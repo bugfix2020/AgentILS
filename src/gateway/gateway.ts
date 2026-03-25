@@ -130,6 +130,9 @@ export class Gateway {
         completionTokens: 0,
       },
       feedbackCollected: false,
+      interactionMode: 'mcp',
+      feedbackRounds: 0,
+      samplingUsed: false,
       startedAt: now,
     }
 

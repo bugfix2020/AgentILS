@@ -18,3 +18,14 @@ export const LOGGED_IN_MONTHLY_RUN_LIMIT = 200
 /** 默认 Plan ID */
 export const DEFAULT_ANONYMOUS_PLAN_ID = 'anonymous'
 export const DEFAULT_PERSONAL_PLAN_ID = 'personal'
+
+/** 交互循环默认配置 */
+export const INTERACTION_DEFAULTS = {
+  maxFeedbackRounds: 50,
+  contextMaxChars: 8000,
+  samplingMaxTokens: 4096,
+  hcHttpPort: 6789,
+  hcHttpHost: '127.0.0.1',
+  hcHealthTimeout: 2000,
+  channelDefault: 'auto' as const,
+} as const

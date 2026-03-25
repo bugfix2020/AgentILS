@@ -40,6 +40,9 @@ export type AgentRun = {
   usage: RunUsage
   // Guard to enforce feedback collection before complete_run.
   feedbackCollected: boolean
+  interactionMode: 'mcp' | 'hc'
+  feedbackRounds: number
+  samplingUsed: boolean
   startedAt: string
   endedAt?: string
 }
