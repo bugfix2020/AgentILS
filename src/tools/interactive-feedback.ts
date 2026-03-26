@@ -28,7 +28,7 @@ export function registerInteractiveFeedback(mcpServer: McpServer, store: MemoryS
       log('CALLED with params:', JSON.stringify(params))
 
       const result = await runInteractionLoop({
-        server: mcpServer.server,
+        mcpServer,
         title: params.title,
         question: params.question,
         answer: params.answer,

@@ -1,6 +1,6 @@
 // src/interaction/sampling-client.ts
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { INTERACTION_DEFAULTS } from '../config/defaults.js'
 
 const log = (...args: unknown[]) => console.error('[sampling-client]', ...args)
@@ -12,9 +12,9 @@ function trimContext(text: string, max = INTERACTION_DEFAULTS.contextMaxChars): 
 }
 
 /** 检查客户端是否支持 sampling */
-export function isSamplingAvailable(server: Server): boolean {
+export function isSamplingAvailable(mcpServer: McpServer): boolean {
   try {
-    const caps = server.getClientCapabilities()
+    const caps = mcpServer.server.getClientCapabilities()
     return !!caps?.sampling
   } catch {
     return false
@@ -23,18 +23,18 @@ export function isSamplingAvailable(server: Server): boolean {
 
 /** 调用 createMessage 进行反向 LLM 推理 */
 export async function tryCreateMessage(
-  server: Server,
+  mcpServer: McpServer,
   userFeedback: string,
   context: string,
 ): Promise<string | null> {
-  if (!isSamplingAvailable(server)) {
+  if (!isSamplingAvailable(mcpServer)) {
     log('sampling not available, skipping createMessage')
     return null
   }
 
   try {
     const trimmed = trimContext(context)
-    const result = await server.createMessage({
+    const result = await mcpServer.server.createMessage({
       messages: [
         {
           role: 'user',

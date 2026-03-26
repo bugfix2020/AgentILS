@@ -1,6 +1,6 @@
 // src/interaction/interaction-loop.ts
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { INTERACTION_DEFAULTS } from '../config/defaults.js'
 import { elicit } from './channel-mcp.js'
 import { isHcAvailable, elicitViaHc } from './channel-hc.js'
@@ -9,7 +9,7 @@ import { isSamplingAvailable, tryCreateMessage } from './sampling-client.js'
 const log = (...args: unknown[]) => console.error('[interaction-loop]', ...args)
 
 export type LoopParams = {
-  server: Server
+  mcpServer: McpServer
   title: string
   question: string
   answer?: string
@@ -27,11 +27,11 @@ export type LoopResult = {
  * 外部看只有「一次工具调用」，内部 while(true) 劫持了执行流。
  */
 export async function runInteractionLoop(params: LoopParams): Promise<LoopResult> {
-  const { server, title } = params
+  const { mcpServer, title } = params
   let { question, answer } = params
   const channelPref = params.channel ?? INTERACTION_DEFAULTS.channelDefault
 
-  const hasSampling = isSamplingAvailable(server)
+  const hasSampling = isSamplingAvailable(mcpServer)
   const hcAvailable = channelPref !== 'mcp' && (await isHcAvailable())
   const useHc = channelPref === 'hc' ? hcAvailable : channelPref === 'auto' ? false : false
   const channelUsed: LoopResult['channel'] = useHc ? 'hc_webview' : 'mcp_elicit'
@@ -58,12 +58,12 @@ export async function runInteractionLoop(params: LoopParams): Promise<LoopResult
         userText = hcRes.text.trim()
       } catch (err) {
         log('HC channel failed, falling back to MCP:', err)
-        const mcpRes = await elicit(server, displayMessage)
+        const mcpRes = await elicit(mcpServer, displayMessage)
         if (mcpRes.action !== 'accept') break
         userText = mcpRes.text
       }
     } else {
-      const mcpRes = await elicit(server, displayMessage)
+      const mcpRes = await elicit(mcpServer, displayMessage)
       if (mcpRes.action !== 'accept') break
       userText = mcpRes.text
     }
@@ -79,7 +79,7 @@ export async function runInteractionLoop(params: LoopParams): Promise<LoopResult
     // 4. 如果 sampling 可用，用 createMessage 反向借脑
     if (hasSampling) {
       const context = buildContext(title, collectedFeedback)
-      const llmReply = await tryCreateMessage(server, userText, context)
+      const llmReply = await tryCreateMessage(mcpServer, userText, context)
       if (llmReply) {
         samplingEverUsed = true
         answer = llmReply
