@@ -4,6 +4,61 @@
     "description": "Agent Gate MCP Server - VS Code AI Agent 编排平台控制层",
     "type": "module",
     "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        },
+        "./interaction": {
+            "import": "./dist/interaction/index.js",
+            "types": "./dist/interaction/index.d.ts"
+        },
+        "./interaction/sampling": {
+            "import": "./dist/interaction/sampling.js",
+            "types": "./dist/interaction/sampling.d.ts"
+        },
+        "./interaction/channel-mcp": {
+            "import": "./dist/interaction/channel-mcp.js",
+            "types": "./dist/interaction/channel-mcp.d.ts"
+        },
+        "./interaction/channel-hc": {
+            "import": "./dist/interaction/channel-hc.js",
+            "types": "./dist/interaction/channel-hc.d.ts"
+        },
+        "./gateway": {
+            "import": "./dist/gateway/index.js",
+            "types": "./dist/gateway/index.d.ts"
+        },
+        "./orchestrator": {
+            "import": "./dist/orchestrator/index.js",
+            "types": "./dist/orchestrator/index.d.ts"
+        },
+        "./store": {
+            "import": "./dist/store/index.js",
+            "types": "./dist/store/index.d.ts"
+        },
+        "./audit": {
+            "import": "./dist/audit/index.js",
+            "types": "./dist/audit/index.d.ts"
+        },
+        "./budget": {
+            "import": "./dist/budget/index.js",
+            "types": "./dist/budget/index.d.ts"
+        },
+        "./policy": {
+            "import": "./dist/policy/index.js",
+            "types": "./dist/policy/index.d.ts"
+        },
+        "./config": {
+            "import": "./dist/config/index.js",
+            "types": "./dist/config/index.d.ts"
+        },
+        "./types": {
+            "import": "./dist/types/index.js",
+            "types": "./dist/types/index.d.ts"
+        }
+    },
     "scripts": {
         "build": "tsup",
         "dev": "tsup --watch",
@@ -16,6 +71,7 @@
     },
     "devDependencies": {
         "@types/node": "^22.15.3",
+        "terser": "^5.46.1",
         "tsup": "^8.5.1",
         "tsx": "^4.19.4",
         "typescript": "^5.8.3"
