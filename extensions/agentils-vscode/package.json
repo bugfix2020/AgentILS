@@ -1,0 +1,77 @@
+{
+  "name": "agentils-vscode",
+  "displayName": "AgentILS",
+  "description": "VS Code task console scaffold for AgentILS conversation/task workflows",
+  "version": "0.1.0",
+  "publisher": "bugfix2020",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "AI"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:agentils.openTaskConsole",
+    "onCommand:agentils.newTask",
+    "onCommand:agentils.continueTask",
+    "onCommand:agentils.markTaskDone",
+    "onCommand:agentils.acceptOverride",
+    "onCommand:agentils.openSummary"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentils.openTaskConsole",
+        "title": "AgentILS: Open Task Console"
+      },
+      {
+        "command": "agentils.newTask",
+        "title": "AgentILS: New Task"
+      },
+      {
+        "command": "agentils.continueTask",
+        "title": "AgentILS: Continue Task"
+      },
+      {
+        "command": "agentils.markTaskDone",
+        "title": "AgentILS: Mark Task Done"
+      },
+      {
+        "command": "agentils.acceptOverride",
+        "title": "AgentILS: Accept Override"
+      },
+      {
+        "command": "agentils.openSummary",
+        "title": "AgentILS: Open Summary"
+      }
+    ],
+    "configuration": {
+      "title": "AgentILS",
+      "properties": {
+        "agentils.taskService.storageKey": {
+          "type": "string",
+          "default": "agentils.vscode.taskServiceState",
+          "description": "Memento key used by the local scaffold task service client."
+        },
+        "agentils.taskConsole.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the AgentILS status bar item."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.8.3"
+  }
+}
