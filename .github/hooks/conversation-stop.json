@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "./scripts/conversation-stop.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}

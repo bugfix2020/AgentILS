@@ -1,28 +1,5 @@
-import { appendFileSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-
-const STATE_FILE = resolve(process.env.AGENTILS_STATE_FILE ?? '.data/agentils-state.json')
-const HOOK_AUDIT_FILE = resolve(process.env.AGENTILS_HOOK_AUDIT_FILE ?? '.data/agentils-hook-audit.log')
-
-export async function readStdin() {
-  const chunks = []
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk)
-  }
-  return Buffer.concat(chunks).toString('utf8').trim()
-}
-
-export function parseJson(value, fallback = {}) {
-  if (!value) {
-    return fallback
-  }
-
-  try {
-    return JSON.parse(value)
-  } catch {
-    return fallback
-  }
-}
+import { readFileSync } from 'node:fs'
+import { STATE_FILE, parseJson } from './hook-common.mjs'
 
 export function loadState() {
   try {
@@ -126,27 +103,20 @@ export function resolveRun(state, preferredRunId) {
   return null
 }
 
-export function logHookEvent(kind, payload, extra = {}) {
-  appendFileSync(
-    HOOK_AUDIT_FILE,
-    `${JSON.stringify({
-      at: new Date().toISOString(),
-      kind,
-      payload,
-      ...extra,
-    })}\n`,
-    'utf8',
-  )
+export function resolveTaskCard(state, runId) {
+  const taskCards = Array.isArray(state?.taskCards) ? state.taskCards : []
+  return taskCards.find((taskCard) => taskCard?.runId === runId) ?? null
 }
 
-export function allow(details = {}) {
-  const output = { decision: 'allow', ...details }
-  process.stdout.write(`${JSON.stringify(output)}\n`)
-  process.exit(0)
+export function resolveHandoff(state, runId) {
+  const handoffs = Array.isArray(state?.handoffs) ? state.handoffs : []
+  return handoffs.find((handoff) => handoff?.runId === runId) ?? null
 }
 
-export function block(reason, details = {}) {
-  const output = { decision: 'block', reason, ...details }
-  process.stdout.write(`${JSON.stringify(output)}\n`)
-  process.exit(2)
+export function resolveConversationState(state) {
+  const conversation = state?.conversation ?? state?.conversationRecord ?? null
+  if (conversation && typeof conversation === 'object') {
+    return conversation
+  }
+  return null
 }
