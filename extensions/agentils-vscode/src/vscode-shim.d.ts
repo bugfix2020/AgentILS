@@ -71,11 +71,18 @@ declare module 'vscode' {
     subscriptions: Disposable[]
   }
 
+  export interface WorkspaceFolder {
+    uri: Uri
+    name: string
+    index: number
+  }
+
   export interface WorkspaceConfiguration {
     get<T>(section: string): T | undefined
   }
 
   export const workspace: {
+    workspaceFolders: readonly WorkspaceFolder[] | undefined
     getConfiguration(section: string): WorkspaceConfiguration
     fs: {
       createDirectory(uri: Uri): Thenable<void>

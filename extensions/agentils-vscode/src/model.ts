@@ -11,8 +11,18 @@ export type AgentILSTaskPhase =
   | 'handoff_prepare'
   | 'verify'
   | 'done'
+  | 'blocked'
+  | 'cancelled'
+  | 'failed'
 
-export type AgentILSTaskStatus = 'active' | 'blocked' | 'done'
+export type AgentILSTaskStatus =
+  | 'active'
+  | 'awaiting_user'
+  | 'awaiting_approval'
+  | 'budget_exceeded'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
 
 export interface AgentILSOverrideState {
   confirmed: boolean
@@ -32,6 +42,7 @@ export interface AgentILSTaskSummaryDocument {
 
 export interface AgentILSTaskSnapshot {
   taskId: string
+  runId: string
   title: string
   goal: string
   controlMode: AgentILSControlMode

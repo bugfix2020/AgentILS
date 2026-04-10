@@ -43,7 +43,7 @@ export class AgentGateTaskStore {
       runId: run.runId,
       title: run.title,
       goal: run.goal,
-      controlMode: normalizeControlMode(run.currentMode),
+      controlMode: normalizeControlMode(taskCard.controlMode),
       currentStep: String(taskCard.currentStep),
       currentStatus: String(taskCard.currentStatus),
       openQuestions: [...taskCard.pendingItems],
@@ -68,7 +68,7 @@ export class AgentGateTaskStore {
       taskId: run.taskId,
       title: run.title,
       goal: run.goal,
-      controlMode: normalizeControlMode(run.currentMode),
+      controlMode: normalizeControlMode(taskCard.controlMode),
       currentStep: String(taskCard.currentStep),
       currentStatus: String(taskCard.currentStatus),
     }

@@ -56,6 +56,9 @@ export function resolveStateFilePath(explicitPath?: string): string {
 export function loadPersistentStore(filePath = resolveStateFilePath()): PersistentStoreData {
   try {
     const raw = readFileSync(filePath, 'utf8')
+    if (!raw.trim()) {
+      return createEmptyStoreData()
+    }
     const parsed = JSON.parse(raw) as Record<string, unknown>
     return {
       meta: {
@@ -113,6 +116,9 @@ export class JsonFileStore<T extends object> implements JsonStoreEntry<T> {
   read(): T {
     try {
       const raw = readFileSync(this.filePath, 'utf8')
+      if (!raw.trim()) {
+        return this.fallback
+      }
       return JSON.parse(raw) as T
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -134,4 +140,3 @@ export class JsonFileStore<T extends object> implements JsonStoreEntry<T> {
     return next
   }
 }
-

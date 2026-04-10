@@ -2,6 +2,7 @@ export * from './conversation-service.js'
 export * from './task-service.js'
 export * from './summary-service.js'
 export * from './override-service.js'
+export * from './ui-actions.js'
 
 import { ConversationService } from './conversation-service.js'
 import { OverrideService } from './override-service.js'

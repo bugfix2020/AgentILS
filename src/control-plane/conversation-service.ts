@@ -58,6 +58,10 @@ export class ConversationService implements ConversationServiceApi {
   }
 
   getActiveTaskRecord(preferredRunId?: string | null): TaskRecord | null {
+    if (!this.hasActiveTask(preferredRunId)) {
+      return null
+    }
+
     const runId = this.resolveRunId(preferredRunId)
     if (!runId) {
       return null

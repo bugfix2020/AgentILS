@@ -48,13 +48,18 @@
         "title": "AgentILS: Open Summary"
       }
     ],
-    "configuration": {
+        "configuration": {
       "title": "AgentILS",
       "properties": {
-        "agentils.taskService.storageKey": {
+        "agentils.runtime.controlPlaneModulePath": {
           "type": "string",
-          "default": "agentils.vscode.taskServiceState",
-          "description": "Memento key used by the local scaffold task service client."
+          "default": "",
+          "description": "Optional absolute path to the built AgentILS control-plane module. Defaults to <workspace>/dist/control-plane/index.js."
+        },
+        "agentils.runtime.stateFilePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the AgentILS state file. Defaults to <workspace>/.data/agentils-state.json."
         },
         "agentils.taskConsole.showStatusBar": {
           "type": "boolean",

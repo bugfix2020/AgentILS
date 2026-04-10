@@ -433,10 +433,10 @@ This should be treated as its own module, not as an afterthought inside WebView 
 - `Wave 1`：已完成
 - `Wave 2`: complete
 - `Wave 2`：已完成
-- `Wave 3`: in progress, VS Code host, UI helper, and .github customizations have landed and are being integrated
-- `Wave 3`：进行中，VS Code 宿主、UI helper 与 `.github` customizations 已落地，正在统一集成
-- `Wave 4`: not started
-- `Wave 4`：未开始
+- `Wave 3`: complete, VS Code host, UI helper, WebView task console scaffold, and `.github` customizations are integrated
+- `Wave 3`：已完成，VS Code 宿主、UI helper、WebView 任务控制台骨架与 `.github` customizations 已完成集成
+- `Wave 4`: in progress, runtime-backed validation and release-facing verification are being completed
+- `Wave 4`：进行中，基于真实 runtime 的校验与面向发布的验证收口正在完成
 
 ## Execution Waves / 实施波次
 

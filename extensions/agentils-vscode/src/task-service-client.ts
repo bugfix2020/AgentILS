@@ -1,28 +1,72 @@
+import { execFile, execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
 import * as vscode from 'vscode'
-import {
-  type AcceptOverrideInput,
-  type AgentILSConversationSnapshot,
-  type AgentILSControlMode,
-  type AgentILSOverrideState,
-  type AgentILSRuntimeSnapshot,
-  type AgentILSTaskPhase,
-  type AgentILSTaskSnapshot,
-  type AgentILSTaskStatus,
-  type AgentILSTaskSummaryDocument,
-  type ContinueTaskInput,
-  type MarkTaskDoneInput,
-  type StartTaskInput,
+import type {
+  AcceptOverrideInput,
+  AgentILSConversationSnapshot,
+  AgentILSRuntimeSnapshot,
+  AgentILSTaskSummaryDocument,
+  ContinueTaskInput,
+  MarkTaskDoneInput,
+  StartTaskInput,
 } from './model'
 
-interface PersistedState {
-  conversation: AgentILSConversationSnapshot
-  tasks: Record<string, AgentILSTaskSnapshot>
-  latestSummaryTaskId: string | null
+const execFileAsync = promisify(execFile)
+
+const runnerScript = `
+import { pathToFileURL } from 'node:url';
+
+const [modulePath, actionName, payloadJson] = process.argv.slice(1);
+const payload = payloadJson ? JSON.parse(payloadJson) : {};
+const module = await import(pathToFileURL(modulePath).href);
+const action = module[actionName];
+
+if (typeof action !== 'function') {
+  throw new Error(\`Unknown AgentILS control-plane action: \${actionName}\`);
+}
+
+const result = await action(payload);
+process.stdout.write(JSON.stringify(result));
+`
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function createEmptyConversationSnapshot(): AgentILSConversationSnapshot {
+  const now = nowIso()
+  return {
+    conversationId: 'conversation_default',
+    state: 'await_next_task',
+    taskIds: [],
+    activeTaskId: null,
+    lastSummaryTaskId: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function createEmptySnapshot(): AgentILSRuntimeSnapshot {
+  return {
+    conversation: createEmptyConversationSnapshot(),
+    activeTask: null,
+    taskHistory: [],
+    latestSummary: null,
+  }
+}
+
+interface RepoRuntimeConfig {
+  workspaceRoot: string
+  controlPlaneModulePath: string
+  stateFilePath: string
 }
 
 export interface AgentILSTaskServiceClient {
   readonly onDidChange: vscode.Event<AgentILSRuntimeSnapshot>
   snapshot(): AgentILSRuntimeSnapshot
+  refresh(): Promise<AgentILSRuntimeSnapshot>
   startTask(input: StartTaskInput): Promise<AgentILSRuntimeSnapshot>
   continueTask(input?: ContinueTaskInput): Promise<AgentILSRuntimeSnapshot | null>
   markTaskDone(input?: MarkTaskDoneInput): Promise<AgentILSRuntimeSnapshot | null>
@@ -31,232 +75,72 @@ export interface AgentILSTaskServiceClient {
   openSummaryDocument(taskId?: string | null): Promise<vscode.Uri | null>
 }
 
-const STORAGE_SUFFIX = 'agentils.vscode.taskServiceState'
-const TASK_PHASES: AgentILSTaskPhase[] = ['collect', 'confirm_elements', 'plan', 'approval', 'execute', 'handoff_prepare', 'verify', 'done']
-
-function nowIso() {
-  return new Date().toISOString()
-}
-
-function createConversationId() {
-  return `conversation-${Date.now().toString(36)}`
-}
-
-function createTaskId() {
-  return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function createEmptyOverrideState(): AgentILSOverrideState {
-  return {
-    confirmed: false,
-    acknowledgedAt: null,
-    note: null,
+function resolveWorkspaceRoot(): string {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+  if (!workspaceFolder) {
+    throw new Error('AgentILS requires an open workspace folder to resolve the runtime store.')
   }
+  return workspaceFolder.uri.fsPath
 }
 
-function createTaskSummaryMarkdown(task: AgentILSTaskSnapshot, summary: string | undefined) {
-  const lines = [
-    `# AgentILS Task Summary`,
-    ``,
-    `- Task ID: ${task.taskId}`,
-    `- Title: ${task.title}`,
-    `- Goal: ${task.goal}`,
-    `- Control Mode: ${task.controlMode}`,
-    `- Phase: ${task.phase}`,
-    `- Status: ${task.status}`,
-    `- Generated At: ${nowIso()}`,
-    ``,
-    `## Outcome`,
-    summary?.trim() || `Task completed without an explicit user summary.`,
-    ``,
-  ]
-
-  if (task.constraints.length > 0) {
-    lines.push(`## Constraints`)
-    for (const constraint of task.constraints) {
-      lines.push(`- ${constraint}`)
-    }
-    lines.push(``)
-  }
-
-  if (task.risks.length > 0) {
-    lines.push(`## Risks`)
-    for (const risk of task.risks) {
-      lines.push(`- ${risk}`)
-    }
-    lines.push(``)
-  }
-
-  if (task.notes.length > 0) {
-    lines.push(`## Notes`)
-    for (const note of task.notes) {
-      lines.push(`- ${note}`)
-    }
-    lines.push(``)
-  }
-
-  return lines.join('\n')
+function resolveConfigPath(settingKey: string, fallback: string): string {
+  const configured = vscode.workspace.getConfiguration('agentils').get<string>(settingKey)?.trim()
+  return configured && configured.length > 0 ? configured : fallback
 }
 
-function createTaskSnapshot(input: StartTaskInput): AgentILSTaskSnapshot {
-  const createdAt = nowIso()
-  return {
-    taskId: createTaskId(),
-    title: input.title,
-    goal: input.goal,
-    controlMode: input.controlMode ?? 'normal',
-    phase: 'collect',
-    status: 'active',
-    scope: input.scope ?? [],
-    constraints: input.constraints ?? [],
-    risks: input.risks ?? [],
-    openQuestions: input.openQuestions ?? [],
-    assumptions: input.assumptions ?? [],
-    decisionNeededFromUser: input.decisionNeededFromUser ?? [],
-    notes: [],
-    overrideState: createEmptyOverrideState(),
-    summaryDocument: null,
-    createdAt,
-    updatedAt: createdAt,
-  }
-}
-
-function createInitialState(): PersistedState {
-  const createdAt = nowIso()
-  return {
-    conversation: {
-      conversationId: createConversationId(),
-      state: 'await_next_task',
-      taskIds: [],
-      activeTaskId: null,
-      lastSummaryTaskId: null,
-      createdAt,
-      updatedAt: createdAt,
-    },
-    tasks: {},
-    latestSummaryTaskId: null,
-  }
-}
-
-function advancePhase(phase: AgentILSTaskPhase): AgentILSTaskPhase {
-  const index = TASK_PHASES.indexOf(phase)
-  if (index < 0 || index >= TASK_PHASES.length - 1) {
-    return phase
-  }
-  return TASK_PHASES[index + 1]
-}
-
-function buildSnapshot(state: PersistedState): AgentILSRuntimeSnapshot {
-  const activeTaskId = state.conversation.activeTaskId
-  const activeTask = activeTaskId ? state.tasks[activeTaskId] ?? null : null
-  const taskHistory = state.conversation.taskIds.map((taskId) => state.tasks[taskId]).filter((task): task is AgentILSTaskSnapshot => Boolean(task))
-  const latestSummaryTaskId = state.latestSummaryTaskId
-  const latestSummary = latestSummaryTaskId ? state.tasks[latestSummaryTaskId]?.summaryDocument ?? null : null
-
-  return {
-    conversation: state.conversation,
-    activeTask,
-    taskHistory,
-    latestSummary,
-  }
-}
-
-export class MementoAgentILSTaskServiceClient implements AgentILSTaskServiceClient {
+export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceClient {
   private readonly emitter = new vscode.EventEmitter<AgentILSRuntimeSnapshot>()
-  private state: PersistedState
+  private readonly runtimeConfig: RepoRuntimeConfig
+  private currentSnapshot: AgentILSRuntimeSnapshot
 
   readonly onDidChange = this.emitter.event
 
-  constructor(
-    private readonly context: vscode.ExtensionContext,
-    private readonly storageKey = STORAGE_SUFFIX,
-  ) {
-    this.state = this.loadState()
+  constructor(_context: vscode.ExtensionContext) {
+    const workspaceRoot = resolveWorkspaceRoot()
+    this.runtimeConfig = {
+      workspaceRoot,
+      controlPlaneModulePath: resolveConfigPath(
+        'runtime.controlPlaneModulePath',
+        join(workspaceRoot, 'dist/control-plane/index.js'),
+      ),
+      stateFilePath: resolveConfigPath('runtime.stateFilePath', join(workspaceRoot, '.data/agentils-state.json')),
+    }
+    this.currentSnapshot = this.safeSnapshot()
   }
 
   snapshot(): AgentILSRuntimeSnapshot {
-    return buildSnapshot(this.state)
+    return this.currentSnapshot
+  }
+
+  async refresh(): Promise<AgentILSRuntimeSnapshot> {
+    const snapshot = await this.invokeAsync('buildUiRuntimeSnapshot', {})
+    this.currentSnapshot = snapshot
+    this.emitter.fire(snapshot)
+    return snapshot
   }
 
   async startTask(input: StartTaskInput): Promise<AgentILSRuntimeSnapshot> {
-    if (this.state.conversation.activeTaskId) {
-      throw new Error('An active task already exists. Finish it before starting a new one.')
-    }
-
-    const task = createTaskSnapshot(input)
-    this.state.tasks[task.taskId] = task
-    this.state.conversation.taskIds.push(task.taskId)
-    this.state.conversation.activeTaskId = task.taskId
-    this.state.conversation.state = 'active_task'
-    this.touchConversation()
-    await this.persist()
-    return this.emitSnapshot()
+    return this.runMutation('startUiTask', input)
   }
 
   async continueTask(input: ContinueTaskInput = {}): Promise<AgentILSRuntimeSnapshot | null> {
-    const task = this.getActiveTask()
-    if (!task) {
-      return null
-    }
-
-    if (input.note?.trim()) {
-      task.notes.push(input.note.trim())
-    }
-
-    if (task.status === 'active' && task.phase !== 'verify') {
-      task.phase = advancePhase(task.phase)
-    }
-
-    task.updatedAt = nowIso()
-    this.touchConversation()
-    await this.persist()
-    return this.emitSnapshot()
+    return this.runMutation('continueUiTask', input)
   }
 
   async markTaskDone(input: MarkTaskDoneInput = {}): Promise<AgentILSRuntimeSnapshot | null> {
-    const task = this.getActiveTask()
-    if (!task) {
-      return null
-    }
-
-    task.phase = 'done'
-    task.status = 'done'
-    task.updatedAt = nowIso()
-    task.summaryDocument = await this.ensureSummaryDocument(task, input.summary)
-
-    this.state.conversation.activeTaskId = null
-    this.state.conversation.state = 'await_next_task'
-    this.state.conversation.lastSummaryTaskId = task.taskId
-    this.state.latestSummaryTaskId = task.taskId
-    this.touchConversation()
-    await this.persist()
-    return this.emitSnapshot()
+    return this.runMutation('markUiTaskDone', input)
   }
 
   async acceptOverride(input: AcceptOverrideInput): Promise<AgentILSRuntimeSnapshot | null> {
-    const task = this.getActiveTask()
-    if (!task) {
-      return null
-    }
-
-    task.overrideState = {
-      confirmed: true,
-      acknowledgedAt: nowIso(),
-      note: input.acknowledgement.trim(),
-    }
-    task.controlMode = 'direct'
-    task.updatedAt = nowIso()
-    this.touchConversation()
-    await this.persist()
-    return this.emitSnapshot()
+    return this.runMutation('acceptUiOverride', input)
   }
 
   getSummaryDocument(taskId?: string | null): AgentILSTaskSummaryDocument | null {
-    const resolvedTaskId = taskId ?? this.state.conversation.activeTaskId ?? this.state.latestSummaryTaskId
-    if (!resolvedTaskId) {
-      return null
+    if (taskId) {
+      const task = this.currentSnapshot.taskHistory.find((candidate) => candidate.taskId === taskId)
+      return task?.summaryDocument ?? null
     }
-    return this.state.tasks[resolvedTaskId]?.summaryDocument ?? null
+    return this.currentSnapshot.latestSummary
   }
 
   async openSummaryDocument(taskId?: string | null): Promise<vscode.Uri | null> {
@@ -267,62 +151,73 @@ export class MementoAgentILSTaskServiceClient implements AgentILSTaskServiceClie
     return vscode.Uri.file(summary.filePath)
   }
 
-  private getActiveTask() {
-    const activeTaskId = this.state.conversation.activeTaskId
-    if (!activeTaskId) {
-      return null
-    }
-    return this.state.tasks[activeTaskId] ?? null
-  }
-
-  private async ensureSummaryDocument(task: AgentILSTaskSnapshot, summary: string | undefined) {
-    const summaryRoot = vscode.Uri.joinPath(this.context.globalStorageUri, 'summaries')
-    await vscode.workspace.fs.createDirectory(summaryRoot)
-
-    const filePath = vscode.Uri.joinPath(summaryRoot, `${task.taskId}.md`)
-    const existing = this.state.tasks[task.taskId]?.summaryDocument
-    const markdown = createTaskSummaryMarkdown(task, summary)
-    const document: AgentILSTaskSummaryDocument = {
-      taskId: task.taskId,
-      title: task.title,
-      filePath: filePath.fsPath,
-      markdown,
-      generatedAt: existing?.generatedAt ?? nowIso(),
-      updatedAt: nowIso(),
-      userEdited: existing?.userEdited ?? false,
-    }
-
-    await vscode.workspace.fs.writeFile(filePath, Buffer.from(markdown, 'utf8'))
-    return document
-  }
-
-  private loadState(): PersistedState {
-    const raw = this.context.globalState.get<PersistedState>(this.storageKey)
-    if (!raw) {
-      return createInitialState()
-    }
-
-    return {
-      conversation: raw.conversation ?? createInitialState().conversation,
-      tasks: raw.tasks ?? {},
-      latestSummaryTaskId: raw.latestSummaryTaskId ?? null,
+  private safeSnapshot(): AgentILSRuntimeSnapshot {
+    try {
+      return this.invokeSync('buildUiRuntimeSnapshot', {})
+    } catch {
+      return createEmptySnapshot()
     }
   }
 
-  private async persist() {
-    await this.context.globalState.update(this.storageKey, this.state)
-  }
-
-  private touchConversation() {
-    this.state.conversation.updatedAt = nowIso()
-    if (!this.state.conversation.activeTaskId && this.state.conversation.state === 'active_task') {
-      this.state.conversation.state = 'await_next_task'
-    }
-  }
-
-  private emitSnapshot() {
-    const snapshot = buildSnapshot(this.state)
+  private async runMutation<T extends object>(action: string, payload: T): Promise<AgentILSRuntimeSnapshot> {
+    const snapshot = await this.invokeAsync(action, payload)
+    this.currentSnapshot = snapshot
     this.emitter.fire(snapshot)
     return snapshot
+  }
+
+  private invokeSync(action: string, payload: object): AgentILSRuntimeSnapshot {
+    this.ensureRuntimeAvailable()
+    const stdout = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        runnerScript,
+        this.runtimeConfig.controlPlaneModulePath,
+        action,
+        JSON.stringify(this.withRuntimeOptions(payload)),
+      ],
+      {
+        cwd: this.runtimeConfig.workspaceRoot,
+        encoding: 'utf8',
+      },
+    )
+    return JSON.parse(stdout) as AgentILSRuntimeSnapshot
+  }
+
+  private async invokeAsync(action: string, payload: object): Promise<AgentILSRuntimeSnapshot> {
+    this.ensureRuntimeAvailable()
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        runnerScript,
+        this.runtimeConfig.controlPlaneModulePath,
+        action,
+        JSON.stringify(this.withRuntimeOptions(payload)),
+      ],
+      {
+        cwd: this.runtimeConfig.workspaceRoot,
+        encoding: 'utf8',
+      },
+    )
+    return JSON.parse(stdout) as AgentILSRuntimeSnapshot
+  }
+
+  private withRuntimeOptions(payload: object) {
+    return {
+      ...(payload as Record<string, unknown>),
+      stateFilePath: this.runtimeConfig.stateFilePath,
+    }
+  }
+
+  private ensureRuntimeAvailable() {
+    if (!existsSync(this.runtimeConfig.controlPlaneModulePath)) {
+      throw new Error(
+        `AgentILS runtime module was not found at ${this.runtimeConfig.controlPlaneModulePath}. Run the root build first.`,
+      )
+    }
   }
 }

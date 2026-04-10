@@ -25,16 +25,19 @@ export class AgentGateConversationStore {
   ) {}
 
   getRecord(): ConversationRecord {
-    const activeRunId = this.adapter.resolveRunId()
     const runs = this.adapter.listRuns()
+    const resolvedRunId = this.adapter.resolveRunId()
+    const resolvedRun = resolvedRunId ? runs.find((run) => run.runId === resolvedRunId) ?? null : null
     const completedTaskIds = runs
       .filter((run) => run.currentStatus === 'completed')
       .map((run) => run.taskId)
+    const state = this.deriveConversationState(resolvedRun)
+    const activeTaskId = state === 'active_task' ? resolvedRun?.taskId ?? null : null
 
     return {
       conversationId: this.conversationId,
-      state: activeRunId ? 'active_task' : 'await_next_task',
-      activeTaskId: activeRunId,
+      state,
+      activeTaskId,
       completedTaskIds,
       archivedTaskSummaries: [],
     }
@@ -53,5 +56,20 @@ export class AgentGateConversationStore {
     const overrideSuffix = isOverrideActive(overrideState) ? 'override active' : 'no override'
     return `${mode} / ${overrideSuffix} / next: ${run.currentStep}`
   }
-}
 
+  private deriveConversationState(run: RunRecord | null): ConversationState {
+    if (!run) {
+      return 'await_next_task'
+    }
+
+    if (run.currentStatus === 'budget_exceeded' || run.currentStatus === 'failed') {
+      return 'conversation_blocked'
+    }
+
+    if (run.currentStatus === 'completed' || run.currentStatus === 'cancelled') {
+      return 'await_next_task'
+    }
+
+    return 'active_task'
+  }
+}
