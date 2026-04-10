@@ -1,61 +1,51 @@
-// src/budget/budget-checker.ts
+import { BudgetCheckResult, BudgetCheckResultSchema, RunBudget, RunBudgetUsageDelta } from '../types/index.js'
 
-import type { AgentRun } from '../types/agent-run.js'
+function buildReasons(budget: RunBudget): string[] {
+  const reasons: string[] = []
 
-export type BudgetViolation =
-  | 'LLM_STEPS'
-  | 'TOOL_CALLS'
-  | 'USER_RESUMES'
-  | 'TOKENS'
-  | 'WALL_CLOCK'
+  if (budget.llmStepsUsed > budget.maxLlmSteps) {
+    reasons.push(`LLM step budget exceeded: ${budget.llmStepsUsed}/${budget.maxLlmSteps}`)
+  }
+  if (budget.toolCallsUsed > budget.maxToolCalls) {
+    reasons.push(`Tool call budget exceeded: ${budget.toolCallsUsed}/${budget.maxToolCalls}`)
+  }
+  if (budget.userResumesUsed > budget.maxUserResumes) {
+    reasons.push(`User resume budget exceeded: ${budget.userResumesUsed}/${budget.maxUserResumes}`)
+  }
+  if (budget.tokensUsed > budget.maxTokens) {
+    reasons.push(`Token budget exceeded: ${budget.tokensUsed}/${budget.maxTokens}`)
+  }
 
-export class BudgetExceededError extends Error {
-  constructor(public readonly violation: BudgetViolation) {
-    super(`Budget exceeded: ${violation}`)
-    this.name = 'BudgetExceededError'
+  const elapsedMs = Date.now() - new Date(budget.startedAt).getTime()
+  if (elapsedMs > budget.maxWallClockMs) {
+    reasons.push(`Wall clock budget exceeded: ${elapsedMs}/${budget.maxWallClockMs}`)
+  }
+
+  return reasons
+}
+
+export function previewBudgetUsage(budget: RunBudget, delta: RunBudgetUsageDelta = {}): RunBudget {
+  return {
+    ...budget,
+    llmStepsUsed: budget.llmStepsUsed + (delta.llmSteps ?? 0),
+    toolCallsUsed: budget.toolCallsUsed + (delta.toolCalls ?? 0),
+    userResumesUsed: budget.userResumesUsed + (delta.userResumes ?? 0),
+    tokensUsed: budget.tokensUsed + (delta.tokens ?? 0),
   }
 }
 
-/**
- * 检查 Run 是否超出预算。
- * 如果超出，抛出 BudgetExceededError。
- */
-export function ensureBudget(run: AgentRun): void {
-  if (run.usage.llmSteps >= run.budget.maxLlmSteps) {
-    throw new BudgetExceededError('LLM_STEPS')
-  }
-  if (run.usage.toolCalls >= run.budget.maxToolCalls) {
-    throw new BudgetExceededError('TOOL_CALLS')
-  }
-  if (run.usage.userResumes >= run.budget.maxUserResumes) {
-    throw new BudgetExceededError('USER_RESUMES')
-  }
-  const totalTokens = run.usage.promptTokens + run.usage.completionTokens
-  if (totalTokens >= run.budget.maxTokens) {
-    throw new BudgetExceededError('TOKENS')
-  }
-}
+export function evaluateBudget(budget: RunBudget, delta: RunBudgetUsageDelta = {}): BudgetCheckResult {
+  const nextBudget = previewBudgetUsage(budget, delta)
+  const reasons = buildReasons(nextBudget)
+  const nearingLimit =
+    nextBudget.llmStepsUsed >= nextBudget.maxLlmSteps * 0.8 ||
+    nextBudget.toolCallsUsed >= nextBudget.maxToolCalls * 0.8 ||
+    nextBudget.tokensUsed >= nextBudget.maxTokens * 0.8
 
-/**
- * 检查 Wall Clock 是否超限。
- * 需要在调度循环中定期调用。
- */
-export function ensureWallClock(run: AgentRun): void {
-  const elapsed = Date.now() - new Date(run.startedAt).getTime()
-  if (elapsed >= run.budget.maxWallClockMs) {
-    throw new BudgetExceededError('WALL_CLOCK')
-  }
-}
-
-/**
- * 非抛出版本，返回是否仍在预算内。
- */
-export function isWithinBudget(run: AgentRun): boolean {
-  try {
-    ensureBudget(run)
-    ensureWallClock(run)
-    return true
-  } catch {
-    return false
-  }
+  return BudgetCheckResultSchema.parse({
+    allowed: reasons.length === 0,
+    status: reasons.length > 0 ? 'budget_exceeded' : nearingLimit ? 'warning' : 'ok',
+    reasons,
+    budget: nextBudget,
+  })
 }

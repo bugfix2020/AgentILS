@@ -1,240 +1,142 @@
-// src/orchestrator/orchestrator.ts
+import { evaluateBudget } from '../budget/budget-checker.js'
+import { AgentGateAuditLogger } from '../audit/audit-logger.js'
+import { evaluateToolPolicy, PolicyContext } from '../policy/tool-policy-checker.js'
+import { AgentGateMemoryStore } from '../store/memory-store.js'
+import {
+  ApprovalResult,
+  ApprovalResultSchema,
+  createRunEvent,
+  FeedbackDecision,
+  HandoffPacket,
+  RunBudgetUsageDelta,
+  StartRunInput,
+  TaskCard,
+  VerificationStatus,
+  VerifyVerdict,
+} from '../types/index.js'
 
-import type { AgentRun } from '../types/agent-run.js'
-import type { RunStep, RunStepType } from '../types/run-step.js'
-import type { MemoryStore } from '../store/memory-store.js'
-import type { AuditLogger } from '../audit/audit-logger.js'
-import { ensureBudget, ensureWallClock, BudgetExceededError } from '../budget/budget-checker.js'
-
-let stepCounter = 0
-
-function generateStepId(): string {
-  return `step_${Date.now()}_${++stepCounter}`
+export interface VerifyRunResult {
+  verdict: VerifyVerdict
+  reasons: string[]
+  verificationStatus: VerificationStatus
 }
 
-export class Orchestrator {
-  constructor(
-    private store: MemoryStore,
-    private audit: AuditLogger
-  ) {}
+export class AgentGateOrchestrator {
+  readonly audit: AgentGateAuditLogger
 
-  /**
-   * 开始执行 Run，将状态从 created → running
-   */
-  startRun(runId: string): AgentRun {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    if (run.status !== 'created') throw new Error(`Run ${runId} is not in 'created' state`)
+  constructor(readonly store: AgentGateMemoryStore) {
+    this.audit = new AgentGateAuditLogger(store)
+  }
 
-    run.status = 'running'
-    this.store.setRun(run)
-
-    this.audit.log({
-      userId: run.userId,
-      runId: run.id,
-      eventType: 'orchestrator',
-      eventName: 'run_started',
-    })
-
+  startRun(input: StartRunInput) {
+    const run = this.store.startRun(input)
+    this.store.appendRunEvent(createRunEvent(run.runId, 'run.started', { goal: run.goal }))
     return run
   }
 
-  /**
-   * 在执行步骤前检查预算
-   * 如果超限，自动将 Run 标记为 budget_exceeded 并抛出错误
-   */
-  checkBudgetOrExceed(runId: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
+  checkBudget(runId: string, delta: RunBudgetUsageDelta = {}, apply = false) {
+    const run = this.store.requireRun(runId)
+    const result = evaluateBudget(run.budget, delta)
 
-    try {
-      ensureBudget(run)
-      ensureWallClock(run)
-    } catch (err) {
-      if (err instanceof BudgetExceededError) {
-        run.status = 'budget_exceeded'
-        run.endedAt = new Date().toISOString()
-        this.store.setRun(run)
-
-        this.audit.log({
-          userId: run.userId,
-          runId: run.id,
-          eventType: 'orchestrator',
-          eventName: 'budget_exceeded',
-          payload: { violation: err.violation },
-        })
-      }
-      throw err
-    }
-  }
-
-  /**
-   * 记录一个 Step 的开始
-   */
-  beginStep(runId: string, type: RunStepType, name: string, request?: unknown): RunStep {
-    const step: RunStep = {
-      id: generateStepId(),
-      runId,
-      type,
-      name,
-      status: 'started',
-      request,
-      startedAt: new Date().toISOString(),
-    }
-    this.store.addStep(step)
-
-    this.audit.log({
-      runId,
-      eventType: 'step',
-      eventName: 'step_started',
-      payload: { stepId: step.id, type, name },
-    })
-
-    return step
-  }
-
-  /**
-   * 标记 Step 完成，并递增 Run usage 对应计数器
-   */
-  completeStep(step: RunStep, response?: unknown): void {
-    step.status = 'completed'
-    step.response = response
-    step.endedAt = new Date().toISOString()
-
-    const run = this.store.getRun(step.runId)
-    if (run) {
-      if (step.type === 'llm') run.usage.llmSteps++
-      if (step.type === 'tool') run.usage.toolCalls++
-      if (step.type === 'elicitation') run.usage.userResumes++
-      this.store.setRun(run)
+    if (apply) {
+      this.store.applyBudgetUsage(runId, delta)
     }
 
-    this.audit.log({
-      runId: step.runId,
-      eventType: 'step',
-      eventName: 'step_completed',
-      payload: { stepId: step.id, type: step.type, name: step.name },
+    if (!result.allowed) {
+      this.store.transitionRun(runId, run.currentStep, 'budget_exceeded')
+      this.audit.warn(runId, 'budget.exceeded', 'Run budget exceeded.', { reasons: result.reasons })
+    }
+
+    return result
+  }
+
+  evaluatePolicy(runId: string, toolName: string, targets: string[] = [], context: PolicyContext = {}) {
+    const decision = evaluateToolPolicy(toolName, targets, context)
+    this.audit.info(runId, 'policy.check', `Policy checked for tool ${toolName}.`, {
+      toolName,
+      targets,
+      decision,
     })
+    return decision
   }
 
-  /**
-   * 标记 Step 失败
-   */
-  failStep(step: RunStep, error?: unknown): void {
-    step.status = 'failed'
-    step.response = error
-    step.endedAt = new Date().toISOString()
-
-    this.audit.log({
-      runId: step.runId,
-      eventType: 'step',
-      eventName: 'step_failed',
-      payload: { stepId: step.id, type: step.type, name: step.name },
-    })
+  upsertTaskCard(taskCard: TaskCard) {
+    const next = this.store.upsertTaskCard(taskCard)
+    this.store.appendRunEvent(createRunEvent(taskCard.runId, 'run.updated', { currentStep: next.currentStep }))
+    return next
   }
 
-  /**
-   * 将 Run 标记为等待用户输入
-   */
-  waitUser(runId: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    run.status = 'waiting_user'
-    this.store.setRun(run)
+  upsertHandoff(handoff: HandoffPacket) {
+    return this.store.upsertHandoff(handoff)
   }
 
-  /**
-   * 用户返回后恢复 Run 为 running
-   */
-  resumeRun(runId: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    run.status = 'running'
-    this.store.setRun(run)
+  recordApproval(runId: string, summary: string, result: ApprovalResult) {
+    const parsed = ApprovalResultSchema.parse(result)
+    this.store.appendDecision(runId, `${parsed.action}: ${parsed.payload?.msg || summary}`)
+    this.store.appendRunEvent(createRunEvent(runId, 'approval.pending', { summary, result: parsed }))
+    this.audit.info(runId, 'approval.result', 'Approval captured.', { summary, result: parsed })
+    return parsed
   }
 
-  /**
-   * 正常完成 Run
-   */
-  completeRun(runId: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    run.status = 'completed'
-    run.endedAt = new Date().toISOString()
-    this.store.setRun(run)
-
-    this.audit.log({
-      userId: run.userId,
-      runId: run.id,
-      eventType: 'orchestrator',
-      eventName: 'run_completed',
-      payload: { usage: run.usage },
-    })
+  recordFeedback(runId: string, decision: FeedbackDecision) {
+    this.store.appendDecision(runId, `${decision.status}: ${decision.msg}`)
+    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { decision }))
+    this.audit.info(runId, 'feedback.result', 'Feedback captured.', decision)
+    return decision
   }
 
-  /**
-   * 标记 Run 失败
-   */
-  failRun(runId: string, reason?: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    run.status = 'failed'
-    run.endedAt = new Date().toISOString()
-    this.store.setRun(run)
+  verifyRun(runId: string, userConfirmedDone = false): VerifyRunResult {
+    const run = this.store.requireRun(runId)
+    const taskCard = this.store.requireTaskCard(runId)
+    const handoff = this.store.requireHandoff(runId)
 
-    this.audit.log({
-      userId: run.userId,
-      runId: run.id,
-      eventType: 'orchestrator',
-      eventName: 'run_failed',
-      payload: { reason },
-    })
-  }
+    if (userConfirmedDone) {
+      this.store.confirmDone(runId, true)
+    }
 
-  /**
-   * 标记 Run 被阻断
-   */
-  blockRun(runId: string, reason: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    run.status = 'blocked'
-    run.endedAt = new Date().toISOString()
-    this.store.setRun(run)
+    const reasons: string[] = []
+    let verdict: VerifyVerdict = 'pass'
 
-    this.audit.log({
-      userId: run.userId,
-      runId: run.id,
-      eventType: 'orchestrator',
-      eventName: 'run_blocked',
-      payload: { reason },
-    })
-  }
+    if (!taskCard.goal.trim()) {
+      reasons.push('TaskCard.goal is empty.')
+    }
+    if (taskCard.steps.length === 0) {
+      reasons.push('TaskCard.steps is empty.')
+    }
+    if (!handoff.nextRecommendedAction.trim()) {
+      reasons.push('Handoff.nextRecommendedAction is empty.')
+    }
+    if (handoff.pendingSteps.length === 0 && handoff.completedSteps.length === 0) {
+      reasons.push('Handoff has neither completedSteps nor pendingSteps.')
+    }
+    if (!run.userConfirmedDone && !userConfirmedDone) {
+      reasons.push('User has not confirmed completion.')
+    }
 
-  /**
-   * 取消 Run
-   */
-  cancelRun(runId: string): void {
-    const run = this.store.getRun(runId)
-    if (!run) throw new Error(`Run not found: ${runId}`)
-    run.status = 'cancelled'
-    run.endedAt = new Date().toISOString()
-    this.store.setRun(run)
+    if (reasons.length > 0) {
+      verdict = reasons.some((reason) => reason.includes('User has not confirmed')) ? 'blocked' : 'failed'
+    } else if (taskCard.risks.length > 0) {
+      verdict = 'pass_with_risks'
+    }
 
-    this.audit.log({
-      userId: run.userId,
-      runId: run.id,
-      eventType: 'orchestrator',
-      eventName: 'run_cancelled',
-    })
-  }
+    const verificationStatus: VerificationStatus = {
+      resultVerified: verdict === 'pass' || verdict === 'pass_with_risks',
+      handoffVerified:
+        handoff.nextRecommendedAction.trim().length > 0 &&
+        (handoff.completedSteps.length > 0 || handoff.pendingSteps.length > 0),
+      verdict,
+    }
 
-  /**
-   * 获取 Run 当前快照
-   */
-  getRunSnapshot(runId: string): { run: AgentRun; steps: RunStep[] } | undefined {
-    const run = this.store.getRun(runId)
-    if (!run) return undefined
-    const steps = this.store.getStepsByRunId(runId)
-    return { run, steps }
+    this.store.markVerification(runId, verificationStatus)
+    this.store.appendRunEvent(createRunEvent(runId, 'verify.finished', { verdict, reasons }))
+
+    if (verificationStatus.resultVerified && verificationStatus.handoffVerified && (run.userConfirmedDone || userConfirmedDone)) {
+      this.store.transitionRun(runId, 'done', 'completed')
+      this.store.appendRunEvent(createRunEvent(runId, 'run.completed', { verdict }))
+    }
+
+    this.audit.info(runId, 'verify.result', 'Run verification completed.', { verdict, reasons })
+
+    return { verdict, reasons, verificationStatus }
   }
 }

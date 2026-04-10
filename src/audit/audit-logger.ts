@@ -1,35 +1,22 @@
-// src/audit/audit-logger.ts
+import { AuditEvent } from '../types/index.js'
+import { AgentGateMemoryStore } from '../store/memory-store.js'
 
-import type { AuditEvent } from '../types/audit-event.js'
-import type { MemoryStore } from '../store/memory-store.js'
+export class AgentGateAuditLogger {
+  constructor(private readonly store: AgentGateMemoryStore) {}
 
-let counter = 0
+  info(runId: string, action: string, message: string, details?: Record<string, unknown>): AuditEvent {
+    return this.store.log(runId, 'info', action, message, details)
+  }
 
-function generateAuditId(): string {
-  return `audit_${Date.now()}_${++counter}`
-}
+  warn(runId: string, action: string, message: string, details?: Record<string, unknown>): AuditEvent {
+    return this.store.log(runId, 'warn', action, message, details)
+  }
 
-export class AuditLogger {
-  constructor(private store: MemoryStore) {}
+  error(runId: string, action: string, message: string, details?: Record<string, unknown>): AuditEvent {
+    return this.store.log(runId, 'error', action, message, details)
+  }
 
-  log(params: {
-    userId?: string
-    orgId?: string
-    runId?: string
-    eventType: string
-    eventName: string
-    payload?: Record<string, unknown>
-  }): void {
-    const event: AuditEvent = {
-      id: generateAuditId(),
-      userId: params.userId,
-      orgId: params.orgId,
-      runId: params.runId,
-      eventType: params.eventType,
-      eventName: params.eventName,
-      payload: params.payload,
-      createdAt: new Date().toISOString(),
-    }
-    this.store.addAuditEvent(event)
+  list(runId: string): AuditEvent[] {
+    return this.store.listAuditEvents(runId)
   }
 }
