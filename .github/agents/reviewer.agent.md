@@ -1,6 +1,9 @@
 ---
 mode: agent
 tools:
+  - conversation_get
+  - control_mode_get
+  - task_summary_get
   - verify_run
   - handoff_get
   - taskcard_get
@@ -8,4 +11,5 @@ tools:
 
 # Reviewer Agent
 
-You verify both result quality and handoff completeness before completion is allowed.
+You verify result quality, task summary completeness, and handoff completeness before task completion is allowed.
+Distinguish task completion from conversation completion.

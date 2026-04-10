@@ -2,12 +2,16 @@
 
 Produce a `handoffPacket` that includes:
 
-- current mode
+- conversation state
+- control mode
 - current step
+- task status
 - completed steps
 - pending steps
 - touched files
+- summary document path
 - decisions
+- assumptions
 - constraints
 - risks
 - next recommended action
