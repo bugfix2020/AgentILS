@@ -53,6 +53,14 @@
             "import": "./dist/store/index.js",
             "types": "./dist/store/index.d.ts"
         },
+        "./summary": {
+            "import": "./dist/summary/index.js",
+            "types": "./dist/summary/index.d.ts"
+        },
+        "./control": {
+            "import": "./dist/control/index.js",
+            "types": "./dist/control/index.d.ts"
+        },
         "./audit": {
             "import": "./dist/audit/index.js",
             "types": "./dist/audit/index.d.ts"
