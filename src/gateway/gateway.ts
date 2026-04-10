@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto'
+import type { Server as HttpServer } from 'node:http'
+import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { pathToFileURL } from 'node:url'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { defaultConfig, type AgentGateConfig } from '../config/defaults.js'
 import { AgentGateOrchestrator } from '../orchestrator/orchestrator.js'
@@ -30,9 +34,27 @@ export interface AgentGateServerRuntime {
   config: AgentGateConfig
 }
 
-export function createAgentGateServer(config: AgentGateConfig = defaultConfig): AgentGateServerRuntime {
-  const store = new AgentGateMemoryStore()
-  const orchestrator = new AgentGateOrchestrator(store)
+export interface AgentGateServerDependencies {
+  store?: AgentGateMemoryStore
+  orchestrator?: AgentGateOrchestrator
+}
+
+export interface AgentGateHttpRuntime {
+  store: AgentGateMemoryStore
+  orchestrator: AgentGateOrchestrator
+  config: AgentGateConfig
+  host: string
+  port: number
+  url: string
+  close: () => Promise<void>
+}
+
+export function createAgentGateServer(
+  config: AgentGateConfig = defaultConfig,
+  dependencies: AgentGateServerDependencies = {},
+): AgentGateServerRuntime {
+  const store = dependencies.store ?? new AgentGateMemoryStore()
+  const orchestrator = dependencies.orchestrator ?? new AgentGateOrchestrator(store)
   const server = new McpServer({
     name: config.serverName,
     version: config.serverVersion,
@@ -41,7 +63,7 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
   server.registerTool(
     'run_start',
     {
-      description: 'Start a new Agent Gate run with an explicit task goal and execution envelope.',
+      description: 'Start a new AgentILS run with an explicit task goal and execution envelope.',
       inputSchema: {
         title: z.string().min(1),
         goal: z.string().min(1),
@@ -54,6 +76,23 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
     async (input) => {
       const run = orchestrator.startRun(input)
       return textResult('Run started', run)
+    },
+  )
+
+  server.registerTool(
+    'run_get',
+    {
+      description: 'Read the current run state, defaulting to the latest persisted run.',
+      inputSchema: {
+        runId: z.string().optional(),
+      },
+    },
+    async ({ runId }) => {
+      const resolvedRunId = store.resolveRunId(runId)
+      if (!resolvedRunId) {
+        return textResult('Run state', { error: 'No run has been started yet.' }, true)
+      }
+      return textResult('Run state', store.requireRun(resolvedRunId))
     },
   )
 
@@ -198,9 +237,25 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
         runId: z.string().min(1),
         summary: z.string().min(1),
         riskLevel: z.enum(['low', 'medium', 'high']).default('medium'),
+        toolName: z.string().optional(),
+        targets: z.array(z.string()).optional(),
       },
     },
-    async ({ runId, summary, riskLevel }) => {
+    async ({ runId, summary, riskLevel, toolName, targets }) => {
+      store.transitionRun(runId, 'approval', 'awaiting_approval')
+      store.updateRun(runId, {
+        activeApproval: {
+          approved: false,
+          action: 'cancel',
+          summary,
+          riskLevel,
+          toolName,
+          targets: targets ?? [],
+          updatedAt: new Date().toISOString(),
+        },
+        verifyPassed: false,
+      })
+
       const elicited = await server.server.elicitInput({
         mode: 'form',
         message: `Approval required (${riskLevel} risk): ${summary}`,
@@ -241,6 +296,7 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
         const fallback = {
           action: elicited.action,
         }
+        orchestrator.recordApproval(runId, summary, fallback)
         return textResult('Approval result', fallback)
       }
 
@@ -252,6 +308,17 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
         },
       })
 
+      store.updateRun(runId, {
+        activeApproval: {
+          approved: result.action === 'accept',
+          action: result.action,
+          summary,
+          riskLevel,
+          toolName,
+          targets: targets ?? [],
+          updatedAt: new Date().toISOString(),
+        },
+      })
       orchestrator.recordApproval(runId, summary, result)
       return textResult('Approval result', result)
     },
@@ -309,7 +376,7 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
   server.registerPrompt(
     'agentgate_start_run',
     {
-      description: 'Start a disciplined Agent Gate run from the current context.',
+      description: 'Start a disciplined AgentILS run from the current context.',
       argsSchema: {
         goal: z.string().describe('The user goal for this run'),
       },
@@ -320,7 +387,7 @@ export function createAgentGateServer(config: AgentGateConfig = defaultConfig): 
           role: 'user',
           content: {
             type: 'text',
-            text: `Start a new Agent Gate run for the following goal: ${goal}. First classify the mode, then collect only the minimum blocking details, then persist taskCard state.`,
+            text: `Start a new AgentILS run for the following goal: ${goal}. First classify the mode, then collect only the minimum blocking details, then persist taskCard state.`,
           },
         },
       ],
@@ -489,13 +556,163 @@ export async function startStdioServer(config: AgentGateConfig = defaultConfig):
   return runtime
 }
 
+export async function startStreamableHttpServer(
+  config: AgentGateConfig = defaultConfig,
+  options: {
+    host?: string
+    port?: number
+    endpoint?: string
+  } = {},
+): Promise<AgentGateHttpRuntime> {
+  const host = options.host ?? process.env.AGENT_GATE_HTTP_HOST ?? '127.0.0.1'
+  const port = options.port ?? Number.parseInt(process.env.AGENT_GATE_HTTP_PORT ?? '8788', 10)
+  const endpoint = options.endpoint ?? '/mcp'
+
+  const store = new AgentGateMemoryStore()
+  const orchestrator = new AgentGateOrchestrator(store)
+  const app = createMcpExpressApp({ host })
+  const transports: Record<string, StreamableHTTPServerTransport> = {}
+
+  app.get('/health', (_req: unknown, res: { json: (body: unknown) => void }) => {
+    res.json({
+      ok: true,
+      name: config.serverName,
+      transport: 'streamable-http',
+      endpoint,
+    })
+  })
+
+  const postHandler = async (req: any, res: any) => {
+    const sessionIdHeader = req.headers['mcp-session-id']
+    const sessionId = Array.isArray(sessionIdHeader) ? sessionIdHeader[0] : sessionIdHeader
+
+    try {
+      let transport: StreamableHTTPServerTransport | undefined
+
+      if (sessionId && transports[sessionId]) {
+        transport = transports[sessionId]
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (initializedSessionId) => {
+            transports[initializedSessionId] = transport!
+          },
+        })
+
+        transport.onclose = () => {
+          const activeSessionId = transport?.sessionId
+          if (activeSessionId) {
+            delete transports[activeSessionId]
+          }
+        }
+
+        const runtime = createAgentGateServer(config, { store, orchestrator })
+        await runtime.server.connect(transport)
+        await transport.handleRequest(req, res, req.body)
+        return
+      } else {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Bad Request: No valid MCP session or initialize request provided',
+          },
+          id: null,
+        })
+        return
+      }
+
+      await transport.handleRequest(req, res, req.body)
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : 'Internal server error',
+          },
+          id: null,
+        })
+      }
+    }
+  }
+
+  const getHandler = async (req: any, res: any) => {
+    const sessionIdHeader = req.headers['mcp-session-id']
+    const sessionId = Array.isArray(sessionIdHeader) ? sessionIdHeader[0] : sessionIdHeader
+
+    if (!sessionId || !transports[sessionId]) {
+      res.status(400).send('Invalid or missing MCP session ID')
+      return
+    }
+
+    await transports[sessionId].handleRequest(req, res)
+  }
+
+  const deleteHandler = async (req: any, res: any) => {
+    const sessionIdHeader = req.headers['mcp-session-id']
+    const sessionId = Array.isArray(sessionIdHeader) ? sessionIdHeader[0] : sessionIdHeader
+
+    if (!sessionId || !transports[sessionId]) {
+      res.status(400).send('Invalid or missing MCP session ID')
+      return
+    }
+
+    await transports[sessionId].handleRequest(req, res)
+  }
+
+  app.post(endpoint, postHandler)
+  app.get(endpoint, getHandler)
+  app.delete(endpoint, deleteHandler)
+
+  const server = await new Promise<HttpServer>((resolve, reject) => {
+    const httpServer = app.listen(port, host, () => resolve(httpServer))
+    httpServer.on('error', reject)
+  })
+
+  const close = async () => {
+    await Promise.all(Object.values(transports).map((transport) => transport.close().catch(() => undefined)))
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      })
+    })
+  }
+
+  return {
+    store,
+    orchestrator,
+    config,
+    host,
+    port,
+    url: `http://${host}:${port}${endpoint}`,
+    close,
+  }
+}
+
 export async function startIfEntrypoint(): Promise<void> {
-  const entryArg = process.argv[1]
-  if (!entryArg) {
+  const invokedPath = process.argv[1] ?? ''
+  const isDirectEntrypoint =
+    invokedPath.endsWith('/src/index.ts') ||
+    invokedPath.endsWith('\\src\\index.ts') ||
+    invokedPath.endsWith('/dist/index.js') ||
+    invokedPath.endsWith('\\dist\\index.js') ||
+    invokedPath === 'src/index.ts' ||
+    invokedPath === 'dist/index.js'
+
+  if (!isDirectEntrypoint) {
     return
   }
 
-  if (import.meta.url === pathToFileURL(entryArg).href) {
-    await startStdioServer()
+  if (process.argv.includes('--http')) {
+    const runtime = await startStreamableHttpServer()
+      console.log(`AgentILS Streamable HTTP server listening at ${runtime.url}`)
+    return
   }
+
+  await startStdioServer()
 }

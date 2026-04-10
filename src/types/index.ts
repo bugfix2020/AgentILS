@@ -147,6 +147,18 @@ export const ApprovalResultSchema = z.object({
 
 export type ApprovalResult = z.infer<typeof ApprovalResultSchema>
 
+export const ActiveApprovalSchema = z.object({
+  approved: z.boolean(),
+  action: UserActionSchema,
+  summary: z.string(),
+  riskLevel: RiskLevelSchema,
+  toolName: z.string().optional(),
+  targets: z.array(z.string()).default([]),
+  updatedAt: z.string(),
+})
+
+export type ActiveApproval = z.infer<typeof ActiveApprovalSchema>
+
 export const BudgetCheckResultSchema = z.object({
   allowed: z.boolean(),
   status: z.union([z.literal('ok'), z.literal('warning'), z.literal('budget_exceeded')]),
@@ -192,6 +204,8 @@ export const RunRecordSchema = z.object({
   budget: RunBudgetSchema,
   userConfirmedDone: z.boolean(),
   verifyPassed: z.boolean(),
+  activeApproval: ActiveApprovalSchema.nullable().default(null),
+  lastFeedback: FeedbackDecisionSchema.nullable().default(null),
   decisions: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -217,6 +231,16 @@ export const RunEventSchema = z.object({
 })
 
 export type RunEvent = z.infer<typeof RunEventSchema>
+
+export const HookDecisionSchema = z.object({
+  decision: z.enum(['allow', 'block']),
+  reason: z.string().optional(),
+  runId: z.string().optional(),
+  toolName: z.string().optional(),
+  details: z.record(z.unknown()).optional(),
+})
+
+export type HookDecision = z.infer<typeof HookDecisionSchema>
 
 export interface StartRunInput {
   title: string
@@ -295,6 +319,8 @@ export function createRunRecord(taskCard: TaskCard, input: StartRunInput): RunRe
     budget: buildDefaultBudget(input.budget),
     userConfirmedDone: false,
     verifyPassed: false,
+    activeApproval: null,
+    lastFeedback: null,
     decisions: [],
     createdAt: now,
     updatedAt: now,

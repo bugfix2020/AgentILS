@@ -8,7 +8,7 @@ export interface AgentGateConfig {
 }
 
 export const defaultConfig: AgentGateConfig = {
-  serverName: 'agent-gate',
+  serverName: 'AgentILS',
   serverVersion: '0.1.0-greenfield',
   policy: {
     allowDangerousTools: false,

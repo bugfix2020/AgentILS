@@ -26,7 +26,7 @@ export default defineConfig({
   treeshake: true,
   minify: true,
   banner: {
-    js: '#!/usr/bin/env node\n// agent-gate MCP Server',
+    js: '#!/usr/bin/env node\n// AgentILS MCP Server',
   },
   onSuccess: 'echo "[tsup] Build complete"',
 })

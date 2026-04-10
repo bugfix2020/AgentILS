@@ -1,7 +1,5 @@
 #!/usr/bin/env sh
 set -eu
 
-# Greenfield placeholder.
-# In the next phase this script should evaluate whether the latest tool call
-# invalidated verification assumptions or touched protected scope.
-exit 0
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec node "$ROOT_DIR/scripts/verify-after-tool.mjs"

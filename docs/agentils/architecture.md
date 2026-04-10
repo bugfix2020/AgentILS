@@ -1,9 +1,9 @@
-# Agent Gate Architecture
+# AgentILS Architecture
 
 ## Layers
 
 1. VS Code customization layer: `.github/instructions`, `.github/agents`, `.github/prompts`, `.github/hooks`
-2. Agent Gate runtime layer: MCP server, state store, budget, policy, audit, verification
+2. AgentILS runtime layer: MCP server, state store, budget, policy, audit, verification
 3. Product control plane layer: auth, claims, quotas, billing, dashboards, policy distribution
 
 ## MVP focus

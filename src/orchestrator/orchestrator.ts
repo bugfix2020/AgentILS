@@ -3,6 +3,7 @@ import { AgentGateAuditLogger } from '../audit/audit-logger.js'
 import { evaluateToolPolicy, PolicyContext } from '../policy/tool-policy-checker.js'
 import { AgentGateMemoryStore } from '../store/memory-store.js'
 import {
+  ActiveApproval,
   ApprovalResult,
   ApprovalResultSchema,
   createRunEvent,
@@ -72,6 +73,39 @@ export class AgentGateOrchestrator {
 
   recordApproval(runId: string, summary: string, result: ApprovalResult) {
     const parsed = ApprovalResultSchema.parse(result)
+    const currentRun = this.store.requireRun(runId)
+    const approvalState: ActiveApproval = {
+      approved: parsed.action === 'accept',
+      action: parsed.action,
+      summary,
+      riskLevel: currentRun.activeApproval?.riskLevel ?? 'medium',
+      toolName: currentRun.activeApproval?.toolName,
+      targets: currentRun.activeApproval?.targets ?? [],
+      updatedAt: new Date().toISOString(),
+    }
+
+    if (parsed.action === 'decline') {
+      this.store.transitionRun(runId, 'cancelled', 'cancelled')
+      this.store.confirmDone(runId, false)
+    } else if (parsed.action === 'cancel') {
+      this.store.transitionRun(runId, 'approval', 'awaiting_approval')
+      this.store.confirmDone(runId, false)
+    } else if (parsed.payload?.status === 'revise') {
+      this.store.transitionRun(runId, 'confirm_elements', 'awaiting_user')
+      this.store.confirmDone(runId, false)
+      this.store.updateRun(runId, { verifyPassed: false })
+    } else if (parsed.payload?.status === 'done') {
+      this.store.transitionRun(runId, 'verify', 'active')
+      this.store.confirmDone(runId, true)
+      this.store.updateRun(runId, { verifyPassed: false })
+    } else {
+      this.store.transitionRun(runId, 'execute', 'active')
+    }
+
+    this.store.updateRun(runId, {
+      activeApproval: approvalState,
+      userConfirmedDone: parsed.payload?.status === 'done',
+    })
     this.store.appendDecision(runId, `${parsed.action}: ${parsed.payload?.msg || summary}`)
     this.store.appendRunEvent(createRunEvent(runId, 'approval.pending', { summary, result: parsed }))
     this.audit.info(runId, 'approval.result', 'Approval captured.', { summary, result: parsed })
@@ -79,6 +113,21 @@ export class AgentGateOrchestrator {
   }
 
   recordFeedback(runId: string, decision: FeedbackDecision) {
+    if (decision.status === 'done') {
+      this.store.transitionRun(runId, 'verify', 'active')
+      this.store.confirmDone(runId, true)
+    } else if (decision.status === 'revise') {
+      this.store.transitionRun(runId, 'confirm_elements', 'awaiting_user')
+      this.store.confirmDone(runId, false)
+      this.store.updateRun(runId, { verifyPassed: false })
+    } else {
+      this.store.transitionRun(runId, 'execute', 'active')
+    }
+
+    this.store.updateRun(runId, {
+      lastFeedback: decision,
+      userConfirmedDone: decision.status === 'done',
+    })
     this.store.appendDecision(runId, `${decision.status}: ${decision.msg}`)
     this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { decision }))
     this.audit.info(runId, 'feedback.result', 'Feedback captured.', decision)

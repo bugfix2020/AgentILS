@@ -20,6 +20,12 @@ import {
   TaskStep,
   VerificationStatus,
 } from '../types/index.js'
+import {
+  loadPersistentStore,
+  type PersistentStoreMeta,
+  resolveStateFilePath,
+  savePersistentStore,
+} from './persistence.js'
 
 export interface StoreSnapshot {
   runs: RunRecord[]
@@ -35,6 +41,34 @@ export class AgentGateMemoryStore {
   private readonly handoffs = new Map<string, HandoffPacket>()
   private readonly auditEvents = new Map<string, AuditEvent[]>()
   private readonly runEvents = new Map<string, RunEvent[]>()
+  readonly stateFilePath: string
+  private meta: PersistentStoreMeta
+
+  constructor(stateFilePath?: string) {
+    this.stateFilePath = resolveStateFilePath(stateFilePath)
+    const snapshot = loadPersistentStore(this.stateFilePath)
+    this.meta = snapshot.meta
+
+    for (const run of snapshot.runs) {
+      this.runs.set(run.runId, run)
+    }
+    for (const taskCard of snapshot.taskCards) {
+      this.taskCards.set(taskCard.runId, taskCard)
+    }
+    for (const handoff of snapshot.handoffs) {
+      this.handoffs.set(handoff.runId, handoff)
+    }
+    for (const event of snapshot.auditEvents) {
+      const current = this.auditEvents.get(event.runId) ?? []
+      current.push(event)
+      this.auditEvents.set(event.runId, current)
+    }
+    for (const event of snapshot.runEvents) {
+      const current = this.runEvents.get(event.runId) ?? []
+      current.push(event)
+      this.runEvents.set(event.runId, current)
+    }
+  }
 
   startRun(input: StartRunInput): RunRecord {
     const runId = `run_${randomUUID()}`
@@ -48,6 +82,8 @@ export class AgentGateMemoryStore {
     this.appendAuditEvent(
       createAuditEvent(runId, 'info', 'run.start', `Run started for goal: ${run.goal}`),
     )
+    this.markLastRun(runId)
+    this.persist()
 
     return run
   }
@@ -68,6 +104,17 @@ export class AgentGateMemoryStore {
     return [...this.runs.values()]
   }
 
+  getMeta(): PersistentStoreMeta {
+    return { ...this.meta }
+  }
+
+  resolveRunId(preferredRunId?: string | null): string | null {
+    if (preferredRunId && this.runs.has(preferredRunId)) {
+      return preferredRunId
+    }
+    return this.meta.lastRunId && this.runs.has(this.meta.lastRunId) ? this.meta.lastRunId : null
+  }
+
   updateRun(runId: string, updates: Partial<RunRecord>): RunRecord {
     const current = this.requireRun(runId)
     const next = RunRecordSchema.parse({
@@ -76,6 +123,8 @@ export class AgentGateMemoryStore {
       updatedAt: new Date().toISOString(),
     })
     this.runs.set(runId, next)
+    this.markLastRun(runId)
+    this.persist()
     return next
   }
 
@@ -152,6 +201,8 @@ export class AgentGateMemoryStore {
           })
         : createHandoffPacket(parsed),
     )
+    this.markLastRun(parsed.runId)
+    this.persist()
 
     return parsed
   }
@@ -193,6 +244,8 @@ export class AgentGateMemoryStore {
   upsertHandoff(handoff: HandoffPacket): HandoffPacket {
     const parsed = HandoffPacketSchema.parse(handoff)
     this.handoffs.set(parsed.runId, parsed)
+    this.markLastRun(parsed.runId)
+    this.persist()
     return parsed
   }
 
@@ -226,6 +279,8 @@ export class AgentGateMemoryStore {
     const current = this.auditEvents.get(parsed.runId) ?? []
     current.push(parsed)
     this.auditEvents.set(parsed.runId, current)
+    this.markLastRun(parsed.runId)
+    this.persist()
     return parsed
   }
 
@@ -241,6 +296,8 @@ export class AgentGateMemoryStore {
     const current = this.runEvents.get(event.runId) ?? []
     current.push(event)
     this.runEvents.set(event.runId, current)
+    this.markLastRun(event.runId)
+    this.persist()
     return event
   }
 
@@ -256,5 +313,26 @@ export class AgentGateMemoryStore {
       auditEvents: [...this.auditEvents.values()].flat(),
       runEvents: [...this.runEvents.values()].flat(),
     }
+  }
+
+  private markLastRun(runId: string): void {
+    this.meta = {
+      lastRunId: runId,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private persist(): void {
+    savePersistentStore(
+      {
+        meta: this.meta,
+        runs: this.listRuns(),
+        taskCards: [...this.taskCards.values()],
+        handoffs: [...this.handoffs.values()],
+        auditEvents: [...this.auditEvents.values()].flat(),
+        runEvents: [...this.runEvents.values()].flat(),
+      },
+      this.stateFilePath,
+    )
   }
 }

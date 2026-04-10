@@ -1,7 +1,5 @@
 #!/usr/bin/env sh
 set -eu
 
-# Greenfield placeholder.
-# In the next phase this script should refuse completion when user confirmation
-# or run verification is still missing.
-exit 0
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec node "$ROOT_DIR/scripts/stop-gate.mjs"

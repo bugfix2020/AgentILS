@@ -1,6 +1,6 @@
-# Agent Gate Developer Guide
+# AgentILS Developer Guide
 
-本文档面向开发人员，覆盖从本地开发、发布、安装，到 VS Code 中接入和调用 Agent Gate 的完整流程。
+本文档面向开发人员，覆盖从本地开发、发布、安装，到 VS Code 中接入和调用 AgentILS 的完整流程。
 
 ## 0. GitHub 仓库现状
 
@@ -11,12 +11,14 @@
 当前存在一处命名分层：
 
 - GitHub 仓库名是 `AgentILS`
-- 本地 runtime 和 npm 包暂时仍使用 `agent-gate`
+- 本地 runtime 对外展示名使用 `AgentILS`
+- npm 包和 CLI 使用 `agentils`
 
 这意味着当前最稳妥的策略是：
 
 - 仓库层面继续沿用 `AgentILS`
-- 运行时入口、CLI 名和 MCP server 名先保持 `agent-gate`
+- 运行时入口和 CLI 名使用 `agentils`
+- MCP server 展示名使用 `AgentILS`
 
 如果未来要统一名字，建议作为单独迁移处理，不要和当前功能开发混在一起。
 
@@ -74,13 +76,41 @@ npm start
 
 这会以 `stdio` 模式启动 MCP server，供 VS Code 或其他 MCP client 进程拉起。
 
+### 2.5 本地 HTTP stream 调试
+
+如果你只是想在本地直接测试，不想先走发布链路，可以直接启动 Streamable HTTP：
+
+```bash
+npm install
+npm run dev:http
+```
+
+默认监听：
+
+```text
+http://127.0.0.1:8788/mcp
+```
+
+健康检查：
+
+```text
+http://127.0.0.1:8788/health
+```
+
+构建产物模式：
+
+```bash
+npm run build
+npm run start:http
+```
+
 ## 3. 发布流程
 
 ### 3.1 发布前检查
 
 仓库已经配置：
 
-- `bin.agent-gate -> dist/index.js`
+- `bin.agentils -> dist/index.js`
 - `prepublishOnly -> npm run typecheck && npm run build`
 
 所以执行 `npm publish` 前会自动做最基本的发布校验。
@@ -109,9 +139,9 @@ npm publish --access public
 
 - `agentils`
 - `@bugfix2020/agentils`
-- `@bugfix2020/agent-gate`
+- `@bugfix2020/agentils`
 
-如果是 scoped package，例如 `@your-org/agent-gate`：
+如果是 scoped package，例如 `@your-org/agentils`：
 
 ```bash
 npm publish --access public
@@ -129,7 +159,7 @@ npm publish --access public
 
 ```bash
 git clone <repo>
-cd agent-gate
+cd AgentILS
 npm install
 npm run build
 ```
@@ -139,7 +169,7 @@ npm run build
 ```json
 {
   "servers": {
-    "agent-gate": {
+    "agentils": {
       "type": "stdio",
       "command": "node",
       "args": ["dist/index.js"]
@@ -155,22 +185,20 @@ npm run build
 全局安装：
 
 ```bash
-npm install -g agent-gate
+npm install -g agentils
 ```
 
 或用 `npx` 直接运行：
 
 ```bash
-npx -y agent-gate
+npx -y agentils
 ```
 
 发布为 scoped package 时示例：
 
 ```bash
-npx -y @your-org/agent-gate
+npx -y @your-org/agentils
 ```
-
-如果未来改名到 `AgentILS`，这里的安装名和 `.vscode/mcp.json` 里的命令参数也要一起调整。
 
 ## 5. VS Code 接入流程
 
@@ -183,7 +211,7 @@ npx -y @your-org/agent-gate
 ```json
 {
   "servers": {
-    "agent-gate": {
+    "agentils": {
       "type": "stdio",
       "command": "node",
       "args": ["dist/index.js"]
@@ -197,24 +225,34 @@ npx -y @your-org/agent-gate
 ```json
 {
   "servers": {
-    "agent-gate": {
+    "agentils": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "agent-gate"]
+      "args": ["-y", "agentils"]
     }
   }
 }
 ```
+
+#### 本地 HTTP stream 模式
+
+如果你的测试客户端支持 Streamable HTTP，也可以直接连：
+
+```text
+http://127.0.0.1:8788/mcp
+```
+
+这条路径主要用于本地调试，不替代 VS Code 的 stdio 接入方式。
 
 如果是 scoped 包：
 
 ```json
 {
   "servers": {
-    "agent-gate": {
+    "agentils": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@your-org/agent-gate"]
+      "args": ["-y", "@your-org/agentils"]
     }
   }
 }
@@ -227,7 +265,7 @@ npx -y @your-org/agent-gate
 ```json
 {
   "chat.mcp.serverSampling": {
-    "agent-gate/.vscode/mcp.json: agent-gate": {
+        "agent-gate/.vscode/mcp.json: agentils": {
       "allowedDuringChat": true
     }
   }
@@ -238,7 +276,7 @@ npx -y @your-org/agent-gate
 
 ### 5.3 验证 VS Code 发现成功
 
-接入成功后，你应该能在 VS Code 的 MCP server 列表里看到 `agent-gate`，并在 chat 中看到它暴露的：
+接入成功后，你应该能在 VS Code 的 MCP server 列表里看到 `AgentILS`，并在 chat 中看到它暴露的：
 
 - tools
 - prompts
@@ -264,6 +302,7 @@ Start a new run for implementing a stop gate for risky tools.
 
 再由 agent 根据需要调用：
 
+- `run_get`
 - `taskcard_get`
 - `taskcard_put`
 - `budget_check`
@@ -277,7 +316,7 @@ Start a new run for implementing a stop gate for risky tools.
 - `approval_request`
 - `feedback_gate`
 
-它们当前使用 MCP elicitation 表单收集用户输入。
+它们当前使用 MCP elicitation 表单收集用户输入，并把审批/反馈结果写回共享 state。
 
 ### 6.3 Prompts
 
@@ -344,7 +383,7 @@ Start a new run for implementing a stop gate for risky tools.
 
 1. 在本仓库开发并验证 MCP server
 2. `npm publish`
-3. 使用 `npx -y agent-gate` 或全局安装方式分发
+3. 使用 `npx -y agentils` 或全局安装方式分发
 4. 在项目或用户级 `.vscode/mcp.json` 中接入
 5. 在 VS Code Chat 中调用 tools/prompts/resources
 6. 后续再单独做一个薄的 VS Code extension 作为安装壳

@@ -1,6 +1,6 @@
 {
   "servers": {
-    "agent-gate": {
+    "agentils": {
       "type": "stdio",
       "command": "node",
       "args": ["dist/index.js"]

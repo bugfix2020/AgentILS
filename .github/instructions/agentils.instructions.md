@@ -1,4 +1,4 @@
-# Agent Gate Module Rules
+# AgentILS Module Rules
 
 - Keep workflow state explicit and serializable.
 - Prefer MCP resources for state visibility over hidden prompt state.
