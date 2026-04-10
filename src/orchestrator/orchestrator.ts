@@ -1,38 +1,54 @@
-import { evaluateBudget } from '../budget/budget-checker.js'
 import { AgentGateAuditLogger } from '../audit/audit-logger.js'
-import { evaluateToolPolicy, PolicyContext } from '../policy/tool-policy-checker.js'
+import { evaluateBudget } from '../budget/budget-checker.js'
+import { evaluateToolPolicy, type PolicyContext } from '../policy/tool-policy-checker.js'
 import { AgentGateMemoryStore } from '../store/memory-store.js'
 import {
-  ActiveApproval,
-  ApprovalResult,
-  ApprovalResultSchema,
-  createRunEvent,
-  FeedbackDecision,
-  HandoffPacket,
-  RunBudgetUsageDelta,
-  StartRunInput,
-  TaskCard,
-  VerificationStatus,
-  VerifyVerdict,
+  type ApprovalResult,
+  type FeedbackDecision,
+  type HandoffPacket,
+  type RunBudgetUsageDelta,
+  type StartRunInput,
+  type TaskCard,
+  type ConversationRecord,
 } from '../types/index.js'
+import { AgentGateConversationOrchestrator } from './conversation-orchestrator.js'
+import { AgentGateControlModeOrchestrator } from './control-mode-orchestrator.js'
+import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
+import {
+  type VerifyRunResult,
+  AgentGateVerificationOrchestrator,
+} from './verification-orchestrator.js'
 
-export interface VerifyRunResult {
-  verdict: VerifyVerdict
-  reasons: string[]
-  verificationStatus: VerificationStatus
+export interface AgentGateOrchestratorRuntime {
+  conversation: AgentGateConversationOrchestrator
+  controlMode: AgentGateControlModeOrchestrator
+  task: AgentGateTaskOrchestrator
+  verification: AgentGateVerificationOrchestrator
 }
 
 export class AgentGateOrchestrator {
   readonly audit: AgentGateAuditLogger
+  readonly conversation: AgentGateConversationOrchestrator
+  readonly controlMode: AgentGateControlModeOrchestrator
+  readonly task: AgentGateTaskOrchestrator
+  readonly verification: AgentGateVerificationOrchestrator
 
   constructor(readonly store: AgentGateMemoryStore) {
     this.audit = new AgentGateAuditLogger(store)
+    this.task = new AgentGateTaskOrchestrator(store, this.audit)
+    this.conversation = new AgentGateConversationOrchestrator(store, this.audit, this.task)
+    this.controlMode = new AgentGateControlModeOrchestrator(store, this.audit, this.task)
+    this.verification = new AgentGateVerificationOrchestrator(
+      store,
+      this.audit,
+      this.task,
+      this.conversation,
+      this.controlMode,
+    )
   }
 
   startRun(input: StartRunInput) {
-    const run = this.store.startRun(input)
-    this.store.appendRunEvent(createRunEvent(run.runId, 'run.started', { goal: run.goal }))
-    return run
+    return this.conversation.startRun(input)
   }
 
   checkBudget(runId: string, delta: RunBudgetUsageDelta = {}, apply = false) {
@@ -62,130 +78,42 @@ export class AgentGateOrchestrator {
   }
 
   upsertTaskCard(taskCard: TaskCard) {
-    const next = this.store.upsertTaskCard(taskCard)
-    this.store.appendRunEvent(createRunEvent(taskCard.runId, 'run.updated', { currentStep: next.currentStep }))
-    return next
+    return this.task.upsertTaskCard(taskCard)
   }
 
   upsertHandoff(handoff: HandoffPacket) {
-    return this.store.upsertHandoff(handoff)
+    return this.task.upsertHandoff(handoff)
   }
 
   recordApproval(runId: string, summary: string, result: ApprovalResult) {
-    const parsed = ApprovalResultSchema.parse(result)
-    const currentRun = this.store.requireRun(runId)
-    const approvalState: ActiveApproval = {
-      approved: parsed.action === 'accept',
-      action: parsed.action,
-      summary,
-      riskLevel: currentRun.activeApproval?.riskLevel ?? 'medium',
-      toolName: currentRun.activeApproval?.toolName,
-      targets: currentRun.activeApproval?.targets ?? [],
-      updatedAt: new Date().toISOString(),
-    }
-
-    if (parsed.action === 'decline') {
-      this.store.transitionRun(runId, 'cancelled', 'cancelled')
-      this.store.confirmDone(runId, false)
-    } else if (parsed.action === 'cancel') {
-      this.store.transitionRun(runId, 'approval', 'awaiting_approval')
-      this.store.confirmDone(runId, false)
-    } else if (parsed.payload?.status === 'revise') {
-      this.store.transitionRun(runId, 'confirm_elements', 'awaiting_user')
-      this.store.confirmDone(runId, false)
-      this.store.updateRun(runId, { verifyPassed: false })
-    } else if (parsed.payload?.status === 'done') {
-      this.store.transitionRun(runId, 'verify', 'active')
-      this.store.confirmDone(runId, true)
-      this.store.updateRun(runId, { verifyPassed: false })
-    } else {
-      this.store.transitionRun(runId, 'execute', 'active')
-    }
-
-    this.store.updateRun(runId, {
-      activeApproval: approvalState,
-      userConfirmedDone: parsed.payload?.status === 'done',
-    })
-    this.store.appendDecision(runId, `${parsed.action}: ${parsed.payload?.msg || summary}`)
-    this.store.appendRunEvent(createRunEvent(runId, 'approval.pending', { summary, result: parsed }))
-    this.audit.info(runId, 'approval.result', 'Approval captured.', { summary, result: parsed })
-    return parsed
+    return this.controlMode.recordApproval(runId, summary, result)
   }
 
   recordFeedback(runId: string, decision: FeedbackDecision) {
-    if (decision.status === 'done') {
-      this.store.transitionRun(runId, 'verify', 'active')
-      this.store.confirmDone(runId, true)
-    } else if (decision.status === 'revise') {
-      this.store.transitionRun(runId, 'confirm_elements', 'awaiting_user')
-      this.store.confirmDone(runId, false)
-      this.store.updateRun(runId, { verifyPassed: false })
-    } else {
-      this.store.transitionRun(runId, 'execute', 'active')
-    }
-
-    this.store.updateRun(runId, {
-      lastFeedback: decision,
-      userConfirmedDone: decision.status === 'done',
-    })
-    this.store.appendDecision(runId, `${decision.status}: ${decision.msg}`)
-    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { decision }))
-    this.audit.info(runId, 'feedback.result', 'Feedback captured.', decision)
-    return decision
+    return this.controlMode.recordFeedback(runId, decision)
   }
 
   verifyRun(runId: string, userConfirmedDone = false): VerifyRunResult {
-    const run = this.store.requireRun(runId)
-    const taskCard = this.store.requireTaskCard(runId)
-    const handoff = this.store.requireHandoff(runId)
+    return this.verification.verifyRun(runId, userConfirmedDone)
+  }
 
-    if (userConfirmedDone) {
-      this.store.confirmDone(runId, true)
-    }
+  getConversationRecord(preferredRunId?: string | null): ConversationRecord {
+    return this.conversation.getConversationRecord(preferredRunId)
+  }
 
-    const reasons: string[] = []
-    let verdict: VerifyVerdict = 'pass'
+  getConversationContext(preferredRunId?: string | null) {
+    return this.conversation.getConversationContext(preferredRunId)
+  }
 
-    if (!taskCard.goal.trim()) {
-      reasons.push('TaskCard.goal is empty.')
-    }
-    if (taskCard.steps.length === 0) {
-      reasons.push('TaskCard.steps is empty.')
-    }
-    if (!handoff.nextRecommendedAction.trim()) {
-      reasons.push('Handoff.nextRecommendedAction is empty.')
-    }
-    if (handoff.pendingSteps.length === 0 && handoff.completedSteps.length === 0) {
-      reasons.push('Handoff has neither completedSteps nor pendingSteps.')
-    }
-    if (!run.userConfirmedDone && !userConfirmedDone) {
-      reasons.push('User has not confirmed completion.')
-    }
+  getLatestSummaryDocument(preferredRunId?: string | null) {
+    return this.conversation.getLatestSummaryDocument(preferredRunId)
+  }
 
-    if (reasons.length > 0) {
-      verdict = reasons.some((reason) => reason.includes('User has not confirmed')) ? 'blocked' : 'failed'
-    } else if (taskCard.risks.length > 0) {
-      verdict = 'pass_with_risks'
-    }
+  getTaskRecord(runId: string, summaryDocumentPath: string | null = null) {
+    return this.store.getTaskRecord(runId, summaryDocumentPath)
+  }
 
-    const verificationStatus: VerificationStatus = {
-      resultVerified: verdict === 'pass' || verdict === 'pass_with_risks',
-      handoffVerified:
-        handoff.nextRecommendedAction.trim().length > 0 &&
-        (handoff.completedSteps.length > 0 || handoff.pendingSteps.length > 0),
-      verdict,
-    }
-
-    this.store.markVerification(runId, verificationStatus)
-    this.store.appendRunEvent(createRunEvent(runId, 'verify.finished', { verdict, reasons }))
-
-    if (verificationStatus.resultVerified && verificationStatus.handoffVerified && (run.userConfirmedDone || userConfirmedDone)) {
-      this.store.transitionRun(runId, 'done', 'completed')
-      this.store.appendRunEvent(createRunEvent(runId, 'run.completed', { verdict }))
-    }
-
-    this.audit.info(runId, 'verify.result', 'Run verification completed.', { verdict, reasons })
-
-    return { verdict, reasons, verificationStatus }
+  getTaskSummary(runId: string) {
+    return this.store.getTaskSummary(runId)
   }
 }

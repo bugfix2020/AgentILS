@@ -1,4 +1,4 @@
-git # AgentILS Implementation Plan V1
+# AgentILS Implementation Plan V1
 # AgentILS 实施计划 V1
 
 ## Goal / 目标
@@ -40,6 +40,8 @@ The implementation target is:
    运行时逻辑放在 `src/*`，hook 脚本只做桥接。
 5. WebView is a control surface, not the source of truth.  
    WebView 是控制面，不是真实状态源。
+6. The plan must support unattended execution with bounded parallelism.  
+   该计划必须支持“无人值守执行”，但并发度必须受控。
 
 ## Current Gap Summary / 当前缺口摘要
 
@@ -80,6 +82,71 @@ These five interfaces must be treated as phase-0 deliverables.
 Without these five, `store / orchestrator / hooks / summary / gateway / webview` will all drift.
 
 如果这 5 个接口不先稳定，`store / orchestrator / hooks / summary / gateway / webview` 会一起漂移并反复返工。
+
+## Unattended Execution Mode / 无人值守执行模式
+
+This plan is intended to run with minimal user intervention once execution starts.
+
+本计划设计目标之一，就是在启动执行后尽量减少用户干预，实现“无人值守”推进。
+
+### Parallelism budget / 并发预算
+
+Maximum concurrent subagents: `6`
+
+最大并发子代理数：`6`
+
+This limit should be treated as a hard scheduler constraint.
+
+这个限制必须被视为硬调度约束。
+
+Do not open more than 6 concurrent worker threads at the same time.
+
+任何时刻都不要同时打开超过 6 个并行子代理线程。
+
+### Execution rule / 执行规则
+
+The system should execute in controlled batches instead of opening every workstream at once.
+
+系统不应一次性把所有工作流全部展开，而应按受控批次执行。
+
+Recommended unattended behavior:
+
+推荐的无人值守执行规则：
+
+1. Freeze contracts first.  
+   先冻结 contracts。
+2. Start only the batch that is dependency-safe.  
+   只启动依赖安全的那一批。
+3. Wait for the batch to finish.  
+   等这一批完成。
+4. Integrate, validate, and resolve compatibility issues centrally.  
+   由主代理统一集成、验证、解决兼容问题。
+5. Launch the next batch only after the current foundation is stable.  
+   当前基础层稳定后，再启动下一批。
+
+### Why this matters / 为什么这样做
+
+Unattended execution fails when:
+
+无人值守执行最容易在这些情况下失控：
+
+- too many overlapping write scopes
+- 写入范围重叠过多
+- contracts are still moving while workers are coding
+- contracts 还在变化，子代理已经开始写代码
+- gateway/orchestrator/UI start changing before state/store is stable
+- state/store 未稳定时，gateway/orchestrator/UI 已经开始变化
+
+So the unattended strategy is:
+
+因此无人值守策略应是：
+
+- fewer concurrent workers
+- 更少但更稳的并行子代理
+- harder ownership boundaries
+- 更硬的所有权边界
+- central integration between batches
+- 批次之间由主代理统一集成
 
 ## Target Module Map / 目标模块地图
 
@@ -127,16 +194,13 @@ Without these five, `store / orchestrator / hooks / summary / gateway / webview`
 ### Gateway / MCP 面
 
 - `src/gateway/server.ts`
-- `src/gateway/tools/run-tools.ts`
-- `src/gateway/tools/task-tools.ts`
-- `src/gateway/tools/approval-tools.ts`
-- `src/gateway/tools/summary-tools.ts`
-- `src/gateway/resources/task-resources.ts`
-- `src/gateway/resources/conversation-resources.ts`
-- `src/gateway/prompts/task-prompts.ts`
-- `src/gateway/transports/stdio.ts`
-- `src/gateway/transports/http.ts`
-- `src/gateway/index.ts`
+- `src/gateway/context.ts`
+- `src/gateway/shared.ts`
+- `src/gateway/tools.ts`
+- `src/gateway/resources.ts`
+- `src/gateway/prompts.ts`
+- `src/gateway/transports.ts`
+- `src/gateway/gateway.ts`
 
 ### Task Surface API / UI 后端接口层
 
@@ -360,6 +424,19 @@ Recommended responsibilities:
 This should be treated as its own module, not as an afterthought inside WebView code.
 
 它应作为独立模块存在，而不是塞进 WebView 代码里的附属逻辑。
+
+## Current Execution Status / 当前执行状态
+
+- `Wave 0`: complete
+- `Wave 0`：已完成
+- `Wave 1`: complete
+- `Wave 1`：已完成
+- `Wave 2`: in progress, runtime behavior split is being integrated
+- `Wave 2`：进行中，运行时行为层拆分正在集成
+- `Wave 3`: not started
+- `Wave 3`：未开始
+- `Wave 4`: not started
+- `Wave 4`：未开始
 
 ## Execution Waves / 实施波次
 
@@ -656,6 +733,95 @@ Recommended initial assignment:
 | Agent 11 | `extensions/agentils-ui-helper/*` | Wave 3 |
 | Agent 12 | integration tests and final verification | Wave 4 |
 
+### Important scheduling note / 重要调度说明
+
+The table above defines ownership, not simultaneous launch count.
+
+上表定义的是所有权，不代表要同时启动这么多子代理。
+
+Because the hard parallel limit is `6`, these agents must be launched in batches.
+
+由于硬并发上限是 `6`，这些子代理必须按批次启动。
+
+### Recommended unattended batches / 推荐无人值守批次
+
+#### Batch A / 批次 A
+
+Goal:
+
+目标：
+
+- finish Wave 0 and Wave 1 foundations
+- 完成 Wave 0 与 Wave 1 基础层
+
+Concurrent workers:
+
+并发子代理：
+
+1. `types`
+2. `store`
+3. `hooks runtime`
+4. `summary`
+5. optional compatibility reviewer
+
+This batch should never exceed 5 workers plus the main integrator.
+
+这一批不应超过 5 个 worker，再加 1 个主集成代理。
+
+#### Batch B / 批次 B
+
+Goal:
+
+目标：
+
+- finish Wave 2 runtime behavior
+- 完成 Wave 2 运行时行为层
+
+Concurrent workers:
+
+并发子代理：
+
+1. `orchestrator`
+2. `gateway`
+3. `control-plane API`
+4. optional runtime integration verifier
+
+#### Batch C / 批次 C
+
+Goal:
+
+目标：
+
+- finish Wave 3 product surfaces
+- 完成 Wave 3 产品承载层
+
+Concurrent workers:
+
+并发子代理：
+
+1. `.github` customizations
+2. VS Code plugin host
+3. WebView console
+4. remote UI bridge
+5. optional UX/integration reviewer
+
+#### Batch D / 批次 D
+
+Goal:
+
+目标：
+
+- finish Wave 4 verification and release prep
+- 完成 Wave 4 验证与发布前收口
+
+Concurrent workers:
+
+并发子代理：
+
+1. integration tests
+2. docs and release surface verification
+3. final compatibility reviewer
+
 Subagent rules:
 
 子代理规则：
@@ -666,6 +832,27 @@ Subagent rules:
 - Wave 0 完成后不要再改接口命名
 - prefer adapters over breaking rewrites
 - 优先写 adapter，而不是破坏式重写
+- when running unattended, the main integrator must always validate between batches
+- 无人值守执行时，主集成代理必须在每一批之间做统一验证
+
+## Unattended Completion Criteria / 无人值守完成判据
+
+Unattended execution is only acceptable when:
+
+只有满足以下条件时，才允许无人值守持续执行：
+
+- current batch has a frozen contract boundary
+- 当前批次的 contract boundary 已冻结
+- worker write scopes are disjoint
+- 子代理写入范围彼此独立
+- the branch builds after every batch
+- 每一批结束后分支都能 build
+- integration is committed before the next batch starts
+- 下一批开始前，集成结果已提交
+
+If any batch breaks these rules, unattended execution should pause and return to central integration first.
+
+如果任何一批打破这些规则，无人值守执行应先暂停，回到主代理统一集成后再继续。
 
 ## Non-Goals For This Version / 本版本非目标
 

@@ -49,6 +49,10 @@
             "import": "./dist/orchestrator/index.js",
             "types": "./dist/orchestrator/index.d.ts"
         },
+        "./control-plane": {
+            "import": "./dist/control-plane/index.js",
+            "types": "./dist/control-plane/index.d.ts"
+        },
         "./store": {
             "import": "./dist/store/index.js",
             "types": "./dist/store/index.d.ts"
