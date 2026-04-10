@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto'
 import {
   AuditEvent,
   AuditEventSchema,
+  type HandoffPacket,
   createAuditEvent,
   createHandoffPacket,
   createRunRecord,
   createTaskCard,
-  HandoffPacket,
   HandoffPacketSchema,
   RunBudgetUsageDelta,
   RunEvent,
@@ -20,6 +20,16 @@ import {
   TaskStep,
   VerificationStatus,
 } from '../types/index.js'
+import {
+  evaluateConversationStopGate,
+  evaluateTaskExecutionGate,
+  evaluateTaskStopGate,
+} from '../control/gate-evaluators.js'
+import { createOverrideState } from '../control/override-policy.js'
+import { AgentGateAuditStore, type AuditStoreAdapter } from './audit-store.js'
+import { AgentGateConversationStore, type ConversationStoreAdapter } from './conversation-store.js'
+import { AgentGateSummaryStore, type SummaryWriteInput, type TaskSummaryDocument } from './summary-store.js'
+import { AgentGateTaskStore, type TaskStoreAdapter } from './task-store.js'
 import {
   loadPersistentStore,
   type PersistentStoreMeta,
@@ -41,6 +51,10 @@ export class AgentGateMemoryStore {
   private readonly handoffs = new Map<string, HandoffPacket>()
   private readonly auditEvents = new Map<string, AuditEvent[]>()
   private readonly runEvents = new Map<string, RunEvent[]>()
+  readonly conversationStore: AgentGateConversationStore
+  readonly taskStore: AgentGateTaskStore
+  readonly summaryStore: AgentGateSummaryStore
+  readonly auditStore: AgentGateAuditStore
   readonly stateFilePath: string
   private meta: PersistentStoreMeta
 
@@ -68,6 +82,11 @@ export class AgentGateMemoryStore {
       current.push(event)
       this.runEvents.set(event.runId, current)
     }
+
+    this.conversationStore = new AgentGateConversationStore(this as ConversationStoreAdapter)
+    this.taskStore = new AgentGateTaskStore(this as TaskStoreAdapter)
+    this.summaryStore = new AgentGateSummaryStore()
+    this.auditStore = new AgentGateAuditStore(this as AuditStoreAdapter)
   }
 
   startRun(input: StartRunInput): RunRecord {
@@ -106,6 +125,52 @@ export class AgentGateMemoryStore {
 
   getMeta(): PersistentStoreMeta {
     return { ...this.meta }
+  }
+
+  getConversationRecord() {
+    return this.conversationStore.getRecord()
+  }
+
+  getTaskRecord(runId: string, summaryDocumentPath: string | null = null) {
+    const overrideState = this.getCurrentOverrideState(runId)
+    return this.taskStore.getTaskRecord(runId, summaryDocumentPath, overrideState)
+  }
+
+  getTaskSummary(runId: string) {
+    return this.taskStore.getTaskSummary(runId)
+  }
+
+  previewTaskGate(runId: string) {
+    const run = this.requireRun(runId)
+    const taskCard = this.requireTaskCard(runId)
+    return evaluateTaskExecutionGate({
+      taskCard,
+      policyAllowed: true,
+      boundaryApproved: taskCard.scope.length > 0,
+      overrideState: this.getCurrentOverrideState(runId),
+      controlMode: run.currentMode,
+    })
+  }
+
+  previewTaskStopGate(runId: string) {
+    return evaluateTaskStopGate(this.requireRun(runId))
+  }
+
+  previewConversationStopGate(runId: string, explicitConversationEnd = false) {
+    const run = this.requireRun(runId)
+    return evaluateConversationStopGate(run, run.currentStatus === 'completed', explicitConversationEnd)
+  }
+
+  writeTaskSummary(input: SummaryWriteInput): TaskSummaryDocument {
+    return this.summaryStore.writeSummary(input)
+  }
+
+  readTaskSummary(taskId: string): TaskSummaryDocument | null {
+    return this.summaryStore.readSummary(taskId)
+  }
+
+  getAuditSummary(runId: string) {
+    return this.auditStore.summarize(runId)
   }
 
   resolveRunId(preferredRunId?: string | null): string | null {
@@ -303,6 +368,24 @@ export class AgentGateMemoryStore {
 
   listRunEvents(runId: string): RunEvent[] {
     return [...(this.runEvents.get(runId) ?? [])]
+  }
+
+  getCurrentOverrideState(runId: string) {
+    const run = this.runs.get(runId)
+    if (!run?.activeApproval) {
+      return null
+    }
+
+    return createOverrideState({
+      confirmed: run.activeApproval.approved,
+      level: run.activeApproval.riskLevel === 'high' ? 'hard' : 'soft',
+      summary: run.activeApproval.summary,
+      acceptedRisks: [...run.activeApproval.targets],
+      skippedChecks: [],
+      confirmedAt: run.activeApproval.updatedAt,
+      taskId: run.taskId,
+      mode: run.currentMode,
+    })
   }
 
   getSnapshot(): StoreSnapshot {
