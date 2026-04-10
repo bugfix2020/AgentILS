@@ -431,10 +431,10 @@ This should be treated as its own module, not as an afterthought inside WebView 
 - `Wave 0`：已完成
 - `Wave 1`: complete
 - `Wave 1`：已完成
-- `Wave 2`: in progress, runtime behavior split is being integrated
-- `Wave 2`：进行中，运行时行为层拆分正在集成
-- `Wave 3`: not started
-- `Wave 3`：未开始
+- `Wave 2`: complete
+- `Wave 2`：已完成
+- `Wave 3`: in progress, VS Code host, UI helper, and .github customizations have landed and are being integrated
+- `Wave 3`：进行中，VS Code 宿主、UI helper 与 `.github` customizations 已落地，正在统一集成
 - `Wave 4`: not started
 - `Wave 4`：未开始
 

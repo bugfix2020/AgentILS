@@ -94,6 +94,9 @@
         "start": "node dist/index.js",
         "start:http": "node dist/index.js --http",
         "typecheck": "tsc --noEmit",
+        "typecheck:vscode-host": "npx tsc -p extensions/agentils-vscode/tsconfig.json --noEmit",
+        "check:ui-helper": "node --check extensions/agentils-ui-helper/src/extension.js && node --check extensions/agentils-ui-helper/src/local-prompts.js && node --check extensions/agentils-ui-helper/src/local-files.js",
+        "verify:surfaces": "npm run typecheck:vscode-host && npm run check:ui-helper",
         "prepublishOnly": "npm run typecheck && npm run build"
     },
     "dependencies": {
