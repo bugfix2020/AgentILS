@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="700" viewBox="0 0 1800 700">
+  <defs>
+    <marker id="arrow-333333" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333333" />
+    </marker>
+    <marker id="arrow-E74F4C" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#E74F4C" />
+    </marker>
+    <marker id="arrow-4669EA" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4669EA" />
+    </marker>
+  </defs>
+  <rect width="1800" height="700" fill="#fbfbfb" />
+  <line x1="0" y1="0" x2="0" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="32" y1="0" x2="32" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="64" y1="0" x2="64" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="96" y1="0" x2="96" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="128" y1="0" x2="128" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="160" y1="0" x2="160" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="192" y1="0" x2="192" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="224" y1="0" x2="224" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="256" y1="0" x2="256" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="288" y1="0" x2="288" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="320" y1="0" x2="320" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="352" y1="0" x2="352" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="384" y1="0" x2="384" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="416" y1="0" x2="416" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="448" y1="0" x2="448" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="480" y1="0" x2="480" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="512" y1="0" x2="512" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="544" y1="0" x2="544" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="576" y1="0" x2="576" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="608" y1="0" x2="608" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="640" y1="0" x2="640" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="672" y1="0" x2="672" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="704" y1="0" x2="704" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="736" y1="0" x2="736" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="768" y1="0" x2="768" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="800" y1="0" x2="800" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="832" y1="0" x2="832" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="864" y1="0" x2="864" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="896" y1="0" x2="896" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="928" y1="0" x2="928" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="960" y1="0" x2="960" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="992" y1="0" x2="992" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1024" y1="0" x2="1024" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1056" y1="0" x2="1056" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1088" y1="0" x2="1088" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1120" y1="0" x2="1120" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1152" y1="0" x2="1152" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1184" y1="0" x2="1184" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1216" y1="0" x2="1216" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1248" y1="0" x2="1248" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1280" y1="0" x2="1280" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1312" y1="0" x2="1312" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1344" y1="0" x2="1344" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1376" y1="0" x2="1376" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1408" y1="0" x2="1408" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1440" y1="0" x2="1440" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1472" y1="0" x2="1472" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1504" y1="0" x2="1504" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1536" y1="0" x2="1536" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1568" y1="0" x2="1568" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1600" y1="0" x2="1600" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1632" y1="0" x2="1632" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1664" y1="0" x2="1664" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1696" y1="0" x2="1696" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1728" y1="0" x2="1728" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1760" y1="0" x2="1760" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="1792" y1="0" x2="1792" y2="700" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="0" x2="1800" y2="0" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="32" x2="1800" y2="32" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="64" x2="1800" y2="64" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="96" x2="1800" y2="96" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="128" x2="1800" y2="128" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="160" x2="1800" y2="160" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="192" x2="1800" y2="192" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="224" x2="1800" y2="224" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="256" x2="1800" y2="256" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="288" x2="1800" y2="288" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="320" x2="1800" y2="320" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="352" x2="1800" y2="352" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="384" x2="1800" y2="384" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="416" x2="1800" y2="416" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="448" x2="1800" y2="448" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="480" x2="1800" y2="480" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="512" x2="1800" y2="512" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="544" x2="1800" y2="544" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="576" x2="1800" y2="576" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="608" x2="1800" y2="608" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="640" x2="1800" y2="640" stroke="#e7e7e7" stroke-width="1" />
+<line x1="0" y1="672" x2="1800" y2="672" stroke="#e7e7e7" stroke-width="1" />
+  
+        
+    <rect x="110" y="170" width="260" height="110" rx="8" ry="8"
+      fill="#ffffff" stroke="#333333" stroke-width="2.5" />
+    <text x="240" y="198" text-anchor="middle" font-size="20" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="240" dy="0">1</tspan><tspan x="240" dy="27">collect</tspan><tspan x="240" dy="27">需求收集</tspan></text>
+  
+
+    <rect x="550" y="170" width="260" height="110" rx="8" ry="8"
+      fill="#ffffff" stroke="#333333" stroke-width="2.5" />
+    <text x="680" y="198" text-anchor="middle" font-size="20" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="680" dy="0">2</tspan><tspan x="680" dy="27">confirm_elements</tspan><tspan x="680" dy="27">关键要素确认</tspan></text>
+  
+
+    <rect x="990" y="170" width="260" height="110" rx="8" ry="8"
+      fill="#ffffff" stroke="#333333" stroke-width="2.5" />
+    <text x="1120" y="198" text-anchor="middle" font-size="20" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="1120" dy="0">3</tspan><tspan x="1120" dy="27">plan</tspan><tspan x="1120" dy="27">计划生成</tspan></text>
+  
+
+    <rect x="1430" y="170" width="260" height="110" rx="8" ry="8"
+      fill="#ffffff" stroke="#333333" stroke-width="2.5" />
+    <text x="1560" y="198" text-anchor="middle" font-size="20" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="1560" dy="0">4</tspan><tspan x="1560" dy="27">execute</tspan><tspan x="1560" dy="27">执行改动</tspan></text>
+  
+        
+    <path d="M 370 225 L 550 225" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrow-333333)" />
+    <text x="460" y="207" text-anchor="middle" font-size="16" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="460" dy="0">接收需求</tspan></text>
+  
+
+    <path d="M 810 225 L 990 225" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrow-333333)" />
+    <text x="900" y="196" text-anchor="middle" font-size="16" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="900" dy="0">LLM 判断：</tspan><tspan x="900" dy="22">目标明确</tspan></text>
+  
+
+    <path d="M 1250 225 L 1430 225" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrow-333333)" />
+    <text x="1340" y="196" text-anchor="middle" font-size="16" font-weight="500" fill="#222222" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"><tspan x="1340" dy="0">直接进入</tspan><tspan x="1340" dy="22">正常法则</tspan></text>
+  
+        
+    <circle cx="460" cy="390" r="7" fill="#4669EA" />
+    <path d="M 460 383 L 460 222" fill="none" stroke="#4669EA" stroke-width="2.5" stroke-dasharray="4 6" />
+    
+    <text x="476" y="398" text-anchor="start" font-size="16" font-weight="600" fill="#4669EA" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+      <tspan x="476" dy="0">用户：把这处文案改掉</tspan>
+    </text>
+  
+  
+        
+    <rect x="1380" y="340" width="360" height="220" rx="8" ry="8"
+      fill="#fffdf7" stroke="#333333" stroke-width="1.5" />
+    
+    <text x="1396" y="364" text-anchor="start" font-size="15" font-weight="700" fill="#E74F4C" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+      <tspan x="1396" dy="0">提示：</tspan>
+    </text>
+  
+    
+    <text x="1396" y="390" text-anchor="start" font-size="14" font-weight="600" fill="#E74F4C" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+      <tspan x="1396" dy="0">Agent 负责需求收敛、规划、执行与验证辅助。</tspan><tspan x="1396" dy="21">不能保证 100% 正确或完全符合预期。</tspan><tspan x="1396" dy="21">效果受任务复杂度、工具可用性和模型自身影响。</tspan>
+    </text>
+  
+    
+    <text x="1396" y="462" text-anchor="start" font-size="14" font-weight="500" fill="#666666" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+      <tspan x="1396" dy="0">复杂任务时建议优先使用T0梯队模型：</tspan><tspan x="1396" dy="21">Claude Sonnet 4.6 / Opus 4.6</tspan><tspan x="1396" dy="21">GPT-5.4 / GPT-5.3-Codex</tspan><tspan x="1396" dy="21">Gemini 3.1 Pro</tspan>
+    </text>
+  
+    
+    <text x="1396" y="546" text-anchor="start" font-size="13" font-weight="500" fill="#666666" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+      <tspan x="1396" dy="0">以平台实际提供为准。</tspan>
+    </text>
+  
+  
+      
+</svg>

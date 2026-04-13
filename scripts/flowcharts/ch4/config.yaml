@@ -1,0 +1,11 @@
+footer_title: 提示：
+footer_risk_lines:
+  - Agent 负责需求收敛、规划、执行与验证辅助。
+  - 不能保证 100% 正确或完全符合预期。
+  - 效果受任务复杂度、工具可用性和模型自身影响。
+footer_model_title: 复杂任务时建议优先使用T0梯队模型：
+footer_model_lines:
+  - Claude Sonnet 4.6 / Opus 4.6
+  - GPT-5.4 / GPT-5.3-Codex
+  - Gemini 3.1 Pro
+footer_disclaimer: 以平台实际提供为准。

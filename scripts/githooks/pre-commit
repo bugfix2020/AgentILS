@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+echo "[pre-commit] generating flowcharts..."
+npm run generate:flowcharts
