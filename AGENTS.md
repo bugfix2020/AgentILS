@@ -1,0 +1,1 @@
+AICORE/adapters/codex.md

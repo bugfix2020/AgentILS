@@ -29,7 +29,8 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
                     taskId: snapshot.run.taskId,
                     title: snapshot.run.title,
                     goal: snapshot.run.goal,
-                    currentMode: snapshot.run.currentMode,
+                    conversationMode: snapshot.run.currentMode,
+                    controlMode: snapshot.run.controlMode,
                     currentStep: snapshot.run.currentStep,
                     currentStatus: snapshot.run.currentStatus,
                   }
@@ -117,7 +118,7 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
             text: asJson({
               runId: snapshot.runId,
               taskId: snapshot.run.taskId,
-              controlMode: snapshot.run.currentMode,
+              controlMode: snapshot.run.controlMode,
               isOverrideActive: Boolean(overrideState?.confirmed),
               overrideState,
               nextAction: store.conversationStore.summarizeNextAction(snapshot.run, overrideState),

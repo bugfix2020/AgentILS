@@ -24,7 +24,7 @@ export interface GateDecision {
 export interface TaskExecutionGateInput {
   taskCard: Pick<
     TaskCard,
-    'goal' | 'scope' | 'steps' | 'risks' | 'verificationRequirements' | 'currentMode' | 'currentStep' | 'currentStatus'
+    'goal' | 'scope' | 'steps' | 'risks' | 'verificationRequirements' | 'controlMode' | 'currentStep' | 'currentStatus'
   >
   policyAllowed: boolean
   boundaryApproved: boolean
@@ -76,7 +76,7 @@ export function evaluateTaskExecutionGate(input: TaskExecutionGateInput): GateDe
   return {
     allowed: reasons.length === 0,
     reasons,
-    controlMode: normalizeControlMode(input.controlMode ?? input.taskCard.currentMode),
+    controlMode: normalizeControlMode(input.controlMode ?? input.taskCard.controlMode),
   }
 }
 
@@ -93,7 +93,7 @@ export function evaluateTaskStopGate(run: RunRecord): GateDecision {
   return {
     allowed: reasons.length === 0,
     reasons,
-    controlMode: normalizeControlMode(run.currentMode),
+    controlMode: normalizeControlMode(run.controlMode),
   }
 }
 
@@ -117,7 +117,7 @@ export function evaluateConversationStopGate(
   return {
     allowed: reasons.length === 0,
     reasons,
-    controlMode: normalizeControlMode(run.currentMode),
+    controlMode: normalizeControlMode(run.controlMode),
   }
 }
 
@@ -134,7 +134,6 @@ export function evaluateVerificationGate(run: RunRecord, handoff: HandoffPacket)
   return {
     allowed: reasons.length === 0,
     reasons,
-    controlMode: normalizeControlMode(run.currentMode),
+    controlMode: normalizeControlMode(run.controlMode),
   }
 }
-

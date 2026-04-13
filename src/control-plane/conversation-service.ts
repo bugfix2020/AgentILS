@@ -2,9 +2,8 @@ import type { GateDecision } from '../control/gate-evaluators.js'
 import type { ControlMode } from '../control/control-modes.js'
 import type { OverrideState } from '../control/override-policy.js'
 import type { AgentGateMemoryStore } from '../store/memory-store.js'
-import type { ConversationRecord } from '../store/conversation-store.js'
-import type { TaskRecord } from '../store/task-store.js'
-import type { TaskSummaryDocument } from '../store/summary-store.js'
+import { createRunEvent, type ConversationRecord, type TaskSummaryDocument } from '../types/index.js'
+import type { TaskRecordView } from '../store/task-store.js'
 
 function createBlockedDecision(reason: string, controlMode: ControlMode = 'normal'): GateDecision {
   return {
@@ -16,7 +15,7 @@ function createBlockedDecision(reason: string, controlMode: ControlMode = 'norma
 
 export interface ConversationSurfaceState {
   conversation: ConversationRecord
-  activeTask: TaskRecord | null
+  activeTask: TaskRecordView | null
   archivedTaskSummaries: TaskSummaryDocument[]
   controlMode: ControlMode
   overrideState: OverrideState | null
@@ -29,11 +28,12 @@ export interface ConversationServiceApi {
   getConversationRecord(preferredRunId?: string | null): ConversationRecord
   getConversationState(preferredRunId?: string | null): ConversationRecord['state']
   hasActiveTask(preferredRunId?: string | null): boolean
-  getActiveTaskRecord(preferredRunId?: string | null): TaskRecord | null
+  getActiveTaskRecord(preferredRunId?: string | null): TaskRecordView | null
   listCompletedTaskIds(preferredRunId?: string | null): string[]
   listArchivedTaskSummaries(preferredRunId?: string | null): TaskSummaryDocument[]
   summarizeNextAction(preferredRunId?: string | null): string | null
   previewConversationStopGate(preferredRunId?: string | null, explicitConversationEnd?: boolean): GateDecision
+  endConversation(preferredRunId?: string | null): ConversationRecord
   buildConversationSurface(preferredRunId?: string | null, explicitConversationEnd?: boolean): ConversationSurfaceState
 }
 
@@ -57,7 +57,7 @@ export class ConversationService implements ConversationServiceApi {
     return this.getConversationState(preferredRunId) === 'active_task'
   }
 
-  getActiveTaskRecord(preferredRunId?: string | null): TaskRecord | null {
+  getActiveTaskRecord(preferredRunId?: string | null): TaskRecordView | null {
     if (!this.hasActiveTask(preferredRunId)) {
       return null
     }
@@ -111,6 +111,26 @@ export class ConversationService implements ConversationServiceApi {
     } catch {
       return createBlockedDecision(`Unknown runId: ${runId}`)
     }
+  }
+
+  endConversation(preferredRunId?: string | null): ConversationRecord {
+    const runId = this.resolveRunId(preferredRunId)
+    if (!runId) {
+      return this.getConversationRecord(preferredRunId)
+    }
+
+    const preview = this.previewConversationStopGate(runId, true)
+    if (!preview.allowed) {
+      throw new Error(preview.reasons.join(' '))
+    }
+
+    const conversation = this.getConversationRecord(runId)
+    this.store.appendRunEvent(
+      createRunEvent(runId, 'conversation.completed', {
+        conversationId: conversation.conversationId,
+      }),
+    )
+    return this.getConversationRecord(runId)
   }
 
   buildConversationSurface(

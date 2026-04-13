@@ -234,6 +234,7 @@ export const RunEventSchema = z.object({
     'verify.finished',
     'run.completed',
     'run.failed',
+    'conversation.completed',
   ]),
   runId: z.string(),
   at: z.string(),

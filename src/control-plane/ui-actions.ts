@@ -1,11 +1,12 @@
 import { AgentGateOrchestrator } from '../orchestrator/orchestrator.js'
 import { normalizeControlMode } from '../control/control-modes.js'
+import { createOverrideState } from '../control/override-policy.js'
 import { AgentGateMemoryStore } from '../store/memory-store.js'
 import { ConversationService } from './conversation-service.js'
 import { OverrideService } from './override-service.js'
 import { SummaryService } from './summary-service.js'
 import { TaskService } from './task-service.js'
-import { createOverrideState, type StartRunInput, type RunStatus, type RunStep } from '../types/index.js'
+import { type StartRunInput, type RunStatus, type RunStep } from '../types/index.js'
 import { renderTaskSummaryDocument, type TaskSummaryDocument } from '../store/summary-store.js'
 
 export interface UiConversationSnapshot {
@@ -78,6 +79,8 @@ export interface MarkTaskDoneInput extends UiRuntimeOptions {
   summary?: string
 }
 
+export interface EndConversationInput extends UiRuntimeOptions {}
+
 const runProgression: RunStep[] = [
   'collect',
   'confirm_elements',
@@ -110,7 +113,7 @@ function mapSummary(document: TaskSummaryDocument | null, filePath: string | nul
 
   return {
     taskId: document.frontmatter.taskId,
-    title: document.frontmatter.title,
+    title: document.frontmatter.taskTitle,
     filePath: filePath ?? '',
     markdown: renderTaskSummaryDocument(document),
     generatedAt: document.frontmatter.createdAt,
@@ -192,9 +195,9 @@ function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}): UiRuntime
           scope: [...run.scope],
           constraints: [...run.constraints],
           risks: [...run.risks],
-          openQuestions: [...taskCard.pendingItems],
-          assumptions: [...taskCard.confirmedItems],
-          decisionNeededFromUser: [],
+          openQuestions: [...taskCard.openQuestions],
+          assumptions: [...taskCard.assumptions],
+          decisionNeededFromUser: [...taskCard.decisionNeededFromUser],
           notes: [...run.decisions],
           overrideState: {
             confirmed: Boolean(taskCard.overrideState?.confirmed),
@@ -245,9 +248,9 @@ function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}): UiRuntime
             scope: services.store.requireRun(conversationSurface.activeTask.runId).scope,
             constraints: services.store.requireRun(conversationSurface.activeTask.runId).constraints,
             risks: services.store.requireRun(conversationSurface.activeTask.runId).risks,
-            openQuestions: [...(activeTaskCard?.pendingItems ?? [])],
-            assumptions: [...(activeTaskCard?.confirmedItems ?? [])],
-            decisionNeededFromUser: [],
+            openQuestions: [...(activeTaskCard?.openQuestions ?? [])],
+            assumptions: [...(activeTaskCard?.assumptions ?? [])],
+            decisionNeededFromUser: [...(activeTaskCard?.decisionNeededFromUser ?? [])],
             notes: [...services.store.requireRun(conversationSurface.activeTask.runId).decisions],
             overrideState: {
               confirmed: Boolean(conversationSurface.activeTask.overrideState?.confirmed),
@@ -332,18 +335,20 @@ export function acceptUiOverride(input: AcceptOverrideInput): UiRuntimeSnapshot 
   const taskCard = services.store.requireTaskCard(runId)
   const overrideState = createOverrideState({
     taskId: run.taskId,
-        conversationId: run.conversationId ?? null,
-        level: input.level ?? 'soft',
-        summary: input.acknowledgement,
-        acceptedRisks: [...run.risks],
-        skippedChecks: [],
-        mode: taskCard.controlMode,
+    conversationId: run.conversationId ?? null,
+    level: input.level ?? 'soft',
+    summary: input.acknowledgement,
+    acceptedRisks: [...run.risks],
+    skippedChecks: [],
+    mode: taskCard.controlMode,
   })
-
-  services.store.patchTaskCard(runId, {
+  services.orchestrator.task.setTaskOverrideState(runId, overrideState)
+  services.orchestrator.controlMode.applyControlModeSignal(
+    runId,
+    normalizeControlMode(taskCard.controlMode) === 'normal' ? 'override' : 'repeat_override',
     overrideState,
-    controlMode: 'direct',
-  })
+    'ui.override',
+  )
   services.store.appendDecision(runId, `override: ${input.acknowledgement}`)
 
   return buildRuntimeSnapshotInternal({
@@ -386,5 +391,19 @@ export function markUiTaskDone(input: MarkTaskDoneInput = {}): UiRuntimeSnapshot
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
     preferredRunId: runId,
+  })
+}
+
+export function endUiConversation(input: EndConversationInput = {}): UiRuntimeSnapshot {
+  const services = createServices(input.stateFilePath)
+  try {
+    services.conversation.endConversation(input.preferredRunId)
+  } catch {
+    return buildRuntimeSnapshotInternal(input)
+  }
+
+  return buildRuntimeSnapshotInternal({
+    stateFilePath: input.stateFilePath,
+    preferredRunId: input.preferredRunId,
   })
 }

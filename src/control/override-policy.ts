@@ -1,43 +1,18 @@
-import { normalizeControlMode, type ControlMode } from './control-modes.js'
+import { normalizeControlMode } from './control-modes.js'
+import {
+  createOverrideState as createCanonicalOverrideState,
+  type CreateOverrideStateInput,
+  type OverrideLevel,
+  type OverrideState,
+} from '../types/control-mode.js'
 
-export type OverrideLevel = 'soft' | 'hard'
-
-export interface OverrideState {
-  confirmed: boolean
-  level: OverrideLevel
-  summary: string
-  acceptedRisks: string[]
-  skippedChecks: string[]
-  confirmedAt: string
-  taskId?: string
-  conversationId?: string
-  mode: ControlMode
-}
-
-export interface CreateOverrideStateInput {
-  summary: string
-  acceptedRisks?: string[]
-  skippedChecks?: string[]
-  taskId?: string
-  conversationId?: string
-  mode?: ControlMode | string | null
-  level?: OverrideLevel
-  confirmed?: boolean
-  confirmedAt?: string
-}
+export type { CreateOverrideStateInput, OverrideLevel, OverrideState }
 
 export function createOverrideState(input: CreateOverrideStateInput): OverrideState {
-  return {
-    confirmed: input.confirmed ?? true,
-    level: input.level ?? 'soft',
-    summary: input.summary,
-    acceptedRisks: [...(input.acceptedRisks ?? [])],
-    skippedChecks: [...(input.skippedChecks ?? [])],
-    confirmedAt: input.confirmedAt ?? new Date().toISOString(),
-    taskId: input.taskId,
-    conversationId: input.conversationId,
+  return createCanonicalOverrideState({
+    ...input,
     mode: normalizeControlMode(input.mode ?? null),
-  }
+  })
 }
 
 export function isOverrideActive(overrideState?: OverrideState | null): boolean {
@@ -56,4 +31,3 @@ export function summarizeOverride(overrideState?: OverrideState | null): string 
   const risks = overrideState.acceptedRisks.length > 0 ? overrideState.acceptedRisks.join('; ') : 'none'
   return `${overrideState.level} override: ${overrideState.summary} [risks: ${risks}]`
 }
-

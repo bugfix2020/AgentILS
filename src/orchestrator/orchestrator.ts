@@ -101,6 +101,10 @@ export class AgentGateOrchestrator {
     return this.conversation.getConversationRecord(preferredRunId)
   }
 
+  endConversation(preferredRunId?: string | null) {
+    return this.conversation.endConversation(preferredRunId)
+  }
+
   getConversationContext(preferredRunId?: string | null) {
     return this.conversation.getConversationContext(preferredRunId)
   }

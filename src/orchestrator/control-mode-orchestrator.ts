@@ -11,26 +11,7 @@ import {
 } from '../types/index.js'
 import { nextControlMode, type ControlModeSignal } from '../control/mode-transitions.js'
 import { normalizeControlMode, type ControlMode } from '../control/control-modes.js'
-import { type OverrideState as PolicyOverrideState } from '../control/override-policy.js'
 import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
-
-function toPolicyOverrideState(overrideState?: TaskOverrideState | null): PolicyOverrideState | null {
-  if (!overrideState) {
-    return null
-  }
-
-  return {
-    confirmed: overrideState.confirmed,
-    level: overrideState.level,
-    summary: overrideState.summary,
-    acceptedRisks: [...overrideState.acceptedRisks],
-    skippedChecks: [...overrideState.skippedChecks],
-    confirmedAt: overrideState.confirmedAt,
-    taskId: overrideState.taskId,
-    conversationId: overrideState.conversationId ?? undefined,
-    mode: overrideState.mode,
-  }
-}
 
 export class AgentGateControlModeOrchestrator {
   constructor(
@@ -40,7 +21,7 @@ export class AgentGateControlModeOrchestrator {
   ) {}
 
   getControlMode(runId: string): ControlMode {
-    return normalizeControlMode(this.store.requireRun(runId).currentMode)
+    return normalizeControlMode(this.store.requireRun(runId).controlMode)
   }
 
   setControlMode(
@@ -60,9 +41,9 @@ export class AgentGateControlModeOrchestrator {
     const currentRun = this.store.requireRun(runId)
     const taskCard = this.store.requireTaskCard(runId)
     const nextMode = nextControlMode(
-      currentRun.currentMode,
+      currentRun.controlMode,
       signal,
-      toPolicyOverrideState(overrideState ?? taskCard.overrideState),
+      overrideState ?? taskCard.overrideState,
     )
     return this.setControlMode(runId, nextMode, `${reason}:${signal}`)
   }
@@ -110,11 +91,11 @@ export class AgentGateControlModeOrchestrator {
         summary,
         acceptedRisks: approvalState.targets,
         skippedChecks: [],
-        mode: currentRun.currentMode,
+        mode: currentRun.controlMode,
       })
       this.task.setTaskOverrideState(runId, overrideState)
 
-      const signal: ControlModeSignal = normalizeControlMode(currentRun.currentMode) === 'normal' ? 'override' : 'repeat_override'
+      const signal: ControlModeSignal = normalizeControlMode(currentRun.controlMode) === 'normal' ? 'override' : 'repeat_override'
       this.applyControlModeSignal(runId, signal, overrideState, 'approval.override')
     }
 

@@ -87,7 +87,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         taskRecord: store.getTaskRecord(run.runId, run.summaryDocumentPath),
         taskSummary: store.getTaskSummary(run.runId),
         summaryDocument: store.readTaskSummary(run.taskId),
-        controlMode: run.currentMode,
+        controlMode: run.controlMode,
       })
     },
   )
@@ -123,7 +123,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         taskRecord: store.getTaskRecord(run.runId, run.summaryDocumentPath),
         taskSummary: store.getTaskSummary(run.runId),
         summaryDocument: store.readTaskSummary(run.taskId),
-        controlMode: run.currentMode,
+        controlMode: run.controlMode,
       })
     },
   )
@@ -147,7 +147,8 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
               taskId: snapshot.taskId,
               title: snapshot.run.title,
               goal: snapshot.run.goal,
-              currentMode: snapshot.run.currentMode,
+              conversationMode: snapshot.run.currentMode,
+              controlMode: snapshot.run.controlMode,
               currentStep: snapshot.run.currentStep,
               currentStatus: snapshot.run.currentStatus,
             }
@@ -158,6 +159,20 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         nextAction: snapshot?.nextAction ?? 'await_next_task',
       })
     },
+  )
+
+  server.registerTool(
+    'conversation_end',
+    {
+      description: 'Explicitly end the current conversation after all tasks are complete.',
+      inputSchema: {
+        runId: z.string().optional(),
+      },
+    },
+    async ({ runId }) =>
+      textResult('Conversation ended', {
+        conversation: orchestrator.endConversation(runId),
+      }),
   )
 
   server.registerTool(
@@ -177,7 +192,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       return textResult('Control mode', {
         runId: snapshot.runId,
         taskId: snapshot.taskId,
-        controlMode: snapshot.run.currentMode,
+        controlMode: snapshot.run.controlMode,
         isOverrideActive: Boolean(snapshot.overrideState?.confirmed),
         overrideState: snapshot.overrideState,
         taskRecord: snapshot.taskRecord,

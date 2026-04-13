@@ -1,7 +1,7 @@
 import type { GateDecision } from '../control/gate-evaluators.js'
 import type { AgentGateMemoryStore } from '../store/memory-store.js'
 import type { HandoffPacket, RunBudgetUsageDelta, RunRecord, StartRunInput, TaskCard, VerificationStatus } from '../types/index.js'
-import type { TaskRecord, TaskReadiness } from '../store/task-store.js'
+import type { TaskReadiness, TaskRecordView } from '../store/task-store.js'
 
 function createBlockedDecision(reason: string) {
   return {
@@ -13,7 +13,7 @@ function createBlockedDecision(reason: string) {
 
 export interface TaskSurfaceState {
   runId: string
-  task: TaskRecord
+  task: TaskRecordView
   summary: ReturnType<AgentGateMemoryStore['getTaskSummary']>
   handoff: HandoffPacket
   taskGate: GateDecision
@@ -24,7 +24,7 @@ export interface TaskSurfaceState {
 export interface TaskServiceApi {
   resolveRunId(preferredRunId?: string | null): string | null
   startTask(input: StartRunInput): RunRecord
-  getTaskRecord(preferredRunId?: string | null, summaryDocumentPath?: string | null): TaskRecord | null
+  getTaskRecord(preferredRunId?: string | null, summaryDocumentPath?: string | null): TaskRecordView | null
   getTaskSummary(preferredRunId?: string | null): ReturnType<AgentGateMemoryStore['getTaskSummary']> | null
   getTaskCard(preferredRunId?: string | null): TaskCard | null
   getHandoff(preferredRunId?: string | null): HandoffPacket | null
@@ -50,7 +50,7 @@ export class TaskService implements TaskServiceApi {
     return this.store.startRun(input)
   }
 
-  getTaskRecord(preferredRunId?: string | null, summaryDocumentPath?: string | null): TaskRecord | null {
+  getTaskRecord(preferredRunId?: string | null, summaryDocumentPath?: string | null): TaskRecordView | null {
     const runId = this.resolveRunId(preferredRunId)
     if (!runId) {
       return null
@@ -196,4 +196,3 @@ export class TaskService implements TaskServiceApi {
     }
   }
 }
-

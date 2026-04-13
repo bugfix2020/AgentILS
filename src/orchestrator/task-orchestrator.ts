@@ -44,7 +44,7 @@ export class AgentGateTaskOrchestrator {
       controlMode: normalized,
     })
     const updated = this.store.updateRun(runId, {
-      currentMode: normalized as unknown as RunRecord['currentMode'],
+      controlMode: normalized,
     })
     this.store.appendRunEvent(
       createRunEvent(runId, 'run.updated', {

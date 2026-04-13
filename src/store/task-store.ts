@@ -1,16 +1,10 @@
-import { type HandoffPacket, type RunRecord, type TaskCard } from '../types/index.js'
+import { type HandoffPacket, type RunRecord, type TaskCard, type TaskExecutionReadiness } from '../types/index.js'
 import { normalizeControlMode, type ControlMode } from '../control/control-modes.js'
 import { type OverrideState, isOverrideActive } from '../control/override-policy.js'
 
-export interface TaskReadiness {
-  technicallyReady: boolean
-  boundaryApproved: boolean
-  policyAllowed: boolean
-  missingInfo: string[]
-  risks: string[]
-}
+export type TaskReadiness = TaskExecutionReadiness
 
-export interface TaskRecord {
+export interface TaskRecordView {
   taskId: string
   runId: string
   title: string
@@ -34,9 +28,14 @@ export interface TaskStoreAdapter {
 export class AgentGateTaskStore {
   constructor(private readonly adapter: TaskStoreAdapter) {}
 
-  getTaskRecord(runId: string, summaryDocumentPath: string | null = null, overrideState: OverrideState | null = null): TaskRecord {
+  getTaskRecord(
+    runId: string,
+    summaryDocumentPath: string | null = null,
+    overrideState: OverrideState | null = null,
+  ): TaskRecordView {
     const run = this.adapter.requireRun(runId)
     const taskCard = this.adapter.requireTaskCard(runId)
+    const boundaryApproved = taskCard.executionReadiness.boundaryApproved || isOverrideActive(overrideState)
 
     return {
       taskId: run.taskId,
@@ -46,21 +45,21 @@ export class AgentGateTaskStore {
       controlMode: normalizeControlMode(taskCard.controlMode),
       currentStep: String(taskCard.currentStep),
       currentStatus: String(taskCard.currentStatus),
-      openQuestions: [...taskCard.pendingItems],
-      assumptions: [...taskCard.confirmedItems],
+      openQuestions: [...taskCard.openQuestions],
+      assumptions: [...taskCard.assumptions],
       summaryDocumentPath,
       overrideState,
       executionReadiness: {
-        technicallyReady: taskCard.steps.length > 0 && Boolean(taskCard.goal.trim()),
-        boundaryApproved: isOverrideActive(overrideState) || taskCard.scope.length > 0,
-        policyAllowed: true,
-        missingInfo: [],
-        risks: [...taskCard.risks],
+        technicallyReady: taskCard.executionReadiness.technicallyReady || (taskCard.steps.length > 0 && Boolean(taskCard.goal.trim())),
+        boundaryApproved,
+        policyAllowed: taskCard.executionReadiness.policyAllowed,
+        missingInfo: [...taskCard.executionReadiness.missingInfo],
+        risks: [...taskCard.executionReadiness.risks],
       },
     }
   }
 
-  getTaskSummary(runId: string): Pick<TaskRecord, 'taskId' | 'title' | 'goal' | 'controlMode' | 'currentStep' | 'currentStatus'> {
+  getTaskSummary(runId: string): Pick<TaskRecordView, 'taskId' | 'title' | 'goal' | 'controlMode' | 'currentStep' | 'currentStatus'> {
     const run = this.adapter.requireRun(runId)
     const taskCard = this.adapter.requireTaskCard(runId)
 

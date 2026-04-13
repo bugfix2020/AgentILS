@@ -12,6 +12,7 @@ import {
   TaskCard,
   TaskCardSchema,
 } from '../../types/index.js'
+import { isControlMode } from '../../control/control-modes.js'
 
 export interface PersistentStoreMeta {
   lastRunId: string | null
@@ -34,6 +35,27 @@ export interface JsonStoreEntry<T> {
 }
 
 export const DEFAULT_STATE_FILE = '.data/agentils-state.json'
+
+function repairLegacyModeFields<T>(entry: T): T {
+  if (!entry || typeof entry !== 'object') {
+    return entry
+  }
+
+  const record = { ...(entry as Record<string, unknown>) }
+  const legacyCurrentMode = typeof record.currentMode === 'string' ? record.currentMode : null
+  const explicitControlMode = typeof record.controlMode === 'string' ? record.controlMode : null
+
+  if (legacyCurrentMode && isControlMode(legacyCurrentMode)) {
+    record.controlMode = isControlMode(explicitControlMode) ? explicitControlMode : legacyCurrentMode
+    record.currentMode = 'execution_intent'
+  }
+
+  if (!isControlMode(record.controlMode)) {
+    record.controlMode = 'normal'
+  }
+
+  return record as T
+}
 
 function createEmptyStoreData(): PersistentStoreData {
   return {
@@ -74,8 +96,10 @@ export function loadPersistentStore(filePath = resolveStateFilePath()): Persiste
             ? parsed.meta.updatedAt
             : new Date().toISOString(),
       },
-      runs: RunRecordSchema.array().parse(parsed.runs ?? []),
-      taskCards: TaskCardSchema.array().parse(parsed.taskCards ?? []),
+      runs: RunRecordSchema.array().parse(Array.isArray(parsed.runs) ? parsed.runs.map(repairLegacyModeFields) : []),
+      taskCards: TaskCardSchema.array().parse(
+        Array.isArray(parsed.taskCards) ? parsed.taskCards.map(repairLegacyModeFields) : [],
+      ),
       handoffs: HandoffPacketSchema.array().parse(parsed.handoffs ?? []),
       auditEvents: AuditEventSchema.array().parse(parsed.auditEvents ?? []),
       runEvents: RunEventSchema.array().parse(parsed.runEvents ?? []),

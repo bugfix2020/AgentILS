@@ -12,24 +12,6 @@ import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
 import { AgentGateConversationOrchestrator } from './conversation-orchestrator.js'
 import { AgentGateControlModeOrchestrator } from './control-mode-orchestrator.js'
 
-function toPolicyOverrideState(overrideState: TaskCard['overrideState']) {
-  if (!overrideState) {
-    return null
-  }
-
-  return {
-    confirmed: overrideState.confirmed,
-    level: overrideState.level,
-    summary: overrideState.summary,
-    acceptedRisks: [...overrideState.acceptedRisks],
-    skippedChecks: [...overrideState.skippedChecks],
-    confirmedAt: overrideState.confirmedAt,
-    taskId: overrideState.taskId,
-    conversationId: overrideState.conversationId ?? undefined,
-    mode: overrideState.mode,
-  }
-}
-
 export interface VerifyRunResult {
   verdict: VerifyVerdict
   reasons: string[]
@@ -65,11 +47,19 @@ export class AgentGateVerificationOrchestrator {
       this.store.writeTaskSummary({
         taskId: completedRun.taskId,
         runId: completedRun.runId,
-        title: completedRun.title,
+        conversationId: completedRun.conversationId,
+        taskTitle: completedRun.title,
         outcome: this.buildOutcome(completedRun, verdict, reasons),
         body: this.buildSummaryBody(completedRun, taskCard, handoff, verificationStatus, reasons, summaryDocumentPath),
         controlMode: taskCard.controlMode,
-        overrideState: toPolicyOverrideState(taskCard.overrideState),
+        taskStatus: 'task_done',
+        touchedFiles: [...taskCard.touchedFiles],
+        residualRisks: [...taskCard.risks],
+        openQuestions: [...taskCard.openQuestions],
+        assumptions: [...taskCard.assumptions],
+        decisionNeededFromUser: [...taskCard.decisionNeededFromUser],
+        nextTaskHints: [...handoff.pendingSteps],
+        overrideState: taskCard.overrideState,
       })
 
       this.store.appendRunEvent(createRunEvent(runId, 'run.completed', { verdict, summaryDocumentPath }))

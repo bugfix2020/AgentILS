@@ -114,9 +114,37 @@ export function resolveHandoff(state, runId) {
 }
 
 export function resolveConversationState(state) {
-  const conversation = state?.conversation ?? state?.conversationRecord ?? null
-  if (conversation && typeof conversation === 'object') {
-    return conversation
+  const runs = Array.isArray(state?.runs) ? state.runs : []
+  const run = resolveRun(state, null)
+  if (!run) {
+    return {
+      state: 'await_next_task',
+      activeTaskId: null,
+      completedTaskIds: [],
+    }
   }
-  return null
+
+  const runEvents = Array.isArray(state?.runEvents) ? state.runEvents : []
+  const completedTaskIds = runs
+    .filter((candidate) => candidate?.currentStatus === 'completed')
+    .map((candidate) => candidate?.taskId)
+    .filter((taskId) => typeof taskId === 'string')
+  const conversationDone = runEvents.some(
+    (event) => event?.runId === run.runId && event?.type === 'conversation.completed',
+  )
+
+  let derivedState = 'active_task'
+  if (conversationDone) {
+    derivedState = 'conversation_done'
+  } else if (run.currentStatus === 'budget_exceeded' || run.currentStatus === 'failed') {
+    derivedState = 'conversation_blocked'
+  } else if (run.currentStatus === 'completed' || run.currentStatus === 'cancelled') {
+    derivedState = 'await_next_task'
+  }
+
+  return {
+    state: derivedState,
+    activeTaskId: derivedState === 'active_task' ? run.taskId ?? null : null,
+    completedTaskIds,
+  }
 }

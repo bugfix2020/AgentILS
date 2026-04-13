@@ -141,14 +141,13 @@ export class AgentGateMemoryStore {
   }
 
   previewTaskGate(runId: string) {
-    const run = this.requireRun(runId)
     const taskCard = this.requireTaskCard(runId)
     return evaluateTaskExecutionGate({
       taskCard,
       policyAllowed: true,
       boundaryApproved: taskCard.scope.length > 0,
       overrideState: this.getCurrentOverrideState(runId),
-      controlMode: run.currentMode,
+      controlMode: taskCard.controlMode,
     })
   }
 
@@ -158,7 +157,8 @@ export class AgentGateMemoryStore {
 
   previewConversationStopGate(runId: string, explicitConversationEnd = false) {
     const run = this.requireRun(runId)
-    return evaluateConversationStopGate(run, run.currentStatus === 'completed', explicitConversationEnd)
+    const conversationState = this.conversationStore.getConversationState()
+    return evaluateConversationStopGate(run, conversationState !== 'active_task', explicitConversationEnd)
   }
 
   writeTaskSummary(input: SummaryWriteInput): TaskSummaryDocument {
@@ -244,6 +244,7 @@ export class AgentGateMemoryStore {
       goal: parsed.goal,
       scope: parsed.scope,
       currentMode: parsed.currentMode,
+      controlMode: parsed.controlMode,
       currentStep: parsed.currentStep,
       currentStatus: parsed.currentStatus,
       constraints: parsed.constraints,
@@ -371,6 +372,11 @@ export class AgentGateMemoryStore {
   }
 
   getCurrentOverrideState(runId: string) {
+    const taskCardOverride = this.taskCards.get(runId)?.overrideState ?? null
+    if (taskCardOverride) {
+      return taskCardOverride
+    }
+
     const run = this.runs.get(runId)
     if (!run?.activeApproval) {
       return null
@@ -384,7 +390,8 @@ export class AgentGateMemoryStore {
       skippedChecks: [],
       confirmedAt: run.activeApproval.updatedAt,
       taskId: run.taskId,
-      mode: run.currentMode,
+      conversationId: run.conversationId,
+      mode: run.controlMode,
     })
   }
 

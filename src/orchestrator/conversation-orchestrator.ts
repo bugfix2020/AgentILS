@@ -3,12 +3,13 @@ import { AgentGateAuditLogger } from '../audit/audit-logger.js'
 import { AgentGateMemoryStore } from '../store/memory-store.js'
 import {
   createConversationRecord,
+  createRunEvent,
   type ConversationRecord,
   type ConversationState,
   type RunRecord,
   type StartRunInput,
+  type TaskSummaryDocument,
 } from '../types/index.js'
-import { type TaskSummaryDocument } from '../store/summary-store.js'
 import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
 
 export interface ConversationContext {
@@ -87,8 +88,11 @@ export class AgentGateConversationOrchestrator {
     const conversationRecord = createConversationRecord({
       conversationId,
       state: this.deriveConversationState(latestRun),
-      activeTaskId: this.isActiveTask(latestRun) ? latestRun.runId : null,
+      activeTaskId: this.isActiveTask(latestRun) ? latestRun.taskId : null,
       completedTaskIds,
+      archivedTaskSummaries: latestSummaryDocument ? [latestSummaryDocument] : [],
+      createdAt: scopedRuns.map((run) => run.createdAt).sort().at(0) ?? latestRun.createdAt,
+      updatedAt: latestRun.updatedAt,
     })
 
     return {
@@ -102,11 +106,37 @@ export class AgentGateConversationOrchestrator {
     return this.getConversationContext(preferredRunId).latestSummaryDocument
   }
 
+  endConversation(preferredRunId?: string | null): ConversationRecord {
+    const runId = this.store.resolveRunId(preferredRunId)
+    if (!runId) {
+      return this.getConversationRecord(preferredRunId)
+    }
+
+    const conversationRecord = this.getConversationRecord(runId)
+    if (conversationRecord.state === 'active_task') {
+      throw new Error('Cannot end conversation while a task is still active.')
+    }
+
+    this.store.appendRunEvent(
+      createRunEvent(runId, 'conversation.completed', {
+        conversationId: conversationRecord.conversationId,
+      }),
+    )
+    this.audit.info(runId, 'conversation.end', 'Conversation explicitly ended.', {
+      conversationId: conversationRecord.conversationId,
+    })
+    return this.getConversationRecord(runId)
+  }
+
   private isActiveTask(run: RunRecord): boolean {
     return !['completed', 'cancelled'].includes(run.currentStatus)
   }
 
   private deriveConversationState(run: RunRecord): ConversationState {
+    if (run.currentStatus === 'completed' && run.currentStep === 'done' && run.userConfirmedDone && run.verifyPassed) {
+      return 'await_next_task'
+    }
+
     if (run.currentStatus === 'completed' || run.currentStatus === 'cancelled') {
       return 'await_next_task'
     }

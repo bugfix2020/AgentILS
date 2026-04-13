@@ -115,7 +115,8 @@ export class SummaryService implements SummaryServiceApi {
     const input: SummaryWriteInput = {
       taskId: task.taskId,
       runId: task.runId,
-      title: overrides.title ?? task.title,
+      conversationId: task.conversationId,
+      taskTitle: overrides.title ?? task.title,
       outcome: overrides.outcome ?? createDefaultOutcome(task.currentStatus),
       body:
         overrides.body ??
@@ -132,7 +133,19 @@ export class SummaryService implements SummaryServiceApi {
           verificationRequirements: [...task.verificationRequirements],
           decisions: [...task.decisions],
         }),
-      controlMode: overrides.controlMode ?? task.currentMode,
+      controlMode: overrides.controlMode ?? task.controlMode,
+      taskStatus:
+        task.currentStatus === 'completed'
+          ? 'task_done'
+          : task.currentStatus === 'cancelled'
+            ? 'cancelled'
+            : 'task_blocked',
+      touchedFiles: [...taskCard.touchedFiles],
+      residualRisks: [...task.risks],
+      openQuestions: [...taskCard.openQuestions],
+      assumptions: [...taskCard.assumptions],
+      decisionNeededFromUser: [...taskCard.decisionNeededFromUser],
+      nextTaskHints: [...task.decisions.slice(-3)],
       overrideState,
     }
 
@@ -140,17 +153,25 @@ export class SummaryService implements SummaryServiceApi {
       input,
       document: {
         frontmatter: {
+          summaryVersion: 'v1',
           taskId: input.taskId,
-          runId: input.runId,
-          title: input.title,
-          outcome: input.outcome,
+          taskTitle: input.taskTitle,
+          conversationId: input.conversationId ?? null,
           controlMode: normalizeControlMode(input.controlMode ?? null),
-          acceptedRisks: input.overrideState?.acceptedRisks ?? [],
-          skippedChecks: input.overrideState?.skippedChecks ?? [],
+          taskStatus: input.taskStatus ?? 'task_done',
+          outcome: input.outcome,
+          touchedFiles: [...(input.touchedFiles ?? [])],
+          residualRisks: [...(input.residualRisks ?? [])],
+          acceptedOverrides: input.overrideState?.confirmed ? [input.overrideState.summary] : [],
+          openQuestions: [...(input.openQuestions ?? [])],
+          assumptions: [...(input.assumptions ?? [])],
+          decisionNeededFromUser: [...(input.decisionNeededFromUser ?? [])],
+          nextTaskHints: [...(input.nextTaskHints ?? [])],
           createdAt: now,
           updatedAt: now,
         },
         body: input.body,
+        path,
       },
       path,
     }
