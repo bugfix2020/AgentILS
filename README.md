@@ -100,6 +100,26 @@ scripts/
 docs/agentils/
 ```
 
+## 指令同步
+
+Codex / GitHub Copilot 的仓库级指令源放在：
+
+- [.hc/instructions](/Users/liuyuxuan/Desktop/Lenovo/agent-gate/.hc/instructions)
+
+生成目标包括：
+
+- [AGENTS.md](/Users/liuyuxuan/Desktop/Lenovo/agent-gate/AGENTS.md)
+- [.github/copilot-instructions.md](/Users/liuyuxuan/Desktop/Lenovo/agent-gate/.github/copilot-instructions.md)
+- [.github/instructions](/Users/liuyuxuan/Desktop/Lenovo/agent-gate/.github/instructions)
+
+手动同步：
+
+```bash
+npm run sync:instructions
+```
+
+提交前的 `pre-commit` hook 会自动执行一次同步并把生成结果加入暂存区。
+
 ## 开发
 
 安装依赖：

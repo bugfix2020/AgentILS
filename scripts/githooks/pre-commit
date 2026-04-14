@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
 
+echo "[pre-commit] syncing Codex/Copilot instructions..."
+node scripts/sync-agent-instructions.mjs --stage
+
 echo "[pre-commit] generating flowcharts..."
 npm run generate:flowcharts
