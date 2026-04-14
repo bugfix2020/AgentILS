@@ -232,6 +232,7 @@ export const RunEventSchema = z.object({
     'approval.pending',
     'resume.received',
     'verify.finished',
+    'verify.rollback',
     'run.completed',
     'run.failed',
     'conversation.completed',
