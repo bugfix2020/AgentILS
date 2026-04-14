@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { ApprovalResultSchema, FeedbackDecisionSchema, HandoffPacketSchema, TaskCardSchema } from '../types/index.js'
-import type { AgentGateServerRuntime } from './context.js'
-import { resolveRun, resolveRunId, textResult } from './shared.js'
+import { createAgentGateRequestContext, type AgentGateRequestContext, type AgentGateServerRuntime } from './context.js'
+import { buildActiveTaskSnapshot, readGatewayRunSnapshot, resolveRun, resolveRunId, textResult } from './shared.js'
 
 const taskReadinessSchema = z.object({
   technicallyReady: z.boolean().optional(),
@@ -47,27 +47,14 @@ function buildTaskStartInput(input: z.infer<typeof taskStartSchema>) {
   }
 }
 
-function readActiveRunSnapshot(runtime: AgentGateServerRuntime, preferredRunId?: string | null) {
+function createToolRequestContext(runtime: AgentGateServerRuntime, preferredRunId?: string | null): AgentGateRequestContext {
   const resolved = resolveRun(runtime.store, preferredRunId)
-  if (!resolved) {
-    return null
-  }
 
-  const overrideState = runtime.store.getCurrentOverrideState(resolved.runId)
-  const taskRecord = runtime.store.getTaskRecord(resolved.runId, resolved.run.summaryDocumentPath)
-  const taskSummary = runtime.store.getTaskSummary(resolved.runId)
-  const summaryDocument = runtime.store.readTaskSummary(resolved.run.taskId)
-
-  return {
-    runId: resolved.runId,
-    taskId: resolved.run.taskId,
-    run: resolved.run,
-    taskRecord,
-    taskSummary,
-    summaryDocument,
-    overrideState,
-    nextAction: runtime.store.conversationStore.summarizeNextAction(resolved.run, overrideState),
-  }
+  return createAgentGateRequestContext(runtime, {
+    runId: resolved?.runId ?? preferredRunId ?? undefined,
+    conversationId: resolved?.run.conversationId ?? undefined,
+    taskId: resolved?.run.taskId ?? undefined,
+  })
 }
 
 function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
@@ -83,7 +70,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       const run = orchestrator.startRun(buildTaskStartInput(input))
       return textResult('New task requested', {
         run,
-        conversation: store.getConversationRecord(),
+        conversation: store.getConversationRecord(run.runId),
         taskRecord: store.getTaskRecord(run.runId, run.summaryDocumentPath),
         taskSummary: store.getTaskSummary(run.runId),
         summaryDocument: store.readTaskSummary(run.taskId),
@@ -119,7 +106,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       const run = orchestrator.startRun(buildTaskStartInput(input))
       return textResult('Run started', {
         run,
-        conversation: store.getConversationRecord(),
+        conversation: store.getConversationRecord(run.runId),
         taskRecord: store.getTaskRecord(run.runId, run.summaryDocumentPath),
         taskSummary: store.getTaskSummary(run.runId),
         summaryDocument: store.readTaskSummary(run.taskId),
@@ -137,22 +124,11 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId }) => {
-      const snapshot = readActiveRunSnapshot(runtime, runId)
+      const snapshot = readGatewayRunSnapshot(runtime.store, runId)
       return textResult('Conversation state', {
-        conversation: store.getConversationRecord(),
+        conversation: store.getConversationRecord(runId),
         resolvedRunId: snapshot?.runId ?? resolveRunId(store, runId),
-        activeTask: snapshot
-          ? {
-              runId: snapshot.runId,
-              taskId: snapshot.taskId,
-              title: snapshot.run.title,
-              goal: snapshot.run.goal,
-              conversationMode: snapshot.run.currentMode,
-              controlMode: snapshot.run.controlMode,
-              currentStep: snapshot.run.currentStep,
-              currentStatus: snapshot.run.currentStatus,
-            }
-          : null,
+        activeTask: buildActiveTaskSnapshot(snapshot),
         taskRecord: snapshot?.taskRecord ?? null,
         taskSummary: snapshot?.taskSummary ?? null,
         summaryDocument: snapshot?.summaryDocument ?? null,
@@ -184,7 +160,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId }) => {
-      const snapshot = readActiveRunSnapshot(runtime, runId)
+      const snapshot = readGatewayRunSnapshot(runtime.store, runId)
       if (!snapshot) {
         return textResult('Control mode', { error: 'No run has been started yet.' }, true)
       }
@@ -211,7 +187,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId, taskId }) => {
-      const snapshot = readActiveRunSnapshot(runtime, runId)
+      const snapshot = readGatewayRunSnapshot(runtime.store, runId)
       const resolvedTaskId = taskId ?? snapshot?.taskId ?? null
 
       if (!resolvedTaskId) {
@@ -357,8 +333,10 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         userConfirmedDone: z.boolean().default(false),
       },
     },
-    async ({ runId, userConfirmedDone }) =>
-      textResult('Verify run', orchestrator.verifyRun(runId, userConfirmedDone)),
+    async ({ runId, userConfirmedDone }) => {
+      const ctx = createToolRequestContext(runtime, runId)
+      return textResult('Verify run', orchestrator.verifyRun(runId, userConfirmedDone, ctx))
+    },
   )
 
   server.registerTool(
@@ -374,21 +352,17 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId, summary, riskLevel, toolName, targets }) => {
-      store.transitionRun(runId, 'approval', 'awaiting_approval')
-      store.updateRun(runId, {
-        activeApproval: {
-          approved: false,
-          action: 'cancel',
-          summary,
-          riskLevel,
-          toolName,
-          targets: targets ?? [],
-          updatedAt: new Date().toISOString(),
-        },
-        verifyPassed: false,
+      const ctx = createToolRequestContext(runtime, runId)
+
+      orchestrator.beginApprovalRequest(ctx, {
+        runId,
+        summary,
+        riskLevel,
+        toolName,
+        targets: targets ?? [],
       })
 
-      const elicited = await server.server.elicitInput({
+      const elicited = await ctx.elicitUser({
         mode: 'form',
         message: `Approval required (${riskLevel} risk): ${summary}`,
         requestedSchema: {
@@ -428,7 +402,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         const fallback = {
           action: elicited.action,
         }
-        orchestrator.recordApproval(runId, summary, fallback as never)
+        orchestrator.recordApproval(runId, summary, fallback as never, ctx)
         return textResult('Approval result', fallback)
       }
 
@@ -440,18 +414,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         },
       })
 
-      store.updateRun(runId, {
-        activeApproval: {
-          approved: result.action === 'accept',
-          action: result.action,
-          summary,
-          riskLevel,
-          toolName,
-          targets: targets ?? [],
-          updatedAt: new Date().toISOString(),
-        },
-      })
-      orchestrator.recordApproval(runId, summary, result)
+      orchestrator.recordApproval(runId, summary, result, ctx)
       return textResult('Approval result', result)
     },
   )
@@ -466,7 +429,8 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId, summary }) => {
-      const elicited = await server.server.elicitInput({
+      const ctx = createToolRequestContext(runtime, runId)
+      const elicited = await ctx.elicitUser({
         mode: 'form',
         message: `Feedback gate: ${summary}`,
         requestedSchema: {
@@ -500,7 +464,7 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         status: elicited.content.status,
         msg: elicited.content.msg ?? '',
       })
-      orchestrator.recordFeedback(runId, decision)
+      orchestrator.recordFeedback(runId, decision, ctx)
       return textResult('Feedback result', decision)
     },
   )

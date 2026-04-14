@@ -106,6 +106,8 @@ function createServices(stateFilePath?: string | null) {
   }
 }
 
+type UiActionServices = ReturnType<typeof createServices>
+
 function mapSummary(document: TaskSummaryDocument | null, filePath: string | null): UiTaskSummaryDocument | null {
   if (!document) {
     return null
@@ -175,42 +177,53 @@ function mapTask(
   }
 }
 
+function buildUiTaskSnapshotFromRunId(
+  services: UiActionServices,
+  runId: string,
+  summaryOverride?: TaskSummaryDocument | null,
+): UiTaskSnapshot | null {
+  const envelope = services.task.getTaskEnvelope(runId)
+  if (!envelope) {
+    return null
+  }
+  const { run, taskCard } = envelope
+  const summary = summaryOverride ?? services.store.readTaskSummary(run.taskId)
+
+  return mapTask(
+    {
+      runId: run.runId,
+      taskId: run.taskId,
+      title: run.title,
+      goal: run.goal,
+      controlMode: taskCard.controlMode,
+      phase: String(taskCard.currentStep),
+      status: String(taskCard.currentStatus),
+      scope: [...run.scope],
+      constraints: [...run.constraints],
+      risks: [...run.risks],
+      openQuestions: [...taskCard.openQuestions],
+      assumptions: [...taskCard.assumptions],
+      decisionNeededFromUser: [...taskCard.decisionNeededFromUser],
+      notes: [...run.decisions],
+      overrideState: {
+        confirmed: Boolean(taskCard.overrideState?.confirmed),
+        acknowledgedAt: taskCard.overrideState?.confirmedAt ?? null,
+        note: taskCard.overrideState?.summary ?? null,
+      },
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+    },
+    summary,
+    taskCard.summaryDocumentPath,
+  )
+}
+
 function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}): UiRuntimeSnapshot {
   const services = createServices(options.stateFilePath)
   const conversationSurface = services.conversation.buildConversationSurface(options.preferredRunId)
   const taskHistory = services.store
     .listRuns()
-    .map((run) => {
-      const taskCard = services.store.requireTaskCard(run.runId)
-      const summary = services.store.readTaskSummary(run.taskId)
-      return mapTask(
-        {
-          runId: run.runId,
-          taskId: run.taskId,
-          title: run.title,
-          goal: run.goal,
-          controlMode: taskCard.controlMode,
-          phase: String(taskCard.currentStep),
-          status: String(taskCard.currentStatus),
-          scope: [...run.scope],
-          constraints: [...run.constraints],
-          risks: [...run.risks],
-          openQuestions: [...taskCard.openQuestions],
-          assumptions: [...taskCard.assumptions],
-          decisionNeededFromUser: [...taskCard.decisionNeededFromUser],
-          notes: [...run.decisions],
-          overrideState: {
-            confirmed: Boolean(taskCard.overrideState?.confirmed),
-            acknowledgedAt: taskCard.overrideState?.confirmedAt ?? null,
-            note: taskCard.overrideState?.summary ?? null,
-          },
-          createdAt: run.createdAt,
-          updatedAt: run.updatedAt,
-        },
-        summary,
-        taskCard.summaryDocumentPath,
-      )
-    })
+    .map((run) => buildUiTaskSnapshotFromRunId(services, run.runId))
     .filter((task): task is UiTaskSnapshot => task !== null)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 
@@ -218,9 +231,6 @@ function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}): UiRuntime
     ? services.store.readTaskSummary(conversationSurface.activeTask.taskId)
     : null
   const latestSummary = activeSummary ?? conversationSurface.archivedTaskSummaries.at(-1) ?? null
-  const activeTaskCard = conversationSurface.activeTask
-    ? services.store.requireTaskCard(conversationSurface.activeTask.runId)
-    : null
 
   return {
     conversation: {
@@ -232,38 +242,12 @@ function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}): UiRuntime
         latestSummary,
         latestSummary ? services.summary.resolveSummaryPath(latestSummary.frontmatter.taskId) : null,
       )?.taskId ?? null,
-      createdAt: services.store.getMeta().updatedAt,
-      updatedAt: services.store.getMeta().updatedAt,
+      createdAt: conversationSurface.conversation.createdAt,
+      updatedAt: conversationSurface.conversation.updatedAt,
     },
-    activeTask: mapTask(
-      conversationSurface.activeTask
-        ? {
-            runId: conversationSurface.activeTask.runId,
-            taskId: conversationSurface.activeTask.taskId,
-            title: conversationSurface.activeTask.title,
-            goal: conversationSurface.activeTask.goal,
-            controlMode: conversationSurface.activeTask.controlMode,
-            phase: conversationSurface.activeTask.currentStep,
-            status: conversationSurface.activeTask.currentStatus,
-            scope: services.store.requireRun(conversationSurface.activeTask.runId).scope,
-            constraints: services.store.requireRun(conversationSurface.activeTask.runId).constraints,
-            risks: services.store.requireRun(conversationSurface.activeTask.runId).risks,
-            openQuestions: [...(activeTaskCard?.openQuestions ?? [])],
-            assumptions: [...(activeTaskCard?.assumptions ?? [])],
-            decisionNeededFromUser: [...(activeTaskCard?.decisionNeededFromUser ?? [])],
-            notes: [...services.store.requireRun(conversationSurface.activeTask.runId).decisions],
-            overrideState: {
-              confirmed: Boolean(conversationSurface.activeTask.overrideState?.confirmed),
-              acknowledgedAt: conversationSurface.activeTask.overrideState?.confirmedAt ?? null,
-              note: conversationSurface.activeTask.overrideState?.summary ?? null,
-            },
-            createdAt: services.store.requireRun(conversationSurface.activeTask.runId).createdAt,
-            updatedAt: services.store.requireRun(conversationSurface.activeTask.runId).updatedAt,
-          }
-        : null,
-      activeSummary,
-      activeTaskCard?.summaryDocumentPath ?? null,
-    ),
+    activeTask: conversationSurface.activeTask
+      ? buildUiTaskSnapshotFromRunId(services, conversationSurface.activeTask.runId, activeSummary)
+      : null,
     taskHistory,
     latestSummary: mapSummary(
       latestSummary,
@@ -296,10 +280,10 @@ export function buildUiRuntimeSnapshot(options: UiRuntimeOptions = {}): UiRuntim
 
 export function startUiTask(input: StartRunInput & UiRuntimeOptions): UiRuntimeSnapshot {
   const services = createServices(input.stateFilePath)
-  services.task.startTask(input)
+  const run = services.task.startTask(input)
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
-    preferredRunId: services.store.getMeta().lastRunId,
+    preferredRunId: run.runId,
   })
 }
 
@@ -310,14 +294,17 @@ export function continueUiTask(input: ContinueTaskInput = {}): UiRuntimeSnapshot
     return buildRuntimeSnapshotInternal(input)
   }
 
-  const run = services.store.requireRun(runId)
+  const run = services.task.getRun(runId)
+  if (!run) {
+    return buildRuntimeSnapshotInternal(input)
+  }
   const nextStep = resolveNextStep(String(run.currentStep))
 
   if (input.note?.trim()) {
-    services.store.appendDecision(runId, input.note.trim())
+    services.task.appendDecision(runId, input.note.trim())
   }
 
-  services.orchestrator.task.transitionTask(runId, nextStep, resolveStatusForStep(nextStep))
+  services.task.transitionTask(runId, nextStep, resolveStatusForStep(nextStep))
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
     preferredRunId: runId,
@@ -331,8 +318,11 @@ export function acceptUiOverride(input: AcceptOverrideInput): UiRuntimeSnapshot 
     return buildRuntimeSnapshotInternal(input)
   }
 
-  const run = services.store.requireRun(runId)
-  const taskCard = services.store.requireTaskCard(runId)
+  const envelope = services.task.getTaskEnvelope(runId)
+  if (!envelope) {
+    return buildRuntimeSnapshotInternal(input)
+  }
+  const { run, taskCard } = envelope
   const overrideState = createOverrideState({
     taskId: run.taskId,
     conversationId: run.conversationId ?? null,
@@ -349,7 +339,7 @@ export function acceptUiOverride(input: AcceptOverrideInput): UiRuntimeSnapshot 
     overrideState,
     'ui.override',
   )
-  services.store.appendDecision(runId, `override: ${input.acknowledgement}`)
+  services.task.appendDecision(runId, `override: ${input.acknowledgement}`)
 
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
@@ -364,29 +354,24 @@ export function markUiTaskDone(input: MarkTaskDoneInput = {}): UiRuntimeSnapshot
     return buildRuntimeSnapshotInternal(input)
   }
 
-  const run = services.store.requireRun(runId)
-  const taskCard = services.store.requireTaskCard(runId)
-  const allowDirectCompletion = normalizeControlMode(taskCard.controlMode) === 'direct' || Boolean(taskCard.overrideState?.confirmed)
+  const taskCard = services.task.getTaskCard(runId)
+  if (!taskCard) {
+    return buildRuntimeSnapshotInternal(input)
+  }
 
   if (input.summary?.trim()) {
-    services.store.appendDecision(runId, `summary: ${input.summary.trim()}`)
+    services.task.appendDecision(runId, `summary: ${input.summary.trim()}`)
   }
 
-  if (allowDirectCompletion) {
-    services.store.confirmDone(runId, true)
-    services.store.transitionRun(runId, 'done', 'completed')
-    services.orchestrator.task.ensureSummaryDocumentPath(runId)
-    services.summary.writeTaskSummaryForRun(runId, {
-      outcome: 'task completed via direct control mode',
-      body: input.summary?.trim(),
-    })
-  } else {
-    services.orchestrator.controlMode.recordFeedback(runId, {
-      status: 'done',
-      msg: input.summary?.trim() ?? 'Marked done from AgentILS VS Code task console.',
-    })
-    services.orchestrator.verifyRun(runId, true)
-  }
+  services.orchestrator.controlMode.recordFeedback(runId, {
+    status: 'done',
+    msg:
+      input.summary?.trim() ??
+      (normalizeControlMode(taskCard.controlMode) === 'direct' || Boolean(taskCard.overrideState?.confirmed)
+        ? 'Marked done from AgentILS VS Code task console under override/direct mode.'
+        : 'Marked done from AgentILS VS Code task console.'),
+  })
+  services.orchestrator.verifyRun(runId, true)
 
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,

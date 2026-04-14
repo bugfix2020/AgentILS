@@ -18,14 +18,11 @@ export interface ConversationStoreAdapter {
 }
 
 export class AgentGateConversationStore {
-  constructor(
-    private readonly adapter: ConversationStoreAdapter,
-    private readonly conversationId = 'conversation_default',
-  ) {}
+  constructor(private readonly adapter: ConversationStoreAdapter) {}
 
-  getRecord(): ConversationRecord {
+  getRecord(preferredRunId?: string | null): ConversationRecord {
     const runs = this.adapter.listRuns()
-    const resolvedRunId = this.adapter.resolveRunId()
+    const resolvedRunId = this.adapter.resolveRunId(preferredRunId)
     const resolvedRun = resolvedRunId ? runs.find((run) => run.runId === resolvedRunId) ?? null : null
     const conversationId = resolvedRun?.conversationId ?? 'conversation_default'
     const completedTaskIds = runs
@@ -36,7 +33,7 @@ export class AgentGateConversationStore {
       .map((taskId) => this.adapter.readTaskSummary(taskId))
       .filter((summary): summary is TaskSummaryDocument => summary !== null)
     const state = this.deriveConversationState(resolvedRun)
-    const activeTaskId = state === 'active_task' ? resolvedRun?.taskId ?? null : null
+    const activeTaskId = state === 'conversation_done' || state === 'await_next_task' ? null : resolvedRun?.taskId ?? null
     const createdAt =
       runs
         .filter((run) => (run.conversationId ?? 'conversation_default') === conversationId)
@@ -55,12 +52,12 @@ export class AgentGateConversationStore {
     })
   }
 
-  getConversationState(): ConversationState {
-    return this.getRecord().state
+  getConversationState(preferredRunId?: string | null): ConversationState {
+    return this.getRecord(preferredRunId).state
   }
 
-  isTaskActive(): boolean {
-    return this.getConversationState() === 'active_task'
+  isTaskActive(preferredRunId?: string | null): boolean {
+    return this.getConversationState(preferredRunId) === 'active_task'
   }
 
   summarizeNextAction(run: RunRecord, overrideState?: OverrideState | null): string {
@@ -78,7 +75,12 @@ export class AgentGateConversationStore {
       return 'conversation_done'
     }
 
-    if (run.currentStatus === 'budget_exceeded' || run.currentStatus === 'failed') {
+    if (
+      run.currentStatus === 'awaiting_user' ||
+      run.currentStatus === 'awaiting_approval' ||
+      run.currentStatus === 'budget_exceeded' ||
+      run.currentStatus === 'failed'
+    ) {
       return 'conversation_blocked'
     }
 

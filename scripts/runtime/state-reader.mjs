@@ -113,9 +113,9 @@ export function resolveHandoff(state, runId) {
   return handoffs.find((handoff) => handoff?.runId === runId) ?? null
 }
 
-export function resolveConversationState(state) {
+export function resolveConversationState(state, preferredRunId = null) {
   const runs = Array.isArray(state?.runs) ? state.runs : []
-  const run = resolveRun(state, null)
+  const run = resolveRun(state, preferredRunId)
   if (!run) {
     return {
       state: 'await_next_task',
@@ -125,7 +125,9 @@ export function resolveConversationState(state) {
   }
 
   const runEvents = Array.isArray(state?.runEvents) ? state.runEvents : []
+  const conversationId = run.conversationId ?? 'conversation_default'
   const completedTaskIds = runs
+    .filter((candidate) => (candidate?.conversationId ?? 'conversation_default') === conversationId)
     .filter((candidate) => candidate?.currentStatus === 'completed')
     .map((candidate) => candidate?.taskId)
     .filter((taskId) => typeof taskId === 'string')
@@ -136,7 +138,12 @@ export function resolveConversationState(state) {
   let derivedState = 'active_task'
   if (conversationDone) {
     derivedState = 'conversation_done'
-  } else if (run.currentStatus === 'budget_exceeded' || run.currentStatus === 'failed') {
+  } else if (
+    run.currentStatus === 'awaiting_user' ||
+    run.currentStatus === 'awaiting_approval' ||
+    run.currentStatus === 'budget_exceeded' ||
+    run.currentStatus === 'failed'
+  ) {
     derivedState = 'conversation_blocked'
   } else if (run.currentStatus === 'completed' || run.currentStatus === 'cancelled') {
     derivedState = 'await_next_task'
@@ -144,7 +151,7 @@ export function resolveConversationState(state) {
 
   return {
     state: derivedState,
-    activeTaskId: derivedState === 'active_task' ? run.taskId ?? null : null,
+    activeTaskId: derivedState === 'conversation_done' || derivedState === 'await_next_task' ? null : run.taskId ?? null,
     completedTaskIds,
   }
 }

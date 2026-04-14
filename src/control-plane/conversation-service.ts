@@ -45,8 +45,7 @@ export class ConversationService implements ConversationServiceApi {
   }
 
   getConversationRecord(preferredRunId?: string | null): ConversationRecord {
-    void preferredRunId
-    return this.store.getConversationRecord()
+    return this.store.getConversationRecord(preferredRunId)
   }
 
   getConversationState(preferredRunId?: string | null): ConversationRecord['state'] {
@@ -54,7 +53,7 @@ export class ConversationService implements ConversationServiceApi {
   }
 
   hasActiveTask(preferredRunId?: string | null): boolean {
-    return this.getConversationState(preferredRunId) === 'active_task'
+    return this.getConversationRecord(preferredRunId).activeTaskId !== null
   }
 
   getActiveTaskRecord(preferredRunId?: string | null): TaskRecordView | null {

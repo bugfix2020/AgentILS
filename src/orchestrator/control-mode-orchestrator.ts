@@ -7,11 +7,28 @@ import {
   type ApprovalResult,
   type FeedbackDecision,
   type OverrideState as TaskOverrideState,
+  type RiskLevel,
   type RunRecord,
 } from '../types/index.js'
 import { nextControlMode, type ControlModeSignal } from '../control/mode-transitions.js'
 import { normalizeControlMode, type ControlMode } from '../control/control-modes.js'
 import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
+
+export interface ApprovalRequestContext {
+  runId?: string
+  conversationId?: string
+  taskId?: string
+  traceId: string
+  now: () => string
+}
+
+export interface BeginApprovalRequestInput {
+  runId: string
+  summary: string
+  riskLevel: RiskLevel
+  toolName?: string
+  targets?: string[]
+}
 
 export class AgentGateControlModeOrchestrator {
   constructor(
@@ -48,7 +65,54 @@ export class AgentGateControlModeOrchestrator {
     return this.setControlMode(runId, nextMode, `${reason}:${signal}`)
   }
 
-  recordApproval(runId: string, summary: string, result: ApprovalResult): ApprovalResult {
+  beginApprovalRequest(ctx: ApprovalRequestContext, input: BeginApprovalRequestInput): RunRecord {
+    if (ctx.runId && ctx.runId !== input.runId) {
+      throw new Error('Request context runId does not match approval request runId.')
+    }
+
+    const currentRun = this.store.requireRun(input.runId)
+    const activeApproval: RunRecord['activeApproval'] = {
+      approved: false,
+      action: 'cancel',
+      summary: input.summary,
+      riskLevel: input.riskLevel,
+      toolName: input.toolName,
+      targets: input.targets ?? [],
+      updatedAt: ctx.now(),
+    }
+
+    this.store.transitionRun(input.runId, 'approval', 'awaiting_approval')
+    const updatedRun = this.store.updateRun(input.runId, {
+      activeApproval,
+      verifyPassed: false,
+    })
+    this.store.appendRunEvent(
+      createRunEvent(input.runId, 'approval.pending', {
+        summary: input.summary,
+        riskLevel: input.riskLevel,
+        toolName: input.toolName,
+        targets: input.targets ?? [],
+        traceId: ctx.traceId,
+        conversationId: ctx.conversationId ?? currentRun.conversationId,
+        taskId: ctx.taskId ?? currentRun.taskId,
+      }),
+    )
+    this.audit.info(input.runId, 'approval.pending', 'Approval request started.', {
+      summary: input.summary,
+      riskLevel: input.riskLevel,
+      toolName: input.toolName,
+      targets: input.targets ?? [],
+      traceId: ctx.traceId,
+    })
+    return updatedRun
+  }
+
+  recordApproval(
+    runId: string,
+    summary: string,
+    result: ApprovalResult,
+    ctx?: Pick<ApprovalRequestContext, 'now' | 'traceId'>,
+  ): ApprovalResult {
     const parsed = ApprovalResultSchema.parse(result)
     const currentRun = this.store.requireRun(runId)
     const approvalState: RunRecord['activeApproval'] = {
@@ -58,7 +122,7 @@ export class AgentGateControlModeOrchestrator {
       riskLevel: currentRun.activeApproval?.riskLevel ?? 'medium',
       toolName: currentRun.activeApproval?.toolName,
       targets: currentRun.activeApproval?.targets ?? [],
-      updatedAt: new Date().toISOString(),
+      updatedAt: ctx?.now() ?? new Date().toISOString(),
     }
 
     if (parsed.action === 'decline') {
@@ -104,12 +168,16 @@ export class AgentGateControlModeOrchestrator {
       userConfirmedDone: parsed.payload?.status === 'done',
     })
     this.store.appendDecision(runId, `${parsed.action}: ${parsed.payload?.msg || summary}`)
-    this.store.appendRunEvent(createRunEvent(runId, 'approval.pending', { summary, result: parsed }))
+    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { summary, result: parsed, traceId: ctx?.traceId }))
     this.audit.info(runId, 'approval.result', 'Approval captured.', { summary, result: parsed })
     return parsed
   }
 
-  recordFeedback(runId: string, decision: FeedbackDecision): FeedbackDecision {
+  recordFeedback(
+    runId: string,
+    decision: FeedbackDecision,
+    ctx?: Pick<ApprovalRequestContext, 'traceId'>,
+  ): FeedbackDecision {
     if (decision.status === 'done') {
       this.store.transitionRun(runId, 'verify', 'active')
       this.store.confirmDone(runId, true)
@@ -126,7 +194,7 @@ export class AgentGateControlModeOrchestrator {
       userConfirmedDone: decision.status === 'done',
     })
     this.store.appendDecision(runId, `${decision.status}: ${decision.msg}`)
-    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { decision }))
+    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { decision, traceId: ctx?.traceId }))
     this.audit.info(runId, 'feedback.result', 'Feedback captured.', decision)
     return decision
   }

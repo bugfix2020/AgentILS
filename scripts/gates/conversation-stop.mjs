@@ -9,8 +9,9 @@ import { getRunIdFromPayload, loadState, resolveConversationState, resolveRun } 
 
 const payload = parseJson(await readStdin(), {})
 const state = loadState()
-const run = resolveRun(state, getRunIdFromPayload(payload))
-const conversation = resolveConversationState(state)
+const preferredRunId = getRunIdFromPayload(payload)
+const run = resolveRun(state, preferredRunId)
+const conversation = resolveConversationState(state, preferredRunId)
 const explicitConversationEnd = Boolean(
   payload?.explicitConversationEnd ??
     payload?.endConversation ??

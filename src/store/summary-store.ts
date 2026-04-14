@@ -26,6 +26,8 @@ export interface SummaryWriteInput {
   decisionNeededFromUser?: string[]
   nextTaskHints?: string[]
   overrideState?: OverrideState | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 export type { TaskSummaryDocument, TaskSummaryFrontmatter }
@@ -44,6 +46,8 @@ export class AgentGateSummaryStore {
   writeSummary(input: SummaryWriteInput): TaskSummaryDocument {
     const path = this.resolveSummaryPath(input.taskId)
     const now = new Date().toISOString()
+    const createdAt = input.createdAt ?? now
+    const updatedAt = input.updatedAt ?? createdAt
     const frontmatter: TaskSummaryFrontmatter = {
       summaryVersion: 'v1',
       taskId: input.taskId,
@@ -59,8 +63,8 @@ export class AgentGateSummaryStore {
       assumptions: [...(input.assumptions ?? [])],
       decisionNeededFromUser: [...(input.decisionNeededFromUser ?? [])],
       nextTaskHints: [...(input.nextTaskHints ?? [])],
-      createdAt: now,
-      updatedAt: now,
+      createdAt,
+      updatedAt,
     }
 
     const document = createTaskSummaryDocument({

@@ -12,10 +12,15 @@ import {
   type ConversationRecord,
 } from '../types/index.js'
 import { AgentGateConversationOrchestrator } from './conversation-orchestrator.js'
-import { AgentGateControlModeOrchestrator } from './control-mode-orchestrator.js'
+import {
+  AgentGateControlModeOrchestrator,
+  type ApprovalRequestContext,
+  type BeginApprovalRequestInput,
+} from './control-mode-orchestrator.js'
 import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
 import {
   type VerifyRunResult,
+  type VerificationRequestContext,
   AgentGateVerificationOrchestrator,
 } from './verification-orchestrator.js'
 
@@ -43,7 +48,6 @@ export class AgentGateOrchestrator {
       this.audit,
       this.task,
       this.conversation,
-      this.controlMode,
     )
   }
 
@@ -85,16 +89,25 @@ export class AgentGateOrchestrator {
     return this.task.upsertHandoff(handoff)
   }
 
-  recordApproval(runId: string, summary: string, result: ApprovalResult) {
-    return this.controlMode.recordApproval(runId, summary, result)
+  beginApprovalRequest(ctx: ApprovalRequestContext, input: BeginApprovalRequestInput) {
+    return this.controlMode.beginApprovalRequest(ctx, input)
   }
 
-  recordFeedback(runId: string, decision: FeedbackDecision) {
-    return this.controlMode.recordFeedback(runId, decision)
+  recordApproval(
+    runId: string,
+    summary: string,
+    result: ApprovalResult,
+    ctx?: Pick<ApprovalRequestContext, 'now' | 'traceId'>,
+  ) {
+    return this.controlMode.recordApproval(runId, summary, result, ctx)
   }
 
-  verifyRun(runId: string, userConfirmedDone = false): VerifyRunResult {
-    return this.verification.verifyRun(runId, userConfirmedDone)
+  recordFeedback(runId: string, decision: FeedbackDecision, ctx?: Pick<ApprovalRequestContext, 'traceId'>) {
+    return this.controlMode.recordFeedback(runId, decision, ctx)
+  }
+
+  verifyRun(runId: string, userConfirmedDone = false, ctx?: VerificationRequestContext): VerifyRunResult {
+    return this.verification.verifyRun(runId, userConfirmedDone, ctx)
   }
 
   getConversationRecord(preferredRunId?: string | null): ConversationRecord {

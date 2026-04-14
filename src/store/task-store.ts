@@ -1,4 +1,4 @@
-import { type HandoffPacket, type RunRecord, type TaskCard, type TaskExecutionReadiness } from '../types/index.js'
+import { type RunRecord, type TaskCard, type TaskExecutionReadiness } from '../types/index.js'
 import { normalizeControlMode, type ControlMode } from '../control/control-modes.js'
 import { type OverrideState, isOverrideActive } from '../control/override-policy.js'
 
@@ -22,7 +22,6 @@ export interface TaskRecordView {
 export interface TaskStoreAdapter {
   requireRun(runId: string): RunRecord
   requireTaskCard(runId: string): TaskCard
-  requireHandoff(runId: string): HandoffPacket
 }
 
 export class AgentGateTaskStore {

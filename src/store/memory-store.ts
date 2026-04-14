@@ -127,8 +127,8 @@ export class AgentGateMemoryStore {
     return { ...this.meta }
   }
 
-  getConversationRecord() {
-    return this.conversationStore.getRecord()
+  getConversationRecord(preferredRunId?: string | null) {
+    return this.conversationStore.getRecord(preferredRunId)
   }
 
   getTaskRecord(runId: string, summaryDocumentPath: string | null = null) {
@@ -157,8 +157,8 @@ export class AgentGateMemoryStore {
 
   previewConversationStopGate(runId: string, explicitConversationEnd = false) {
     const run = this.requireRun(runId)
-    const conversationState = this.conversationStore.getConversationState()
-    return evaluateConversationStopGate(run, conversationState !== 'active_task', explicitConversationEnd)
+    const taskDone = run.currentStatus === 'completed' || run.currentStatus === 'cancelled'
+    return evaluateConversationStopGate(run, taskDone, explicitConversationEnd)
   }
 
   writeTaskSummary(input: SummaryWriteInput): TaskSummaryDocument {

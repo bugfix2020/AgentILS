@@ -15,8 +15,8 @@ export function nextControlMode(
   }
 
   if (signal === 'override') {
-    if (overrideState?.level === 'hard' || normalized !== 'normal') {
-      return 'alternate'
+    if (overrideState?.level === 'hard') {
+      return 'direct'
     }
     return degradeControlMode(normalized)
   }
@@ -41,4 +41,3 @@ export function shouldUseDirectMode(
 ): boolean {
   return repeatOverrideCount > 1 || overrideState?.level === 'hard'
 }
-

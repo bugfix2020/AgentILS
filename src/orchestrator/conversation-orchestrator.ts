@@ -5,7 +5,6 @@ import {
   createConversationRecord,
   createRunEvent,
   type ConversationRecord,
-  type ConversationState,
   type RunRecord,
   type StartRunInput,
   type TaskSummaryDocument,
@@ -65,10 +64,7 @@ export class AgentGateConversationOrchestrator {
   getConversationContext(preferredRunId?: string | null): ConversationContext {
     const runId = this.store.resolveRunId(preferredRunId)
     if (!runId) {
-      const conversationRecord = createConversationRecord({
-        conversationId: 'conversation_default',
-        state: 'await_next_task',
-      })
+      const conversationRecord = this.store.getConversationRecord(preferredRunId)
       return {
         conversationRecord,
         activeRun: null,
@@ -86,9 +82,7 @@ export class AgentGateConversationOrchestrator {
     const latestSummaryDocument = latestCompletedRun ? this.store.readTaskSummary(latestCompletedRun.taskId) : null
 
     const conversationRecord = createConversationRecord({
-      conversationId,
-      state: this.deriveConversationState(latestRun),
-      activeTaskId: this.isActiveTask(latestRun) ? latestRun.taskId : null,
+      ...this.store.getConversationRecord(runId),
       completedTaskIds,
       archivedTaskSummaries: latestSummaryDocument ? [latestSummaryDocument] : [],
       createdAt: scopedRuns.map((run) => run.createdAt).sort().at(0) ?? latestRun.createdAt,
@@ -97,7 +91,7 @@ export class AgentGateConversationOrchestrator {
 
     return {
       conversationRecord,
-      activeRun: this.isActiveTask(latestRun) ? latestRun : null,
+      activeRun: conversationRecord.activeTaskId ? latestRun : null,
       latestSummaryDocument,
     }
   }
@@ -113,7 +107,7 @@ export class AgentGateConversationOrchestrator {
     }
 
     const conversationRecord = this.getConversationRecord(runId)
-    if (conversationRecord.state === 'active_task') {
+    if (conversationRecord.activeTaskId) {
       throw new Error('Cannot end conversation while a task is still active.')
     }
 
@@ -126,25 +120,5 @@ export class AgentGateConversationOrchestrator {
       conversationId: conversationRecord.conversationId,
     })
     return this.getConversationRecord(runId)
-  }
-
-  private isActiveTask(run: RunRecord): boolean {
-    return !['completed', 'cancelled'].includes(run.currentStatus)
-  }
-
-  private deriveConversationState(run: RunRecord): ConversationState {
-    if (run.currentStatus === 'completed' && run.currentStep === 'done' && run.userConfirmedDone && run.verifyPassed) {
-      return 'await_next_task'
-    }
-
-    if (run.currentStatus === 'completed' || run.currentStatus === 'cancelled') {
-      return 'await_next_task'
-    }
-
-    if (run.currentStatus === 'budget_exceeded' || run.currentStatus === 'failed') {
-      return 'conversation_blocked'
-    }
-
-    return 'active_task'
   }
 }

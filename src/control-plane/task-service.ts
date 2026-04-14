@@ -21,16 +21,26 @@ export interface TaskSurfaceState {
   summaryDocumentPath: string | null
 }
 
+export interface TaskEnvelope {
+  run: RunRecord
+  taskCard: TaskCard
+  handoff: HandoffPacket
+}
+
 export interface TaskServiceApi {
   resolveRunId(preferredRunId?: string | null): string | null
   startTask(input: StartRunInput): RunRecord
+  getRun(preferredRunId?: string | null): RunRecord | null
   getTaskRecord(preferredRunId?: string | null, summaryDocumentPath?: string | null): TaskRecordView | null
   getTaskSummary(preferredRunId?: string | null): ReturnType<AgentGateMemoryStore['getTaskSummary']> | null
+  getTaskEnvelope(preferredRunId?: string | null): TaskEnvelope | null
   getTaskCard(preferredRunId?: string | null): TaskCard | null
   getHandoff(preferredRunId?: string | null): HandoffPacket | null
   getTaskReadiness(preferredRunId?: string | null): TaskReadiness | null
   previewTaskGate(preferredRunId?: string | null): GateDecision
   previewTaskStopGate(preferredRunId?: string | null): GateDecision
+  appendDecision(runId: string, decision: string): RunRecord | null
+  transitionTask(runId: string, step: TaskCard['currentStep'], status: TaskCard['currentStatus']): RunRecord | null
   patchTaskCard(runId: string, updates: Partial<TaskCard>): TaskCard | null
   patchHandoff(runId: string, updates: Partial<HandoffPacket>): HandoffPacket | null
   recordBudgetUsage(runId: string, delta: RunBudgetUsageDelta, apply?: boolean): RunRecord | null
@@ -48,6 +58,19 @@ export class TaskService implements TaskServiceApi {
 
   startTask(input: StartRunInput): RunRecord {
     return this.store.startRun(input)
+  }
+
+  getRun(preferredRunId?: string | null): RunRecord | null {
+    const runId = this.resolveRunId(preferredRunId)
+    if (!runId) {
+      return null
+    }
+
+    try {
+      return this.store.requireRun(runId)
+    } catch {
+      return null
+    }
   }
 
   getTaskRecord(preferredRunId?: string | null, summaryDocumentPath?: string | null): TaskRecordView | null {
@@ -73,6 +96,21 @@ export class TaskService implements TaskServiceApi {
       return this.store.getTaskSummary(runId)
     } catch {
       return null
+    }
+  }
+
+  getTaskEnvelope(preferredRunId?: string | null): TaskEnvelope | null {
+    const run = this.getRun(preferredRunId)
+    const taskCard = this.getTaskCard(preferredRunId)
+    const handoff = this.getHandoff(preferredRunId)
+    if (!run || !taskCard || !handoff) {
+      return null
+    }
+
+    return {
+      run,
+      taskCard,
+      handoff,
     }
   }
 
@@ -130,6 +168,22 @@ export class TaskService implements TaskServiceApi {
       return this.store.previewTaskStopGate(runId)
     } catch {
       return createBlockedDecision(`Unknown runId: ${runId}`)
+    }
+  }
+
+  appendDecision(runId: string, decision: string): RunRecord | null {
+    try {
+      return this.store.appendDecision(runId, decision)
+    } catch {
+      return null
+    }
+  }
+
+  transitionTask(runId: string, step: TaskCard['currentStep'], status: TaskCard['currentStatus']): RunRecord | null {
+    try {
+      return this.store.transitionRun(runId, step, status)
+    } catch {
+      return null
     }
   }
 

@@ -1,6 +1,6 @@
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { AgentGateServerRuntime } from './context.js'
-import { asJson, resolveRun } from './shared.js'
+import { asJson, buildActiveTaskSnapshot, readGatewayRunSnapshot } from './shared.js'
 
 export function registerGatewayResources(runtime: AgentGateServerRuntime): void {
   const { server, store } = runtime
@@ -14,8 +14,8 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
       mimeType: 'application/json',
     },
     async () => {
-      const snapshot = resolveRun(store)
-      const conversation = store.getConversationRecord()
+      const snapshot = readGatewayRunSnapshot(store)
+      const conversation = store.getConversationRecord(snapshot?.runId)
 
       return {
         contents: [
@@ -23,23 +23,10 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
             uri: 'conversation://current',
             text: asJson({
               conversation,
-              activeTask: snapshot
-                ? {
-                    runId: snapshot.runId,
-                    taskId: snapshot.run.taskId,
-                    title: snapshot.run.title,
-                    goal: snapshot.run.goal,
-                    conversationMode: snapshot.run.currentMode,
-                    controlMode: snapshot.run.controlMode,
-                    currentStep: snapshot.run.currentStep,
-                    currentStatus: snapshot.run.currentStatus,
-                  }
-                : null,
-              taskRecord: snapshot
-                ? store.getTaskRecord(snapshot.runId, snapshot.run.summaryDocumentPath)
-                : null,
-              taskSummary: snapshot ? store.getTaskSummary(snapshot.runId) : null,
-              summaryDocument: snapshot ? store.readTaskSummary(snapshot.run.taskId) : null,
+              activeTask: buildActiveTaskSnapshot(snapshot),
+              taskRecord: snapshot?.taskRecord ?? null,
+              taskSummary: snapshot?.taskSummary ?? null,
+              summaryDocument: snapshot?.summaryDocument ?? null,
             }),
           },
         ],
@@ -57,7 +44,7 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
     },
     async (_uri, variables) => {
       const runId = String(variables.runId ?? '')
-      const snapshot = resolveRun(store, runId)
+      const snapshot = readGatewayRunSnapshot(store, runId)
       if (!snapshot) {
         return {
           contents: [
@@ -75,10 +62,10 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
             uri: `task-summary://${runId}`,
             text: asJson({
               runId: snapshot.runId,
-              taskId: snapshot.run.taskId,
-              taskSummary: store.getTaskSummary(snapshot.runId),
-              summaryDocument: store.readTaskSummary(snapshot.run.taskId),
-              summaryAvailable: Boolean(store.readTaskSummary(snapshot.run.taskId)),
+              taskId: snapshot.taskId,
+              taskSummary: snapshot.taskSummary,
+              summaryDocument: snapshot.summaryDocument,
+              summaryAvailable: Boolean(snapshot.summaryDocument),
               summaryPath: snapshot.run.summaryDocumentPath ?? null,
             }),
           },
@@ -97,7 +84,7 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
     },
     async (_uri, variables) => {
       const runId = String(variables.runId ?? '')
-      const snapshot = resolveRun(store, runId)
+      const snapshot = readGatewayRunSnapshot(store, runId)
       if (!snapshot) {
         return {
           contents: [
