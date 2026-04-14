@@ -1,6 +1,9 @@
 # Frontend Rules
 
+- Read `AGENTS.md` first. For state behavior, defer to `.hc/codex-modular-debug.md` and backend truth sources.
 - Approval and feedback UX should favor compact structured forms.
 - Do not request sensitive information through elicitation.
 - Surface conversation state, active task state, control mode, blocking reasons, summary status, and next action clearly.
 - Provide explicit affordances for `New task`, `Continue task`, `Accept override`, `Mark task done`, and `Open summary`.
+- Do not hand-compute core conversation or task state in the UI; consume backend/control-plane projections instead.
+- Distinguish `task_done` from `conversation_done` in UI copy and state handling.
