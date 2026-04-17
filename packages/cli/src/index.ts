@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
@@ -7,14 +7,14 @@ import { fileURLToPath } from 'node:url'
 type InjectionTarget = 'vscode' | 'cursor' | 'codex' | 'antigravity'
 
 interface CliOptions {
-  command: 'inject' | 'help'
+  command: 'inject' | 'uninstall' | 'help'
   dryRun: boolean
   workspaceRoot: string
   targets: InjectionTarget[]
 }
 
 interface ChangeRecord {
-  kind: 'write' | 'skip'
+  kind: 'write' | 'skip' | 'delete'
   path: string
   detail?: string
 }
@@ -24,6 +24,24 @@ const sourceRoot = resolve(packageRoot, '../..')
 const supportedTargets: InjectionTarget[] = ['vscode', 'cursor', 'codex', 'antigravity']
 const managedBlockStart = '# BEGIN AgentILS managed block'
 const managedBlockEnd = '# END AgentILS managed block'
+const vscodePromptTemplateFileNames = [
+  'agentils.orchestrator.agent.md',
+  'agentils.run-code.prompt.md',
+  'startnewtask.prompt.md',
+  'agentils.run-task.prompt.md',
+  'agentils.approval.prompt.md',
+  'agentils.feedback.prompt.md',
+] as const
+const legacyVsCodePromptTemplateFileNames = [
+  'agentils.plan.agent.md',
+  'agentils.execute.agent.md',
+  'agentils.verify.agent.md',
+  'agentils.handoff.agent.md',
+] as const
+const allVsCodePromptTemplateFileNames = [...new Set([
+  ...vscodePromptTemplateFileNames,
+  ...legacyVsCodePromptTemplateFileNames,
+])]
 
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv)
@@ -35,24 +53,42 @@ export async function main(argv = process.argv.slice(2)) {
   const changes: ChangeRecord[] = []
 
   for (const target of options.targets) {
+    if (options.command === 'inject') {
+      switch (target) {
+        case 'vscode':
+          injectVsCode(options, changes)
+          break
+        case 'cursor':
+          injectCursor(options, changes)
+          break
+        case 'codex':
+          injectCodex(options, changes)
+          break
+        case 'antigravity':
+          injectAntigravity(options, changes)
+          break
+      }
+      continue
+    }
+
     switch (target) {
       case 'vscode':
-        injectVsCode(options, changes)
+        uninstallVsCode(options, changes)
         break
       case 'cursor':
-        injectCursor(options, changes)
+        uninstallCursor(options, changes)
         break
       case 'codex':
-        injectCodex(options, changes)
+        uninstallCodex(options, changes)
         break
       case 'antigravity':
-        injectAntigravity(options, changes)
+        uninstallAntigravity(options, changes)
         break
     }
   }
 
   for (const change of changes) {
-    const action = change.kind === 'write' ? 'updated' : 'skipped'
+    const action = change.kind === 'write' ? 'updated' : change.kind === 'delete' ? 'removed' : 'skipped'
     const detail = change.detail ? ` (${change.detail})` : ''
     console.log(`[agentils] ${action}: ${change.path}${detail}`)
   }
@@ -71,7 +107,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const [command, ...rest] = argv
-  if (command !== 'inject') {
+  if (command !== 'inject' && command !== 'uninstall') {
     throw new Error(`Unknown command: ${command}`)
   }
 
@@ -111,7 +147,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   return {
-    command: 'inject',
+    command,
     dryRun,
     workspaceRoot,
     targets: targets.length > 0 ? targets : [...supportedTargets],
@@ -127,15 +163,17 @@ function printHelp() {
 
 Usage:
   agentils inject [targets...] [--workspace <path>] [--dry-run]
+  agentils uninstall [targets...] [--workspace <path>] [--dry-run]
 
 Targets:
-  vscode       Sync Copilot instructions, prompt files, VS Code MCP config, and VS Code user prompts
+  vscode       Sync Copilot instructions, VS Code MCP config, and VS Code user agent/prompt files
   cursor       Sync AGENTS.md, Cursor rules, and Cursor MCP config
   codex        Sync AGENTS.md and Codex global config for MCP/doc fallbacks
   antigravity  Sync AGENTS.md plus Antigravity workspace rules and workflows
 
 Examples:
   agentils inject vscode
+  agentils uninstall vscode
   agentils inject cursor codex --workspace /path/to/repo
   agentils inject all --dry-run
 `)
@@ -161,17 +199,34 @@ function injectVsCode(options: CliOptions, changes: ChangeRecord[]) {
     options.dryRun,
   )
 
-  const promptsDir = resolveVsCodePromptsDir()
+  const promptsDirs = resolveVsCodePromptsDirs()
   const templateDir = join(sourceRoot, 'extensions', 'agentils-vscode', 'templates')
-  for (const fileName of listMarkdownFiles(templateDir)) {
-    const sourcePath = join(templateDir, fileName)
-    writeTextFile(
-      join(promptsDir, fileName),
-      readNormalized(sourcePath),
-      changes,
-      options.dryRun,
-    )
+  for (const promptsDir of promptsDirs) {
+    for (const fileName of vscodePromptTemplateFileNames) {
+      const sourcePath = join(templateDir, fileName)
+      writeTextFile(
+        join(promptsDir, fileName),
+        readNormalized(sourcePath),
+        changes,
+        options.dryRun,
+      )
+    }
+
+    for (const fileName of legacyVsCodePromptTemplateFileNames) {
+      removeFile(join(promptsDir, fileName), changes, options.dryRun)
+    }
   }
+}
+
+function uninstallVsCode(options: CliOptions, changes: ChangeRecord[]) {
+  const promptsDirs = resolveVsCodePromptsDirs()
+  for (const promptsDir of promptsDirs) {
+    for (const fileName of allVsCodePromptTemplateFileNames) {
+      removeFile(join(promptsDir, fileName), changes, options.dryRun)
+    }
+  }
+
+  removeJsonProperty(join(options.workspaceRoot, '.vscode', 'mcp.json'), ['servers', 'agentils'], changes, options.dryRun)
 }
 
 function injectCursor(options: CliOptions, changes: ChangeRecord[]) {
@@ -211,6 +266,11 @@ function injectCursor(options: CliOptions, changes: ChangeRecord[]) {
   )
 }
 
+function uninstallCursor(options: CliOptions, changes: ChangeRecord[]) {
+  removeFile(join(options.workspaceRoot, '.cursor', 'rules', 'agentils.mdc'), changes, options.dryRun)
+  removeJsonProperty(join(options.workspaceRoot, '.cursor', 'mcp.json'), ['mcpServers', 'agentils'], changes, options.dryRun)
+}
+
 function injectCodex(options: CliOptions, changes: ChangeRecord[]) {
   syncAgentsInstruction(options.workspaceRoot, changes, options.dryRun)
 
@@ -228,6 +288,10 @@ function injectCodex(options: CliOptions, changes: ChangeRecord[]) {
   ].join('\n')
 
   writeManagedTomlBlock(codexConfigPath, managedBlock, changes, options.dryRun)
+}
+
+function uninstallCodex(options: CliOptions, changes: ChangeRecord[]) {
+  removeManagedTomlBlock(join(homedir(), '.codex', 'config.toml'), changes, options.dryRun)
 }
 
 function injectAntigravity(options: CliOptions, changes: ChangeRecord[]) {
@@ -257,6 +321,15 @@ function injectAntigravity(options: CliOptions, changes: ChangeRecord[]) {
       changes,
       options.dryRun,
     )
+  }
+}
+
+function uninstallAntigravity(options: CliOptions, changes: ChangeRecord[]) {
+  removeFile(join(options.workspaceRoot, '.agent', 'rules', 'agentils.md'), changes, options.dryRun)
+
+  const promptDir = join(sourceRoot, '.github', 'prompts')
+  for (const fileName of listMarkdownFiles(promptDir)) {
+    removeFile(join(options.workspaceRoot, '.agent', 'workflows', workflowFileNameFromPrompt(fileName)), changes, options.dryRun)
   }
 }
 
@@ -322,6 +395,35 @@ function writeManagedTomlBlock(filePath: string, managedBlock: string, changes: 
   writeTextFile(filePath, next, changes, dryRun)
 }
 
+function removeManagedTomlBlock(filePath: string, changes: ChangeRecord[], dryRun: boolean) {
+  if (!existsSync(filePath)) {
+    changes.push({
+      kind: 'skip',
+      path: filePath,
+      detail: 'not found',
+    })
+    return
+  }
+
+  const current = readNormalized(filePath)
+  const next = removeManagedBlock(current)
+  if (next === current) {
+    changes.push({
+      kind: 'skip',
+      path: filePath,
+      detail: 'no managed block',
+    })
+    return
+  }
+
+  if (next.length === 0) {
+    removeFile(filePath, changes, dryRun)
+    return
+  }
+
+  writeTextFile(filePath, next, changes, dryRun)
+}
+
 export function replaceManagedBlock(current: string, managedBlock: string): string {
   const startIndex = current.indexOf(managedBlockStart)
   const endIndex = current.indexOf(managedBlockEnd)
@@ -336,6 +438,22 @@ export function replaceManagedBlock(current: string, managedBlock: string): stri
   }
 
   return normalizeTrailingNewline(`${current.trimEnd()}\n\n${managedBlock.trimEnd()}`)
+}
+
+export function removeManagedBlock(current: string): string {
+  const startIndex = current.indexOf(managedBlockStart)
+  const endIndex = current.indexOf(managedBlockEnd)
+  if (startIndex < 0 || endIndex < startIndex) {
+    return current
+  }
+
+  const before = current.slice(0, startIndex).trimEnd()
+  const after = current.slice(endIndex + managedBlockEnd.length).trimStart()
+  const merged = [before, after].filter(Boolean).join('\n\n')
+  if (merged.length === 0) {
+    return ''
+  }
+  return normalizeTrailingNewline(merged)
 }
 
 function writeTextFile(filePath: string, content: string, changes: ChangeRecord[], dryRun: boolean) {
@@ -365,6 +483,29 @@ function writeTextFile(filePath: string, content: string, changes: ChangeRecord[
   writeFileSync(filePath, normalizedContent, 'utf8')
 }
 
+function removeFile(filePath: string, changes: ChangeRecord[], dryRun: boolean) {
+  if (!existsSync(filePath)) {
+    changes.push({
+      kind: 'skip',
+      path: filePath,
+      detail: 'not found',
+    })
+    return
+  }
+
+  changes.push({
+    kind: 'delete',
+    path: filePath,
+    detail: dryRun ? 'dry run' : undefined,
+  })
+
+  if (dryRun) {
+    return
+  }
+
+  rmSync(filePath, { force: true })
+}
+
 function readNormalized(filePath: string) {
   return readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n')
 }
@@ -373,14 +514,98 @@ function normalizeTrailingNewline(value: string) {
   return `${value.replace(/\r\n/g, '\n').trimEnd()}\n`
 }
 
-function resolveVsCodePromptsDir() {
+function removeJsonProperty(filePath: string, pathSegments: string[], changes: ChangeRecord[], dryRun: boolean) {
+  if (!existsSync(filePath)) {
+    changes.push({
+      kind: 'skip',
+      path: filePath,
+      detail: 'not found',
+    })
+    return
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readNormalized(filePath))
+  } catch {
+    changes.push({
+      kind: 'skip',
+      path: filePath,
+      detail: 'invalid json',
+    })
+    return
+  }
+
+  if (!removeNestedProperty(parsed, pathSegments)) {
+    changes.push({
+      kind: 'skip',
+      path: filePath,
+      detail: 'not configured',
+    })
+    return
+  }
+
+  if (isEmptyObject(parsed)) {
+    removeFile(filePath, changes, dryRun)
+    return
+  }
+
+  writeJsonFile(filePath, parsed, changes, dryRun)
+}
+
+function removeNestedProperty(value: unknown, pathSegments: string[]): boolean {
+  if (!value || typeof value !== 'object' || pathSegments.length === 0) {
+    return false
+  }
+
+  return removeNestedPropertyFromObject(value as Record<string, unknown>, pathSegments)
+}
+
+function removeNestedPropertyFromObject(cursor: Record<string, unknown>, pathSegments: string[]): boolean {
+  const [head, ...tail] = pathSegments
+
+  if (tail.length === 0) {
+    if (!(head in cursor)) {
+      return false
+    }
+    delete cursor[head]
+    return true
+  }
+
+  const next = cursor[head]
+  if (!next || typeof next !== 'object' || Array.isArray(next)) {
+    return false
+  }
+
+  const removed = removeNestedPropertyFromObject(next as Record<string, unknown>, tail)
+  if (!removed) {
+    return false
+  }
+
+  if (isEmptyObject(next)) {
+    delete cursor[head]
+  }
+
+  return true
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as Record<string, unknown>).length === 0
+}
+
+function resolveVsCodePromptsDirs() {
   const userDataPath =
     process.env.APPDATA ||
     (process.platform === 'darwin'
       ? join(homedir(), 'Library', 'Application Support')
       : join(homedir(), '.config'))
 
-  return join(userDataPath, 'Code', 'User', 'prompts')
+  const candidates = ['Code', 'Code - Insiders']
+    .map((folder) => join(userDataPath, folder, 'User', 'prompts'))
+    .filter((candidate, index, items) => items.indexOf(candidate) === index)
+
+  const existing = candidates.filter((candidate) => existsSync(candidate))
+  return existing.length > 0 ? existing : [candidates[0]]
 }
 
 function escapeTomlString(value: string) {

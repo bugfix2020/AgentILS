@@ -214,6 +214,20 @@ export class TaskConsolePanel implements vscode.Disposable {
       return
     }
 
+    if (pending.kind === 'startTask') {
+      const title = message.title?.trim() ?? ''
+      const goal = message.goal?.trim() ?? ''
+      if (!title || !goal) {
+        vscode.window.showWarningMessage('Task title and goal are required.')
+        return
+      }
+
+      const controlMode =
+        message.controlMode === 'alternate' || message.controlMode === 'direct' ? message.controlMode : 'normal'
+      this.sessionManager.submitTaskStart(message.requestId, title, goal, controlMode)
+      return
+    }
+
     if (pending.kind === 'clarification') {
       this.sessionManager.submitClarification(message.requestId, message.content?.trim() ?? '')
       return

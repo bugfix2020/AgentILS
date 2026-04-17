@@ -26,9 +26,9 @@ Covers: building the project, running the MCP Server (stdio / HTTP), debugging w
 | 中文 | [VS Code 扩展调试指引](./debugging-vscode-ext-zh.md) |
 | English | [VS Code Extension Debugging Guide](./debugging-vscode-ext-en.md) |
 
-Covers: building extensions (`agentils-vscode` + `agentils-ui-helper`), using preconfigured launch configurations, breakpoint debugging, combined MCP + extension debugging, and extension architecture details.
+Covers: building the single `agentils-vscode` extension, using the preconfigured launch configuration, breakpoint debugging, and the MCP + WebView call chain.
 
-涵盖：构建扩展（`agentils-vscode` + `agentils-ui-helper`）、使用预配置的 launch 配置、断点调试、MCP + 扩展联合调试、扩展架构详情。
+涵盖：构建单个 `agentils-vscode` 扩展、使用预配置的 launch 配置、断点调试，以及 MCP + WebView 调用链。
 
 ---
 
@@ -36,19 +36,40 @@ Covers: building extensions (`agentils-vscode` + `agentils-ui-helper`), using pr
 
 ```bash
 # 1. Install dependencies / 安装依赖
-npm install
-cd extensions/agentils-vscode && npm install && cd ../..
+pnpm install
 
 # 2. Build everything / 构建全部
-npm run build
-cd extensions/agentils-vscode && npm run build && cd ../..
+pnpm build
 
-# 3. Smoke test / 冒烟测试
-npm run smoke
+# 3. Install AgentILS prompts into VS Code / 安装 AgentILS prompts 到 VS Code
+pnpm agentils:inject:vscode
 
-# 4. Run tests / 运行测试
-npm run test:unit
+# 4. Start the extension locally / 本地启动扩展
+#    Press Cmd+Shift+D → Select "AgentILS: VS Code Extension" → F5
+```
 
-# 5. Debug in VS Code / 在 VS Code 中调试
-#    Press Cmd+Shift+D → Select "AgentILS: Both Extensions" → F5
+Then validate in the Extension Development Host:
+
+1. Open Copilot Chat.
+2. Type `/agentils.run-code welcome onboarding`.
+3. Confirm the tool invocation when VS Code asks to start the AgentILS task console.
+4. Expect the AgentILS WebView panel to open.
+
+然后在 Extension Development Host 里验证：
+
+1. 打开 Copilot Chat。
+2. 输入 `/agentils.run-code welcome onboarding`。
+3. 当 VS Code 询问是否启动 AgentILS task console 时，点击确认。
+4. 预期会弹出 AgentILS WebView 面板。
+
+To remove the injected VS Code prompts and MCP config later:
+
+```bash
+pnpm agentils:uninstall:vscode
+```
+
+如果后面需要清理 VS Code 注入项，可以执行：
+
+```bash
+pnpm agentils:uninstall:vscode
 ```

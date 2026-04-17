@@ -73,12 +73,14 @@ function createFakeGatewayRuntime(
 
 test('createAgentGateRequestContext forwards interaction through elicitUser', async () => {
   const calls: Array<Record<string, unknown>> = []
+  const optionsCalls: Array<Record<string, unknown> | undefined> = []
   const ctx = createAgentGateRequestContext(
     {
       server: {
         server: {
-          async elicitInput(params: Record<string, unknown>) {
+          async elicitInput(params: Record<string, unknown>, options?: Record<string, unknown>) {
             calls.push(params)
+            optionsCalls.push(options)
             return {
               action: 'accept',
               content: { status: 'continue' },
@@ -107,6 +109,8 @@ test('createAgentGateRequestContext forwards interaction through elicitUser', as
   assert.equal(ctx.traceId, 'trace_fixed')
   assert.equal(ctx.now(), '2026-04-14T00:00:00.000Z')
   assert.deepEqual(calls, [{ mode: 'form', message: 'Need input' }])
+  assert.equal(optionsCalls.length, 1)
+  assert.equal(optionsCalls[0]?.timeout, 2_147_483_647)
   assert.deepEqual(result, {
     action: 'accept',
     content: { status: 'continue' },
@@ -182,6 +186,35 @@ test('approval_request uses elicitation and advances accepted runs into execute'
   assert.equal(updatedRun.controlMode, 'alternate')
   assert.equal(updatedTaskCard.overrideState?.confirmed, true)
   assert.equal(updatedTaskCard.overrideState?.mode, 'normal')
+})
+
+test('ui_task_start_gate uses elicitation and starts the task from returned payload', async () => {
+  const runtime = createFakeGatewayRuntime(async () => ({
+    action: 'accept',
+    content: {
+      title: 'Welcome onboarding',
+      goal: 'Guide the user through the onboarding flow in the AgentILS panel',
+      controlMode: 'normal',
+    },
+  }))
+  const handler = runtime.tools.get('ui_task_start_gate')
+  assert.ok(handler, 'ui_task_start_gate should be registered')
+
+  const response = await handler({
+    title: 'Draft onboarding task',
+    goal: 'Initial draft',
+    controlMode: 'normal',
+  })
+
+  const parsed = parseTextResult(response)
+
+  assert.equal(runtime.elicitCalls.length, 1)
+  assert.equal(runtime.elicitCalls[0]?.mode, 'form')
+  assert.equal(runtime.elicitCalls[0]?._meta?.agentilsInteractionKind, 'startTask')
+  assert.equal(parsed.activeTask?.title, 'Welcome onboarding')
+  assert.equal(parsed.activeTask?.goal, 'Guide the user through the onboarding flow in the AgentILS panel')
+  assert.equal(parsed.activeTask?.controlMode, 'normal')
+  assert.equal(parsed.conversation.state, 'active_task')
 })
 
 test('approval_request promotes high-risk accepted approvals into direct mode', async () => {
@@ -618,4 +651,35 @@ test('conversation projections honor preferredRunId instead of always reading th
   assert.equal(runtime.store.conversationStore.isTaskActive(secondRun.runId), true)
   assert.equal(serviceConversation.conversationId, 'conversation_a')
   assert.equal(serviceConversation.state, 'conversation_done')
+})
+
+test('ui_task_start and ui_runtime_snapshot_get flow through gateway tools backed by the runtime store', async () => {
+  const runtime = createFakeGatewayRuntime(async () => ({
+    action: 'accept',
+    content: {
+      status: 'continue',
+      msg: '',
+    },
+  }))
+  const startHandler = runtime.tools.get('ui_task_start')
+  const snapshotHandler = runtime.tools.get('ui_runtime_snapshot_get')
+
+  assert.ok(startHandler, 'ui_task_start should be registered')
+  assert.ok(snapshotHandler, 'ui_runtime_snapshot_get should be registered')
+
+  const startResponse = await startHandler({
+    title: 'Gateway UI task start',
+    goal: 'Start through MCP UI tool',
+    controlMode: 'normal',
+  })
+  const started = parseTextResult(startResponse)
+
+  assert.equal(started.activeTask?.title, 'Gateway UI task start')
+  assert.equal(runtime.store.listRuns().length, 1)
+
+  const snapshotResponse = await snapshotHandler({})
+  const snapshot = parseTextResult(snapshotResponse)
+
+  assert.equal(snapshot.activeTask?.title, 'Gateway UI task start')
+  assert.equal(snapshot.conversation.state, 'active_task')
 })

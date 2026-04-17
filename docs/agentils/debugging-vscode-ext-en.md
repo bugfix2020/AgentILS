@@ -1,285 +1,194 @@
 # AgentILS VS Code Extension Debugging Guide
 
-This document covers the build and debug workflow for the two AgentILS VS Code extensions:
-- **agentils-vscode** — Main extension providing Task Console, LM Tools, and MCP Elicitation Bridge
-- **agentils-ui-helper** — UI helper extension providing local prompt and file bridge commands
+This document covers the build and debug workflow for the current AgentILS VS Code extension surface.
+
+Current scope:
+- `extensions/agentils-vscode` — Main extension providing Task Console, LM Tools, MCP runtime access, and MCP elicitation bridge
+
+Removed scope:
+- `agentils-ui-helper` no longer exists in this repository and is not part of the current debug flow
 
 ---
 
 ## 1. Prerequisites
 
-### 1.1 Requirements
-
 | Dependency | Minimum Version |
 |------------|----------------|
 | VS Code | 1.90.0+ |
 | Node.js | 20+ |
-| npm | 9+ |
+| pnpm | 10+ |
 
-### 1.2 Install Dependencies
+Install dependencies:
 
 ```bash
-# Root dependencies (core MCP Server)
-npm install
-
-# agentils-vscode extension dependencies
-cd extensions/agentils-vscode && npm install && cd ../..
-```
-
-> `agentils-ui-helper` is a pure JavaScript extension with no additional dependencies to install.
-
----
-
-## 2. Project Structure
-
-```
-extensions/
-├── agentils-vscode/          # Main extension (TypeScript)
-│   ├── package.json          # Extension manifest (commands, languageModelTools)
-│   ├── tsconfig.json         # CommonJS output, target ES2022
-│   ├── src/
-│   │   ├── extension.ts      # Activation entry
-│   │   ├── commands.ts       # Command registration
-│   │   ├── lm-tools/         # Language Model Tools registration
-│   │   ├── session/          # Session management
-│   │   ├── interaction-channel/ # Interaction channel
-│   │   ├── mcp-elicitation-bridge.ts  # MCP bridge
-│   │   ├── task-service-client.ts     # Task service client
-│   │   └── status-surface.ts # Status bar UI
-│   └── dist/                 # Build output
-│
-└── agentils-ui-helper/       # UI helper extension (pure JavaScript)
-    ├── package.json          # extensionKind: ["ui"]
-    └── src/
-        ├── extension.js      # Activation entry
-        ├── local-prompts.js  # Local prompt reading
-        ├── local-files.js    # Local file operations
-        ├── local-paths.js    # Path resolution
-        └── constants.js      # Constants
+pnpm install
 ```
 
 ---
 
-## 3. Building Extensions
+## 2. Build
 
-### 3.1 One-Step Build (Recommended)
-
-The project provides preconfigured VS Code Tasks that build all dependencies in order:
-
-1. Press `Cmd+Shift+P` → "Tasks: Run Task"
-2. Select **prepare:agentils-extensions**
-
-This executes sequentially:
-1. `build:root` — Build core MCP Server (`npm run build`)
-2. `build:agentils-vscode` — Build the main VS Code extension
-3. `check:agentils-ui-helper` — Syntax-check the UI Helper
-
-### 3.2 Manual Build
+Recommended:
 
 ```bash
-# 1. Build core MCP Server
-npm run build
-
-# 2. Build agentils-vscode extension
-cd extensions/agentils-vscode
-npm run build
-cd ../..
-
-# 3. Check agentils-ui-helper (pure JS, no compilation needed)
-npm run check:ui-helper
+pnpm build
 ```
 
-### 3.3 Type Checking
+Or build the VS Code extension only:
 
 ```bash
-# Type-check agentils-vscode extension
-npm run typecheck:vscode-host
+pnpm --filter agentils-vscode build
+```
 
-# Check all surfaces (vscode-host + ui-helper)
-npm run verify:surfaces
+Useful checks:
+
+```bash
+pnpm --filter agentils-vscode typecheck
+pnpm --filter @agentils/mcp test
 ```
 
 ---
 
-## 4. Debugging Extensions
+## 3. User-Facing End-to-End Flow
 
-### 4.1 Using Preconfigured Launch Configurations
+This is the recommended validation flow from a user point of view:
 
-The `.vscode/launch.json` provides three debug modes:
+1. Install dependencies and build the repo.
+2. Run the CLI installer so VS Code receives the AgentILS prompts and MCP config.
+3. Start the local VS Code extension with `F5`.
+4. In Copilot Chat, invoke `/agentils.run-code`.
+5. Confirm the tool invocation and expect the AgentILS WebView to open.
 
-#### Debug Main Extension
+Run these commands from the repository root in order:
 
-1. Open the **Run and Debug** panel (`Cmd+Shift+D`)
-2. Select **"AgentILS: VS Code Extension"**
-3. Press `F5` to start
+```bash
+pnpm install
+pnpm build
+pnpm agentils:inject:vscode
+```
+
+What each step does:
+
+1. `pnpm install` installs workspace dependencies.
+2. `pnpm build` builds the MCP runtime and the VS Code extension.
+3. `agentils inject vscode` installs AgentILS prompts and MCP config for VS Code.
+
+Before launching the extension, verify these two things:
+
+1. `packages/mcp/dist/index.js` exists.
+2. `~/Library/Application Support/Code/User/prompts/agentils.run-code.prompt.md` exists.
+
+To clean the VS Code injection later:
+
+```bash
+pnpm agentils:uninstall:vscode
+```
+
+---
+
+## 4. Start The Extension Locally
+
+The workspace now ships a single launch configuration:
+
+- `AgentILS: VS Code Extension`
+
+How to use it:
+
+1. Open the **Run and Debug** panel.
+2. Select **AgentILS: VS Code Extension**.
+3. Press `F5`.
 
 This will:
-- Automatically run the `prepare:agentils-extensions` pre-launch task
-- Launch the Extension Development Host
-- Load only `extensions/agentils-vscode`
-- Map source maps to `extensions/agentils-vscode/dist/**/*.js`
-
-#### Debug UI Helper Extension
-
-1. Select **"AgentILS: UI Helper Extension"**
-2. Press `F5`
-
-#### Debug Both Extensions Together
-
-1. Select **"AgentILS: Both Extensions"**
-2. Press `F5`
-
-This loads both `agentils-vscode` and `agentils-ui-helper` in the same Extension Development Host.
-
-### 4.2 Breakpoint Debugging
-
-1. **Set breakpoints** in source files:
-   - `extensions/agentils-vscode/src/extension.ts` — Activation flow
-   - `extensions/agentils-vscode/src/commands.ts` — Command handling
-   - `extensions/agentils-vscode/src/lm-tools/` — Language Model Tool invocations
-   - `extensions/agentils-vscode/src/session/` — Session management logic
-   - `extensions/agentils-vscode/src/mcp-elicitation-bridge.ts` — MCP bridge
-
-2. **Verify sourceMap is enabled**: `extensions/agentils-vscode/tsconfig.json` → `"sourceMap": true`
-
-3. **Trigger actions in the Extension Development Host**:
-   - `Cmd+Shift+P` → Run AgentILS commands
-   - Or use `#agentils_start_conversation` and other LM Tools in Copilot Chat
-
-4. **The debugger will pause at breakpoints**, allowing you to inspect call stacks, variable values, etc.
-
-### 4.3 Viewing Extension Output Logs
-
-In the Extension Development Host:
-
-1. Open the Output panel (`Cmd+Shift+U`)
-2. Select the relevant output channel from the dropdown
-
-You can also view console output in Developer Tools:
-- `Cmd+Shift+P` → "Developer: Toggle Developer Tools"
+- run `prepare:agentils-extensions`
+- build the workspace packages
+- build `extensions/agentils-vscode`
+- start an Extension Development Host that loads only `agentils-vscode`
+- open the separate debug workspace at `apps/vscode-debug`
 
 ---
 
-## 5. agentils-vscode Extension Details
+## 5. What The User Should Do In Copilot Chat
 
-### 5.1 Activation Flow
+Inside the Extension Development Host:
 
-```
-extension.ts activate()
-  ├─ Create RepoBackedAgentILSTaskServiceClient
-  ├─ Create ConversationSessionManager
-  ├─ Create LocalPanelInteractionChannel (WebView interaction panel)
-  ├─ Create AgentILSStatusSurface (status bar)
-  ├─ registerAgentILSCommands() — Register VS Code commands
-  ├─ registerAgentILSLanguageModelTools() — Register LM Tools
-  ├─ registerAgentILSPromptPackCommands() — Register Prompt Pack commands
-  ├─ Create AgentILSMcpElicitationBridge — MCP bridge
-  └─ sessionManager.refresh() — Refresh session state
+1. Open Copilot Chat.
+2. Type exactly:
+
+```text
+/agentils.run-code welcome onboarding
 ```
 
-### 5.2 MCP Server Path Resolution
+3. When VS Code shows the AgentILS tool confirmation, click `Continue`.
+4. Expect the `AgentILS Task Console` WebView panel to open.
 
-The extension automatically locates the MCP Server entrypoint, in order of priority:
-1. `{extensionPath}/../../dist/index.js` — Development layout (monorepo sibling directory)
-2. `{workspaceFolder}/dist/index.js` — Workspace build output
+You can also try these entrypoints:
 
-> **Debugging tip**: If the extension reports "AgentILS runtime is unavailable", the MCP Server build artifacts were not found. Make sure to run `npm run build` first.
+- `/agentils.run-task welcome onboarding`
+- `#startnewtask`
 
-### 5.3 Registered Commands
-
-| Command | Description |
-|---------|------------|
-| `agentils.openTaskConsole` | Open Task Console |
-| `agentils.newTask` | Create new task |
-| `agentils.continueTask` | Continue current task |
-| `agentils.markTaskDone` | Mark task done |
-| `agentils.acceptOverride` | Accept Override |
-| `agentils.openSummary` | Open Summary |
-| `agentils.installPromptPack` | Install Prompt Pack |
-
-### 5.4 Registered Language Model Tools
-
-| Tool | Description |
-|------|------------|
-| `agentils_start_conversation` | Start a new AgentILS task conversation |
-| `agentils_continue_task` | Continue the current task |
-| `agentils_request_clarification` | Request user clarification |
+The preferred path for the current VS Code flow is `/agentils.run-code`.
 
 ---
 
-## 6. agentils-ui-helper Extension Details
+## 6. Expected Result
 
-### 6.1 Characteristics
+If the setup is correct, the user-visible sequence is:
 
-- `extensionKind: ["ui"]` — Runs on the UI side (local desktop environment)
-- Pure JavaScript, no compilation needed
-- Provides local filesystem access capabilities
-
-### 6.2 Registered Commands
-
-| Command | Description |
-|---------|------------|
-| `agentilsUiHelper.getLocalPrompts` | Read local prompt files |
-| `agentilsUiHelper.readLocalFile` | Read local file contents |
-| `agentilsUiHelper.openLocalFile` | Open a local file in the editor |
-| `agentilsUiHelper.installPromptTemplate` | Install a prompt template |
-
-### 6.3 Configuration
-
-| Setting | Type | Default | Description |
-|---------|------|---------|------------|
-| `agentilsUiHelper.promptRoots` | `string[]` | `[]` | Custom prompt directory paths |
-| `agentilsUiHelper.defaultPromptName` | `string` | `"agentils-task"` | Default template name for installation |
+1. `/agentils.run-code` appears as a Copilot prompt entry.
+2. VS Code asks to confirm the `agentils_start_conversation` tool call.
+3. After confirmation, the `AgentILS Task Console` WebView opens.
+4. Further clarification, feedback, and approval steps continue inside the AgentILS panel.
 
 ---
 
-## 7. Combined Debugging: MCP Server + VS Code Extension
+## 7. Runtime Expectations
 
-When you need to debug both the MCP Server and VS Code extension simultaneously:
+The active VS Code chain is:
 
-### Option A: HTTP Mode (Recommended)
+`Copilot prompt or AgentILS custom prompt -> agentils-vscode LM tool -> MCP runtime -> AgentILS WebView -> MCP runtime -> Copilot`
 
-1. **Start the MCP Server separately (HTTP mode)**:
-```bash
-node --inspect=9230 dist/index.js --http
-```
+Key files:
 
-2. **Launch extension debugging**: Select "AgentILS: Both Extensions" → `F5`
-
-3. **Attach to MCP Server**: Start a new debug session in VS Code using "Attach to Node Process" on port 9230
-
-4. You can now set breakpoints in both extension code and MCP Server code.
-
-### Option B: stdio Mode
-
-1. **Launch extension debugging**: Select "AgentILS: VS Code Extension" → `F5`
-2. The extension automatically spawns the MCP Server as a child process via stdio
-3. Set breakpoints in extension-side code to debug interaction logic
-4. MCP Server logs go to stderr and can be viewed in the extension's Output channel
+- `extensions/agentils-vscode/src/extension.ts`
+- `extensions/agentils-vscode/src/lm-tools/index.ts`
+- `extensions/agentils-vscode/src/session/conversation-session-manager.ts`
+- `extensions/agentils-vscode/src/task-console-panel.ts`
+- `extensions/agentils-vscode/src/mcp-elicitation-bridge.ts`
+- `packages/mcp/src/gateway/tools.ts`
 
 ---
 
-## 8. FAQ
+## 8. Breakpoint Suggestions
 
-### Q: Extension Development Host fails to start
+Set breakpoints in:
 
-- Verify that the `prepare:agentils-extensions` task completed successfully
-- Confirm `extensions/agentils-vscode/dist/extension.js` exists
-- Check VS Code version >= 1.90.0
+- `extensions/agentils-vscode/src/extension.ts` for activation
+- `extensions/agentils-vscode/src/lm-tools/index.ts` for tool invocation
+- `extensions/agentils-vscode/src/session/conversation-session-manager.ts` for panel-open behavior
+- `extensions/agentils-vscode/src/task-console-panel.ts` for WebView message handling
+- `packages/mcp/src/gateway/tools.ts` for MCP tool entry
 
-### Q: LM Tool invocations have no response
+---
 
-- Confirm the MCP Server is built (`npm run build`)
-- Check the Developer Tools Console in the Extension Development Host
-- Set breakpoints in `src/lm-tools/` and `src/session/` to trace the issue
+## 9. Common Checks
 
-### Q: agentils-ui-helper extension not loading
+If `/agentils.run-code` appears in Copilot but no WebView opens:
 
-- Confirm you used "AgentILS: Both Extensions" or "AgentILS: UI Helper Extension" launch config
-- Verify `extensions/agentils-ui-helper/src/extension.js` syntax: `npm run check:ui-helper`
+1. Confirm the extension development host is running the `agentils-vscode` extension.
+2. Confirm `packages/mcp/dist/index.js` exists.
+3. Confirm prompts were installed into `~/Library/Application Support/Code/User/prompts`.
+4. Reload the VS Code window after prompt installation.
+5. Check whether VS Code showed a confirmation dialog for `agentils_start_conversation` and it was cancelled.
 
-### Q: WebView panel not showing
+If the extension activates but MCP calls fail:
 
-- In the Extension Development Host, press `Cmd+Shift+P` → "AgentILS: Open Task Console"
-- Check if `LocalPanelInteractionChannel` was created successfully in `extension.ts`
-- Inspect error messages in Developer Tools
+1. Rebuild with `pnpm build`.
+2. Check `agentils.runtime.serverModulePath` if you overrode it.
+3. Inspect the Output channel and developer tools console.
+4. If you want to fully reset the VS Code-side injection, run `pnpm agentils:uninstall:vscode` and then `pnpm agentils:inject:vscode` again.
+
+---
+
+## 10. Historical Note
+
+Some reference documents in `docs/agentils/` still discuss a helper-style UI extension because they analyze external reference implementations. Those documents are architectural references, not statements about the current AgentILS repository layout.

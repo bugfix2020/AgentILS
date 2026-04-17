@@ -2,11 +2,11 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { registerAgentILSCommands } from './commands'
+import { registerAgentILSChatParticipant } from './chat-participant'
 import { LocalPanelInteractionChannel } from './interaction-channel/local-panel-channel'
 import { registerAgentILSLanguageModelTools } from './lm-tools'
 import { initLogger, log } from './logger'
 import { AgentILSMcpElicitationBridge } from './mcp-elicitation-bridge'
-import { installAgentILSPromptPack } from './prompt-pack/installer'
 import { registerAgentILSPromptPackCommands } from './prompt-pack'
 import { ConversationSessionManager } from './session/conversation-session-manager'
 import { AgentILSStatusSurface } from './status-surface'
@@ -16,6 +16,10 @@ function resolveMcpServerPath(context: vscode.ExtensionContext): string | null {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
   if (!workspaceFolder) {
     return null
+  }
+  const configured = vscode.workspace.getConfiguration('agentils').get<string>('runtime.serverModulePath')?.trim()
+  if (configured) {
+    return configured
   }
   // Prefer the sibling repo build output (development layout), then workspace package output.
   const candidates = [
@@ -43,24 +47,12 @@ export async function activate(context: vscode.ExtensionContext) {
   const openConsole = interactionChannel.revealConsole.bind(interactionChannel)
 
   sessionManager.setInteractionChannel(interactionChannel)
+  client.setElicitationHandler((params) => sessionManager.handleMcpElicitation(params))
   registerAgentILSCommands(context, sessionManager, openConsole)
+  registerAgentILSChatParticipant(context, sessionManager)
   registerAgentILSLanguageModelTools(context, sessionManager)
   registerAgentILSPromptPackCommands(context)
-  log('activate', 'Commands, LM tools, prompt pack registered')
-
-  try {
-    const promptPackResult = installAgentILSPromptPack(context.extensionUri.fsPath)
-    log('activate', 'Prompt pack synced', {
-      promptsDir: promptPackResult.promptsDir,
-      written: promptPackResult.writtenFiles.length,
-      overwritten: promptPackResult.overwrittenFiles.length,
-      skipped: promptPackResult.skippedFiles.length,
-    })
-  } catch (error) {
-    log('activate', 'Prompt pack sync failed', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
+  log('activate', 'Commands, chat participant, LM tools, prompt pack registered')
 
   // Diagnostic: enumerate all registered LM tools
   const toolNames = vscode.lm.tools.map(t => t.name)
@@ -70,7 +62,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // that server-side approval_request / feedback_gate tool elicitations are
   // dispatched to the WebView via sessionManager.
   const bridge = new AgentILSMcpElicitationBridge(context, sessionManager)
-  context.subscriptions.push(status, sessionManager, interactionChannel, bridge)
+  context.subscriptions.push(client, status, sessionManager, interactionChannel, bridge)
 
   try {
     await sessionManager.refresh()

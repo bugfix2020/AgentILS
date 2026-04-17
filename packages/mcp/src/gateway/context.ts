@@ -39,6 +39,11 @@ export interface AgentGateRequestContext {
   elicitUser: (params: AgentGateElicitParams) => Promise<AgentGateElicitResult>
 }
 
+// MCP SDK defaults every request to 60s, but AgentILS user interactions are
+// intentionally long-lived. Use the largest safe timer window supported by
+// Node's setTimeout so approval/feedback/start-task gates can wait for humans.
+const AGENTILS_INTERACTION_TIMEOUT_MSEC = 2_147_483_647
+
 export interface CreateAgentGateRequestContextInput {
   runId?: string | null
   conversationId?: string | null
@@ -79,7 +84,9 @@ export function createAgentGateRequestContext(
         throw new Error('User interaction is not allowed in the current request context.')
       }
 
-      return (await runtime.server.server.elicitInput(params as never)) as AgentGateElicitResult
+      return (await runtime.server.server.elicitInput(params as never, {
+        timeout: AGENTILS_INTERACTION_TIMEOUT_MSEC,
+      })) as AgentGateElicitResult
     },
   }
 }

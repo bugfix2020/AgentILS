@@ -43,15 +43,33 @@
       },
       {
         "command": "agentils.installPromptPack",
-        "title": "AgentILS: Install Prompt Pack"
+        "title": "AgentILS: Run Installer"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "agentils.agentils",
+        "name": "agentils",
+        "fullName": "AgentILS",
+        "description": "Start the AgentILS task console directly from chat.",
+        "isSticky": false,
+        "commands": [
+          {
+            "name": "run",
+            "description": "Start an AgentILS task and open the task console"
+          }
+        ]
       }
     ],
     "languageModelTools": [
       {
         "name": "agentils_start_conversation",
         "displayName": "Start Conversation",
-        "modelDescription": "MANDATORY entry point for EVERY user message in this workspace. This tool initializes AgentILS task tracking. Call it with the user's raw input as the goal. Must be called before any other action — file edits, searches, or responses.",
+        "modelDescription": "MANDATORY first tool for AgentILS custom prompts such as /agentils.run-code, /agentils.run-task, and #startnewtask when the request is concrete. Do not answer with plain text before calling this tool inside an AgentILS flow.",
         "userDescription": "Start a new AgentILS task conversation.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "startConversation",
+        "icon": "$(play)",
         "description": "Start a new AgentILS task conversation and return the latest runtime snapshot.",
         "inputSchema": {
           "type": "object",
@@ -90,8 +108,11 @@
       {
         "name": "agentils_continue_task",
         "displayName": "Continue Task",
-        "modelDescription": "REQUIRED: After starting a conversation, call this tool to advance the active AgentILS task. Include progress notes about what was accomplished.",
+        "modelDescription": "Use after an AgentILS task has started to advance the active task and record progress notes.",
         "userDescription": "Continue the active AgentILS task.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "continueTask",
+        "icon": "$(debug-continue)",
         "description": "Advance the active AgentILS task with an optional continuation note.",
         "inputSchema": {
           "type": "object",
@@ -112,8 +133,11 @@
       {
         "name": "agentils_request_clarification",
         "displayName": "Request Clarification",
-        "modelDescription": "REQUIRED when user input is needed: Request blocking clarification from the user through the AgentILS interaction panel. Do not use other clarification tools.",
+        "modelDescription": "MANDATORY first tool when an AgentILS custom prompt is missing blocking detail. Use this instead of asking a plain-text follow-up.",
         "userDescription": "Ask the user for missing detail through AgentILS.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "requestClarification",
+        "icon": "$(comment-discussion)",
         "description": "Request blocking clarification from the user through the AgentILS interaction panel.",
         "inputSchema": {
           "type": "object",
@@ -147,8 +171,11 @@
       {
         "name": "agentils_request_feedback",
         "displayName": "Request Feedback",
-        "modelDescription": "REQUIRED at decision points: Request user feedback through the AgentILS interaction panel. Do not use other feedback tools.",
+        "modelDescription": "Use at AgentILS decision points to collect continue/done/revise feedback through the AgentILS interaction panel.",
         "userDescription": "Ask the user for feedback through AgentILS.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "requestFeedback",
+        "icon": "$(feedback)",
         "description": "Request user feedback for the current AgentILS task state and persist the response.",
         "inputSchema": {
           "type": "object",
@@ -187,8 +214,11 @@
       {
         "name": "agentils_request_approval",
         "displayName": "Request Approval",
-        "modelDescription": "REQUIRED before risky actions: Request user approval through the AgentILS interaction panel. Do not proceed without approval.",
+        "modelDescription": "Use before risky AgentILS actions to collect explicit approval through the AgentILS interaction panel. Do not proceed without approval.",
         "userDescription": "Ask the user to approve a risky AgentILS action.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "requestApproval",
+        "icon": "$(shield)",
         "description": "Request approval for a risky AgentILS action and persist the approval decision.",
         "inputSchema": {
           "type": "object",
@@ -227,8 +257,11 @@
       {
         "name": "agentils_finish_conversation",
         "displayName": "Finish Conversation",
-        "modelDescription": "REQUIRED to end: Call this to finish the AgentILS conversation when all tasks are complete. Must be called before ending the interaction.",
+        "modelDescription": "Call this to finish the AgentILS conversation after the active tasks and gates are complete.",
         "userDescription": "Attempt to finish the current AgentILS conversation.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "finishConversation",
+        "icon": "$(check)",
         "description": "Ask the AgentILS runtime to finish the current conversation if gates are satisfied.",
         "inputSchema": {
           "type": "object",
@@ -251,12 +284,17 @@
         "agentils.runtime.httpBaseUrl": {
           "type": "string",
           "default": "",
-          "description": "Optional base URL for a running AgentILS HTTP debug server. Leave empty to use the local built control-plane module."
+          "description": "Optional base URL for a running AgentILS HTTP debug server. Leave empty to use the local built MCP server."
+        },
+        "agentils.runtime.serverModulePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the built AgentILS MCP server entrypoint. Defaults to the extension's sibling repo build output when available, otherwise <workspace>/packages/mcp/dist/index.js."
         },
         "agentils.runtime.controlPlaneModulePath": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to the built AgentILS control-plane module. Defaults to the extension's sibling repo build output when available, otherwise <workspace>/packages/mcp/dist/control-plane/index.js."
+          "description": "Deprecated legacy setting for the old local control-plane path. Prefer agentils.runtime.serverModulePath."
         },
         "agentils.runtime.stateFilePath": {
           "type": "string",

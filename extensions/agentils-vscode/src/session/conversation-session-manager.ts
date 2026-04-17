@@ -6,12 +6,16 @@ import type {
   AgentILSApprovalResult,
   AgentILSClarificationRequestInput,
   AgentILSClarificationResult,
+  AgentILSMcpElicitationParams,
+  AgentILSMcpElicitationResult,
   AgentILSFeedbackRequestInput,
   AgentILSFeedbackResult,
   AgentILSPanelState,
   AgentILSPendingInteraction,
   AgentILSRecordApprovalInput,
   AgentILSRecordFeedbackInput,
+  AgentILSStartTaskGateInput,
+  AgentILSStartTaskGateResult,
   ContinueTaskInput,
   MarkTaskDoneInput,
   StartTaskInput,
@@ -88,6 +92,13 @@ export class ConversationSessionManager implements vscode.Disposable {
     return this.snapshot()
   }
 
+  async startTaskGate(input: AgentILSStartTaskGateInput) {
+    log('session', 'startTaskGate called', { title: input.title, hasGoal: Boolean(input.goal) })
+    await this.client.startTaskGate(input)
+    log('session', 'startTaskGate completed')
+    return this.snapshot()
+  }
+
   async continueTask(input: ContinueTaskInput = {}) {
     await this.client.continueTask(input)
     return this.snapshot()
@@ -133,6 +144,23 @@ export class ConversationSessionManager implements vscode.Disposable {
       description: [input.question, input.context].filter(Boolean).join('\n\n'),
       placeholder: input.placeholder ?? 'Provide the missing detail',
       required: input.required ?? true,
+    })
+  }
+
+  async requestTaskStart(input: AgentILSStartTaskGateInput & { message?: string }): Promise<AgentILSStartTaskGateResult> {
+    log('session', 'requestTaskStart called', { title: input.title, hasGoal: Boolean(input.goal) })
+    this.ensureConsoleVisible('newTask')
+    return this.registry.begin<AgentILSStartTaskGateResult>({
+      requestId: createRequestId('start_task'),
+      kind: 'startTask',
+      runId: null,
+      title: 'Start AgentILS Task',
+      description: input.message ?? 'Confirm or refine the task before AgentILS starts tracking it.',
+      required: true,
+      draftTitle: input.title?.trim() || '',
+      draftGoal: input.goal?.trim() || '',
+      draftControlMode: input.controlMode ?? 'normal',
+      controlMode: input.controlMode ?? 'normal',
     })
   }
 
@@ -197,6 +225,30 @@ export class ConversationSessionManager implements vscode.Disposable {
     } satisfies AgentILSClarificationResult)
   }
 
+  submitTaskStart(requestId: string, title: string, goal: string, controlMode: StartTaskInput['controlMode'] = 'normal') {
+    this.registry.resolve(requestId, {
+      action: 'accept',
+      content: {
+        title,
+        goal,
+        controlMode,
+      },
+      requestId,
+      traceId: `start_task_${randomUUID()}`,
+      recordedAt: nowIso(),
+    } satisfies AgentILSStartTaskGateResult)
+  }
+
+  cancelTaskStart(requestId: string) {
+    this.registry.resolve(requestId, {
+      action: 'cancel',
+      content: null,
+      requestId,
+      traceId: `start_task_${randomUUID()}`,
+      recordedAt: nowIso(),
+    } satisfies AgentILSStartTaskGateResult)
+  }
+
   submitFeedback(requestId: string, status: AgentILSFeedbackResult['status'], message: string) {
     this.registry.resolve(requestId, {
       status,
@@ -237,6 +289,11 @@ export class ConversationSessionManager implements vscode.Disposable {
       return
     }
 
+    if (pending.kind === 'startTask') {
+      this.cancelTaskStart(pending.requestId)
+      return
+    }
+
     if (pending.kind === 'clarification') {
       this.cancelClarification(pending.requestId)
       return
@@ -248,6 +305,59 @@ export class ConversationSessionManager implements vscode.Disposable {
     }
 
     this.cancelApproval(pending.requestId)
+  }
+
+  async handleMcpElicitation(params: AgentILSMcpElicitationParams): Promise<AgentILSMcpElicitationResult> {
+    const interactionKind = params._meta?.agentilsInteractionKind ?? ''
+    log('session', 'handleMcpElicitation', { mode: params.mode, interactionKind, runId: params.runId })
+    const summary = params.message ?? params.summary ?? ''
+    const riskLevel = params.riskLevel ?? 'medium'
+    const targets = Array.isArray(params.targets) ? params.targets : []
+    const runId = typeof params.runId === 'string' ? params.runId : undefined
+
+    if (interactionKind === 'startTask') {
+      const result = await this.requestTaskStart({
+        title: typeof params.title === 'string' ? params.title : undefined,
+        goal: typeof params.goal === 'string' ? params.goal : undefined,
+        controlMode: params.controlMode === 'alternate' || params.controlMode === 'direct' ? params.controlMode : 'normal',
+        message: summary,
+      })
+      return {
+        action: result.action,
+        content: result.content ?? null,
+      }
+    }
+
+    if (interactionKind === 'approval') {
+      try {
+        const result = await this.requestApproval({
+          summary,
+          riskLevel,
+          targets,
+          preferredRunId: runId,
+        })
+        return {
+          action: result.action,
+          content: { status: result.status, msg: result.message },
+        }
+      } catch {
+        return { action: 'cancel', content: null }
+      }
+    }
+
+    try {
+      const result = await this.requestFeedback({
+        question: summary,
+        summary,
+        preferredRunId: runId,
+      })
+      return {
+        action: 'accepted',
+        content: { status: result.status, msg: result.message },
+      }
+    } catch {
+      return { action: 'cancel', content: null }
+    }
   }
 
   private emitChange() {

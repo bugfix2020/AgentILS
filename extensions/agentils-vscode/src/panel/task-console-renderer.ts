@@ -46,6 +46,39 @@ function renderPendingInteraction(interaction: AgentILSPendingInteraction | null
     return ''
   }
 
+  if (interaction.kind === 'startTask') {
+    const selectedControlMode = interaction.draftControlMode ?? 'normal'
+    return `
+      <section class="card pending-card pending-${interaction.kind}">
+        <p class="eyebrow">Pending task start</p>
+        <h3>${escapeHtml(interaction.title)}</h3>
+        <p class="muted">${escapeHtml(interaction.description)}</p>
+        <form class="composer-form" data-form="pending" data-kind="startTask" data-request-id="${escapeHtml(interaction.requestId)}">
+          <label>
+            <span>Task title</span>
+            <input name="title" type="text" value="${escapeHtml(interaction.draftTitle ?? '')}" placeholder="What are you trying to do?" required />
+          </label>
+          <label>
+            <span>Task goal</span>
+            <textarea name="goal" rows="6" placeholder="Describe the desired outcome, constraints, or acceptance criteria." required>${escapeHtml(interaction.draftGoal ?? '')}</textarea>
+          </label>
+          <label>
+            <span>Control mode</span>
+            <select name="controlMode">
+              <option value="normal" ${selectedControlMode === 'normal' ? 'selected' : ''}>normal</option>
+              <option value="alternate" ${selectedControlMode === 'alternate' ? 'selected' : ''}>alternate</option>
+              <option value="direct" ${selectedControlMode === 'direct' ? 'selected' : ''}>direct</option>
+            </select>
+          </label>
+          <div class="composer-actions">
+            <button type="submit">Start task</button>
+            <button type="button" data-cancel-request-id="${escapeHtml(interaction.requestId)}">Cancel</button>
+          </div>
+        </form>
+      </section>
+    `
+  }
+
   if (interaction.kind === 'clarification') {
     return `
       <section class="card pending-card pending-${interaction.kind}">
@@ -570,6 +603,9 @@ export function renderTaskConsoleHtml(state: AgentILSPanelState, composerMode: T
           status: String(data.get('status') || ''),
           responseAction: String(data.get('responseAction') || ''),
           message: String(data.get('message') || ''),
+          title: String(data.get('title') || ''),
+          goal: String(data.get('goal') || ''),
+          controlMode: String(data.get('controlMode') || ''),
         };
         vscode.postMessage(message);
       });

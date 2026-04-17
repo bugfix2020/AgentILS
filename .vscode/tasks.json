@@ -18,19 +18,11 @@
       "problemMatcher": "$tsc"
     },
     {
-      "label": "check:agentils-ui-helper",
-      "type": "npm",
-      "script": "check",
-      "path": "extensions/agentils-ui-helper",
-      "problemMatcher": []
-    },
-    {
       "label": "prepare:agentils-extensions",
       "dependsOrder": "sequence",
       "dependsOn": [
         "build:root",
-        "build:agentils-vscode",
-        "check:agentils-ui-helper"
+        "build:agentils-vscode"
       ],
       "problemMatcher": []
     }

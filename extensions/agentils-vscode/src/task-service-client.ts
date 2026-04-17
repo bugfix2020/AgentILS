@@ -1,42 +1,26 @@
-import { execFile, execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 import * as vscode from 'vscode'
 import { log } from './logger'
+import { getLocalToolRequestOptions } from './runtime-client/request-options'
 import type {
   AcceptOverrideInput,
   AgentILSApprovalRequestInput,
-  AgentILSApprovalResult,
   AgentILSConversationSnapshot,
+  AgentILSElicitationHandler,
   AgentILSFinishConversationResult,
-  AgentILSFeedbackResult,
   AgentILSRecordApprovalInput,
   AgentILSRecordFeedbackInput,
   AgentILSRuntimeSnapshot,
+  AgentILSStartTaskGateInput,
   AgentILSTaskSummaryDocument,
   ContinueTaskInput,
   MarkTaskDoneInput,
   StartTaskInput,
 } from './model'
 
-const execFileAsync = promisify(execFile)
-
-const runnerScript = `
-import { pathToFileURL } from 'node:url';
-
-const [modulePath, actionName, payloadJson] = process.argv.slice(1);
-const payload = payloadJson ? JSON.parse(payloadJson) : {};
-const module = await import(pathToFileURL(modulePath).href);
-const action = module[actionName];
-
-if (typeof action !== 'function') {
-  throw new Error(\`Unknown AgentILS control-plane action: \${actionName}\`);
-}
-
-const result = await action(payload);
-process.stdout.write(JSON.stringify(result));
-`
+type McpClient = any
+type McpTransport = any
 
 function nowIso() {
   return new Date().toISOString()
@@ -64,53 +48,6 @@ function createEmptySnapshot(): AgentILSRuntimeSnapshot {
   }
 }
 
-class AgentILSRuntimeHttpError extends Error {
-  constructor(action: string, baseUrl: string, cause?: unknown) {
-    super(
-      `AgentILS HTTP runtime is unavailable for ${action} at ${baseUrl}. ` +
-        `Start the workspace server with "pnpm run dev:http" or configure ` +
-        '`agentils.runtime.httpBaseUrl`.',
-    )
-    this.name = 'AgentILSRuntimeHttpError'
-    this.cause = cause instanceof Error ? cause : undefined
-  }
-}
-
-class AgentILSRuntimeLocalError extends Error {
-  constructor(controlPlaneModulePath: string, cause?: unknown) {
-    const causeText = cause instanceof Error ? cause.message : String(cause ?? 'Unknown error')
-    super(
-      `AgentILS local runtime is unavailable. Expected built control-plane module at ` +
-        `${controlPlaneModulePath}. Run "pnpm run build" first. Cause: ${causeText}`,
-    )
-    this.name = 'AgentILSRuntimeLocalError'
-    this.cause = cause instanceof Error ? cause : undefined
-  }
-}
-
-export interface AgentILSTaskServiceClient {
-  readonly onDidChange: vscode.Event<AgentILSRuntimeSnapshot>
-  snapshot(): AgentILSRuntimeSnapshot
-  refresh(): Promise<AgentILSRuntimeSnapshot>
-  startTask(input: StartTaskInput): Promise<AgentILSRuntimeSnapshot>
-  continueTask(input?: ContinueTaskInput): Promise<AgentILSRuntimeSnapshot | null>
-  markTaskDone(input?: MarkTaskDoneInput): Promise<AgentILSRuntimeSnapshot | null>
-  acceptOverride(input: AcceptOverrideInput): Promise<AgentILSRuntimeSnapshot | null>
-  beginApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSRuntimeSnapshot>
-  recordApproval(input: AgentILSRecordApprovalInput): Promise<AgentILSRuntimeSnapshot>
-  recordFeedback(input: AgentILSRecordFeedbackInput): Promise<AgentILSRuntimeSnapshot>
-  finishConversation(input?: { preferredRunId?: string }): Promise<AgentILSFinishConversationResult>
-  getSummaryDocument(taskId?: string | null): AgentILSTaskSummaryDocument | null
-  openSummaryDocument(taskId?: string | null): Promise<vscode.Uri | null>
-}
-
-function ensureWorkspaceRoot(): void {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
-  if (!workspaceFolder) {
-    throw new Error('AgentILS requires an open workspace folder.')
-  }
-}
-
 function resolveConfigPath(settingKey: string, fallback: string): string {
   const configured = vscode.workspace.getConfiguration('agentils').get<string>(settingKey)?.trim()
   return configured && configured.length > 0 ? configured : fallback
@@ -125,92 +62,218 @@ function resolveRuntimeBaseUrl(): string | null {
   return null
 }
 
-function resolveDefaultControlPlaneModulePath(context: vscode.ExtensionContext, workspaceRoot: string): string {
-  const extensionRelativePath = join(context.extensionPath, '..', '..', 'packages', 'mcp', 'dist', 'control-plane', 'index.js')
+function ensureWorkspaceRoot(): string {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+  if (!workspaceFolder) {
+    throw new Error('AgentILS requires an open workspace folder.')
+  }
+  return workspaceFolder.uri.fsPath
+}
+
+function resolveDefaultServerModulePath(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const extensionRelativePath = join(context.extensionPath, '..', '..', 'packages', 'mcp', 'dist', 'index.js')
   if (existsSync(extensionRelativePath)) {
     return extensionRelativePath
   }
 
-  const workspacePackagePath = join(workspaceRoot, 'packages', 'mcp', 'dist', 'control-plane', 'index.js')
+  const workspacePackagePath = join(workspaceRoot, 'packages', 'mcp', 'dist', 'index.js')
   if (existsSync(workspacePackagePath)) {
     return workspacePackagePath
   }
 
-  return join(workspaceRoot, 'dist', 'control-plane', 'index.js')
+  return join(workspaceRoot, 'dist', 'index.js')
+}
+
+function parseToolTextPayload<T>(result: { content?: Array<{ type?: string; text?: string }>; isError?: boolean }): T {
+  const textPart = result.content?.find((item) => item.type === 'text' && typeof item.text === 'string')
+  if (!textPart?.text) {
+    throw new Error('AgentILS MCP tool returned no text payload.')
+  }
+
+  const separatorIndex = textPart.text.indexOf('\n')
+  if (separatorIndex < 0) {
+    throw new Error('AgentILS MCP tool returned an invalid text payload.')
+  }
+
+  if (result.isError) {
+    throw new Error(textPart.text.slice(separatorIndex + 1).trim() || textPart.text)
+  }
+
+  return JSON.parse(textPart.text.slice(separatorIndex + 1)) as T
+}
+
+function buildSpawnEnv(stateFilePath: string): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === 'string') {
+      env[key] = value
+    }
+  }
+  env.AGENTILS_STATE_FILE = stateFilePath
+  return env
+}
+
+class AgentILSRuntimeHttpError extends Error {
+  constructor(action: string, baseUrl: string, cause?: unknown) {
+    super(
+      `AgentILS HTTP runtime is unavailable for ${action} at ${baseUrl}. ` +
+        `Start the workspace server with "pnpm run dev:http" or configure ` +
+        '`agentils.runtime.httpBaseUrl`.',
+    )
+    this.name = 'AgentILSRuntimeHttpError'
+    this.cause = cause instanceof Error ? cause : undefined
+  }
+}
+
+class AgentILSRuntimeLocalError extends Error {
+  constructor(serverModulePath: string, cause?: unknown) {
+    const causeText = cause instanceof Error ? cause.message : String(cause ?? 'Unknown error')
+    super(
+      `AgentILS local runtime is unavailable. Expected built MCP server at ` +
+        `${serverModulePath}. Run "pnpm run build" first. Cause: ${causeText}`,
+    )
+    this.name = 'AgentILSRuntimeLocalError'
+    this.cause = cause instanceof Error ? cause : undefined
+  }
+}
+
+export interface AgentILSTaskServiceClient extends vscode.Disposable {
+  readonly onDidChange: vscode.Event<AgentILSRuntimeSnapshot>
+  snapshot(): AgentILSRuntimeSnapshot
+  refresh(): Promise<AgentILSRuntimeSnapshot>
+  startTask(input: StartTaskInput): Promise<AgentILSRuntimeSnapshot>
+  startTaskGate(input: AgentILSStartTaskGateInput): Promise<AgentILSRuntimeSnapshot>
+  continueTask(input?: ContinueTaskInput): Promise<AgentILSRuntimeSnapshot | null>
+  markTaskDone(input?: MarkTaskDoneInput): Promise<AgentILSRuntimeSnapshot | null>
+  acceptOverride(input: AcceptOverrideInput): Promise<AgentILSRuntimeSnapshot | null>
+  beginApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSRuntimeSnapshot>
+  recordApproval(input: AgentILSRecordApprovalInput): Promise<AgentILSRuntimeSnapshot>
+  recordFeedback(input: AgentILSRecordFeedbackInput): Promise<AgentILSRuntimeSnapshot>
+  finishConversation(input?: { preferredRunId?: string }): Promise<AgentILSFinishConversationResult>
+  getSummaryDocument(taskId?: string | null): AgentILSTaskSummaryDocument | null
+  openSummaryDocument(taskId?: string | null): Promise<vscode.Uri | null>
+  setElicitationHandler(handler: AgentILSElicitationHandler | undefined): void
 }
 
 export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceClient {
   private readonly emitter = new vscode.EventEmitter<AgentILSRuntimeSnapshot>()
   private readonly workspaceRoot: string
-  private readonly controlPlaneModulePath: string
+  private readonly serverModulePath: string
   private readonly stateFilePath: string
   private currentSnapshot: AgentILSRuntimeSnapshot
+  private localClient: McpClient | null = null
+  private localTransport: McpTransport | null = null
+  private elicitationHandler: AgentILSElicitationHandler | undefined
 
   readonly onDidChange = this.emitter.event
 
-  constructor(_context: vscode.ExtensionContext) {
-    ensureWorkspaceRoot()
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
-    this.workspaceRoot = workspaceFolder!.uri.fsPath
-    this.controlPlaneModulePath = resolveConfigPath(
-      'runtime.controlPlaneModulePath',
-      resolveDefaultControlPlaneModulePath(_context, this.workspaceRoot),
+  constructor(context: vscode.ExtensionContext) {
+    this.workspaceRoot = ensureWorkspaceRoot()
+    this.serverModulePath = resolveConfigPath(
+      'runtime.serverModulePath',
+      resolveDefaultServerModulePath(context, this.workspaceRoot),
     )
     this.stateFilePath = resolveConfigPath('runtime.stateFilePath', join(this.workspaceRoot, '.data/agentils-state.json'))
     this.currentSnapshot = createEmptySnapshot()
+  }
+
+  dispose() {
+    this.emitter.dispose()
+    void this.closeLocalClient()
   }
 
   snapshot(): AgentILSRuntimeSnapshot {
     return this.currentSnapshot
   }
 
+  setElicitationHandler(handler: AgentILSElicitationHandler | undefined) {
+    this.elicitationHandler = handler
+  }
+
   async refresh(): Promise<AgentILSRuntimeSnapshot> {
-    const snapshot = await this.invokeAsync<AgentILSRuntimeSnapshot>('buildUiRuntimeSnapshot', {})
-    this.currentSnapshot = snapshot
-    this.emitter.fire(snapshot)
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>(
+      'ui_runtime_snapshot_get',
+      {},
+      'buildUiRuntimeSnapshot',
+    )
+    this.applySnapshot(snapshot)
     return snapshot
   }
 
   async startTask(input: StartTaskInput): Promise<AgentILSRuntimeSnapshot> {
-    return this.runMutation('startUiTask', input)
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>('ui_task_start', input, 'startUiTask')
+    this.applySnapshot(snapshot)
+    return snapshot
+  }
+
+  async startTaskGate(input: AgentILSStartTaskGateInput): Promise<AgentILSRuntimeSnapshot> {
+    const snapshot = await this.invokeLocalTool<AgentILSRuntimeSnapshot>('ui_task_start_gate', input)
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async continueTask(input: ContinueTaskInput = {}): Promise<AgentILSRuntimeSnapshot | null> {
-    return this.runMutation('continueUiTask', input)
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>('ui_task_continue', input, 'continueUiTask')
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async markTaskDone(input: MarkTaskDoneInput = {}): Promise<AgentILSRuntimeSnapshot | null> {
-    return this.runMutation('markUiTaskDone', input)
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>('ui_task_done', input, 'markUiTaskDone')
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async acceptOverride(input: AcceptOverrideInput): Promise<AgentILSRuntimeSnapshot | null> {
-    return this.runMutation('acceptUiOverride', input)
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>('ui_override_accept', input, 'acceptUiOverride')
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async beginApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSRuntimeSnapshot> {
-    return this.runMutation('beginUiApproval', input)
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>('ui_approval_begin', input, 'beginUiApproval')
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async recordApproval(input: AgentILSRecordApprovalInput): Promise<AgentILSRuntimeSnapshot> {
-    return this.runMutation('recordUiApproval', {
-      preferredRunId: input.preferredRunId,
-      summary: input.summary,
-      action: input.action,
-      status: input.status === 'cancel' ? undefined : input.status,
-      message: input.message,
-    })
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>(
+      'ui_approval_record',
+      {
+        preferredRunId: input.preferredRunId,
+        summary: input.summary,
+        action: input.action,
+        status: input.status === 'cancel' ? undefined : input.status,
+        message: input.message,
+      },
+      'recordUiApproval',
+    )
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async recordFeedback(input: AgentILSRecordFeedbackInput): Promise<AgentILSRuntimeSnapshot> {
-    return this.runMutation('recordUiFeedback', {
-      preferredRunId: input.preferredRunId,
-      status: input.status === 'cancel' ? 'continue' : input.status,
-      message: input.message,
-    })
+    const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>(
+      'ui_feedback_record',
+      {
+        preferredRunId: input.preferredRunId,
+        status: input.status === 'cancel' ? 'continue' : input.status,
+        message: input.message,
+      },
+      'recordUiFeedback',
+    )
+    this.applySnapshot(snapshot)
+    return snapshot
   }
 
   async finishConversation(input: { preferredRunId?: string } = {}): Promise<AgentILSFinishConversationResult> {
-    return this.invokeAsync('finishUiConversation', input) as Promise<AgentILSFinishConversationResult>
+    const result = await this.invokeRuntime<AgentILSFinishConversationResult>(
+      'ui_conversation_finish',
+      input,
+      'finishUiConversation',
+    )
+    this.applySnapshot(result.snapshot)
+    return result
   }
 
   getSummaryDocument(taskId?: string | null): AgentILSTaskSummaryDocument | null {
@@ -229,67 +292,111 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
     return vscode.Uri.file(summary.filePath)
   }
 
-  private invokeSync(action: string, payload: object): AgentILSRuntimeSnapshot {
-    this.ensureLocalRuntimeAvailable()
-    try {
-      const stdout = execFileSync(
-        process.execPath,
-        [
-          '--input-type=module',
-          '-e',
-          runnerScript,
-          this.controlPlaneModulePath,
-          action,
-          JSON.stringify(this.withRuntimeOptions(payload)),
-        ],
-        {
-          cwd: this.workspaceRoot,
-          encoding: 'utf8',
-        },
-      )
-      return JSON.parse(stdout) as AgentILSRuntimeSnapshot
-    } catch (error) {
-      throw new AgentILSRuntimeLocalError(this.controlPlaneModulePath, error)
-    }
-  }
-
-  private async runMutation<T extends object>(action: string, payload: T): Promise<AgentILSRuntimeSnapshot> {
-    log('client', `runMutation: ${action}`)
-    const snapshot = await this.invokeAsync<AgentILSRuntimeSnapshot>(action, payload)
-    log('client', `runMutation done: ${action}`, { conversationState: snapshot.conversation.state, activeTaskId: snapshot.activeTask?.taskId })
+  private applySnapshot(snapshot: AgentILSRuntimeSnapshot) {
     this.currentSnapshot = snapshot
     this.emitter.fire(snapshot)
-    return snapshot
   }
 
-  private async invokeAsync<T>(action: string, payload: object): Promise<T> {
-    log('client', `invokeAsync: ${action}`)
+  private async invokeSnapshotTool<T>(toolName: string, payload: object, httpAction: string): Promise<T> {
+    return this.invokeRuntime<T>(toolName, payload, httpAction)
+  }
+
+  private async invokeRuntime<T>(toolName: string, payload: object, httpAction: string): Promise<T> {
+    log('client', `invokeRuntime: ${toolName}`)
     const baseUrl = resolveRuntimeBaseUrl()
     if (baseUrl) {
-      return this.invokeHttp<T>(action, payload, baseUrl)
+      return this.invokeHttp<T>(httpAction, payload, baseUrl)
+    }
+    return this.invokeLocalTool<T>(toolName, payload)
+  }
+
+  private async invokeLocalTool<T>(toolName: string, payload: object): Promise<T> {
+    this.ensureLocalRuntimeAvailable()
+    const client = await this.ensureLocalClient()
+    try {
+      const requestOptions = getLocalToolRequestOptions(toolName)
+      const result = await client.callTool({
+        name: toolName,
+        arguments: payload,
+      }, undefined, requestOptions)
+      return parseToolTextPayload<T>(result)
+    } catch (error) {
+      throw new AgentILSRuntimeLocalError(this.serverModulePath, error)
+    }
+  }
+
+  private async ensureLocalClient(): Promise<McpClient> {
+    if (this.localClient) {
+      return this.localClient
     }
 
-    this.ensureLocalRuntimeAvailable()
+    let Client: any
+    let StdioClientTransport: any
+    let ElicitRequestSchema: any
     try {
-      const { stdout } = await execFileAsync(
-        process.execPath,
-        [
-          '--input-type=module',
-          '-e',
-          runnerScript,
-          this.controlPlaneModulePath,
-          action,
-          JSON.stringify(this.withRuntimeOptions(payload)),
-        ],
-        {
-          cwd: this.workspaceRoot,
-          encoding: 'utf8',
-        },
-      )
-      return JSON.parse(stdout) as T
+      Client = require('@modelcontextprotocol/sdk/client/index.js').Client
+      StdioClientTransport = require('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport
+      ElicitRequestSchema = require('@modelcontextprotocol/sdk/types.js').ElicitRequestSchema
     } catch (error) {
-      throw new AgentILSRuntimeLocalError(this.controlPlaneModulePath, error)
+      throw new AgentILSRuntimeLocalError(this.serverModulePath, error)
     }
+
+    this.localTransport = new StdioClientTransport({
+      command: 'node',
+      args: [this.serverModulePath],
+      cwd: this.workspaceRoot,
+      env: buildSpawnEnv(this.stateFilePath),
+      stderr: 'pipe',
+    })
+
+    if (this.localTransport.stderr) {
+      this.localTransport.stderr.on('data', (chunk: Buffer | string) => {
+        const stderrText = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+        if (stderrText.trim().length > 0) {
+          log('client', 'mcp stderr', { stderr: stderrText.trim() })
+        }
+      })
+    }
+
+    this.localClient = new Client(
+      { name: 'agentils-vscode-runtime-client', version: '0.1.0' },
+      { capabilities: { elicitation: {} } },
+    )
+
+    this.localClient.setRequestHandler(
+      ElicitRequestSchema,
+      async (request: { params?: Record<string, unknown> }) => {
+        if (!this.elicitationHandler) {
+          return {
+            action: 'cancel',
+            content: null,
+          }
+        }
+        return this.elicitationHandler(request.params ?? {})
+      },
+    )
+
+    try {
+      await this.localClient.connect(this.localTransport)
+      log('client', 'Local MCP runtime client connected', { serverModulePath: this.serverModulePath })
+      return this.localClient
+    } catch (error) {
+      this.localClient = null
+      this.localTransport = null
+      throw new AgentILSRuntimeLocalError(this.serverModulePath, error)
+    }
+  }
+
+  private async closeLocalClient() {
+    if (this.localClient) {
+      try {
+        await this.localClient.close()
+      } catch {
+        // best effort
+      }
+    }
+    this.localClient = null
+    this.localTransport = null
   }
 
   private async invokeHttp<T>(action: string, payload: object, baseUrl: string): Promise<T> {
@@ -302,7 +409,6 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
       'recordUiApproval': '/api/ui/approval/record',
       'recordUiFeedback': '/api/ui/feedback/record',
       'markUiTaskDone': '/api/ui/mark_done',
-      'endUiConversation': '/api/ui/end_conversation',
       'finishUiConversation': '/api/ui/finish_conversation',
     }
 
@@ -315,7 +421,10 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...(payload as Record<string, unknown>),
+          stateFilePath: this.stateFilePath,
+        }),
       })
 
       if (!response.ok) {
@@ -329,16 +438,9 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
     }
   }
 
-  private withRuntimeOptions(payload: object) {
-    return {
-      ...(payload as Record<string, unknown>),
-      stateFilePath: this.stateFilePath,
-    }
-  }
-
   private ensureLocalRuntimeAvailable() {
-    if (!existsSync(this.controlPlaneModulePath)) {
-      throw new AgentILSRuntimeLocalError(this.controlPlaneModulePath)
+    if (!existsSync(this.serverModulePath)) {
+      throw new AgentILSRuntimeLocalError(this.serverModulePath)
     }
   }
 }

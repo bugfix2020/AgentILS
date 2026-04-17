@@ -78,7 +78,7 @@ export interface AgentILSRuntimeSnapshot {
   latestSummary: AgentILSTaskSummaryDocument | null
 }
 
-export type AgentILSInteractionKind = 'clarification' | 'feedback' | 'approval'
+export type AgentILSInteractionKind = 'clarification' | 'feedback' | 'approval' | 'startTask'
 
 export type AgentILSFeedbackStatus = 'continue' | 'done' | 'revise'
 
@@ -89,6 +89,33 @@ export type AgentILSRiskLevel = 'low' | 'medium' | 'high'
 export interface AgentILSToolRequestOptions {
   preferredRunId?: string
 }
+
+export interface AgentILSMcpElicitationParams {
+  mode?: string
+  message?: string
+  summary?: string
+  riskLevel?: AgentILSRiskLevel
+  targets?: string[]
+  runId?: string
+  title?: string
+  goal?: string
+  controlMode?: AgentILSControlMode
+  requestedSchema?: Record<string, unknown>
+  _meta?: {
+    agentilsInteractionKind?: 'startTask' | 'approval' | 'feedback'
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface AgentILSMcpElicitationResult {
+  action: string
+  content?: Record<string, unknown> | null
+}
+
+export type AgentILSElicitationHandler = (
+  params: AgentILSMcpElicitationParams,
+) => Promise<AgentILSMcpElicitationResult>
 
 export interface StartTaskInput {
   title: string
@@ -135,6 +162,9 @@ export interface AgentILSPendingInteraction {
   targets?: string[]
   risks?: string[]
   controlMode?: AgentILSControlMode
+  draftTitle?: string
+  draftGoal?: string
+  draftControlMode?: AgentILSControlMode
 }
 
 export interface AgentILSPanelState {
@@ -151,6 +181,24 @@ export interface AgentILSClarificationRequestInput extends AgentILSToolRequestOp
   context?: string
   placeholder?: string
   required?: boolean
+}
+
+export interface AgentILSStartTaskGateInput {
+  title?: string
+  goal?: string
+  controlMode?: AgentILSControlMode
+}
+
+export interface AgentILSStartTaskGateResult {
+  action: 'accept' | 'cancel'
+  content?: {
+    title: string
+    goal: string
+    controlMode?: AgentILSControlMode
+  } | null
+  requestId: string
+  traceId: string
+  recordedAt: string
 }
 
 export interface AgentILSClarificationResult {

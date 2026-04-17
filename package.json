@@ -3,6 +3,8 @@
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "scripts": {
+    "agentils:inject:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js inject vscode --workspace .",
+    "agentils:uninstall:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js uninstall vscode --workspace .",
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "dev:http": "pnpm --filter @agentils/mcp dev:http",

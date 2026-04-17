@@ -7,6 +7,7 @@ Before reading the repository broadly, read `.hc/codex-modular-debug.md`.
 Core working rules:
 
 - Treat AgentILS as a TypeScript runtime control plane, not as a free-form chatbot shell.
+- In VS Code, when AgentILS prompts are installed, prefer `/agentils.run-code` or `/agentils.run-task` as the explicit entrypoint for AgentILS work.
 - Do not start with full-repo scanning. Work by active call chain and module boundary.
 - First classify the issue into one of the main chains: `task start`, `approval`, `feedback`, `verify`, `conversation state`, or `summary`.
 - Follow React-like one-way data flow: commands may enter from multiple gateways, but derived state must have one truth source and flow outward from that source.
@@ -26,6 +27,7 @@ State and truth-source rules:
 Execution rules:
 
 - In task execution mode, progress through `collect`, `confirm_elements`, `plan`, `approval`, `execute`, `handoff_prepare`, `verify`, `done`.
+- Inside an AgentILS VS Code flow, prefer AgentILS tools and the AgentILS interaction panel over plain-text clarification or unrelated extension tools.
 - Do not mark a task done until result verification, handoff verification, and summary state are aligned.
 - High-risk actions require explicit approval or user override acknowledgement.
 - Control modes are `normal`, `alternate`, and `direct`; `direct` reduces gating but does not remove audit visibility.

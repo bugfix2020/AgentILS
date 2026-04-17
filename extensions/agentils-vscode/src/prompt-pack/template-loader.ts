@@ -8,10 +8,7 @@ export interface AgentILSPromptTemplate {
 
 const promptTemplateFileNames = [
   'agentils.orchestrator.agent.md',
-  'agentils.plan.agent.md',
-  'agentils.execute.agent.md',
-  'agentils.verify.agent.md',
-  'agentils.handoff.agent.md',
+  'agentils.run-code.prompt.md',
   'startnewtask.prompt.md',
   'agentils.run-task.prompt.md',
   'agentils.approval.prompt.md',

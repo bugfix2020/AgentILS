@@ -1,5 +1,17 @@
 import { z } from 'zod'
 import { ApprovalResultSchema, FeedbackDecisionSchema, HandoffPacketSchema, TaskCardSchema } from '../types/index.js'
+import {
+  acceptUiOverride,
+  beginUiApproval,
+  buildUiActionServices,
+  buildUiRuntimeSnapshot,
+  continueUiTask,
+  finishUiConversation,
+  markUiTaskDone,
+  recordUiApproval,
+  recordUiFeedback,
+  startUiTask,
+} from '../control-plane/ui-actions.js'
 import { createAgentGateRequestContext, type AgentGateRequestContext, type AgentGateServerRuntime } from './context.js'
 import { buildActiveTaskSnapshot, readGatewayRunSnapshot, resolveRun, resolveRunId, textResult } from './shared.js'
 
@@ -9,6 +21,12 @@ const taskReadinessSchema = z.object({
   policyAllowed: z.boolean().optional(),
   missingInfo: z.array(z.string()).optional(),
   risks: z.array(z.string()).optional(),
+})
+
+const uiTaskStartGateSchema = z.object({
+  title: z.string().optional(),
+  goal: z.string().optional(),
+  controlMode: z.enum(['normal', 'alternate', 'direct']).optional(),
 })
 
 const taskStartSchema = z.object({
@@ -59,6 +77,7 @@ function createToolRequestContext(runtime: AgentGateServerRuntime, preferredRunI
 
 function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
   const { server, store, orchestrator } = runtime
+  const uiServices = buildUiActionServices(store, orchestrator)
 
   server.registerTool(
     'new_task_request',
@@ -365,6 +384,9 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       const elicited = await ctx.elicitUser({
         mode: 'form',
         message: `Approval required (${riskLevel} risk): ${summary}`,
+        _meta: {
+          agentilsInteractionKind: 'approval',
+        },
         requestedSchema: {
           type: 'object',
           properties: {
@@ -433,6 +455,9 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       const elicited = await ctx.elicitUser({
         mode: 'form',
         message: `Feedback gate: ${summary}`,
+        _meta: {
+          agentilsInteractionKind: 'feedback',
+        },
         requestedSchema: {
           type: 'object',
           properties: {
@@ -467,6 +492,262 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       orchestrator.recordFeedback(runId, decision, ctx)
       return textResult('Feedback result', decision)
     },
+  )
+
+  server.registerTool(
+    'ui_runtime_snapshot_get',
+    {
+      description: 'Read the AgentILS UI runtime snapshot through the MCP gateway.',
+      inputSchema: {
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ preferredRunId }) =>
+      textResult(
+        'UI runtime snapshot',
+        buildUiRuntimeSnapshot(
+          {
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_task_start_gate',
+    {
+      description:
+        'Collect or confirm the initial AgentILS task input through MCP elicitation, then start the task and return the updated runtime snapshot.',
+      inputSchema: uiTaskStartGateSchema,
+    },
+    async ({ title, goal, controlMode }) => {
+      const ctx = createToolRequestContext(runtime)
+      const elicited = await ctx.elicitUser({
+        mode: 'form',
+        message: 'Confirm or refine the initial AgentILS task before starting it.',
+        _meta: {
+          agentilsInteractionKind: 'startTask',
+        },
+        title: title ?? '',
+        goal: goal ?? '',
+        controlMode: controlMode ?? 'normal',
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              title: 'Task title',
+            },
+            goal: {
+              type: 'string',
+              title: 'Task goal',
+            },
+            controlMode: {
+              type: 'string',
+              title: 'Control mode',
+              oneOf: [
+                { const: 'normal', title: 'normal' },
+                { const: 'alternate', title: 'alternate' },
+                { const: 'direct', title: 'direct' },
+              ],
+              default: controlMode ?? 'normal',
+            },
+          },
+          required: ['title', 'goal'],
+        },
+      })
+
+      if (elicited.action !== 'accept' || !elicited.content) {
+        return textResult('UI task start cancelled', { action: elicited.action })
+      }
+
+      const parsed = taskStartSchema.parse({
+        title: elicited.content.title,
+        goal: elicited.content.goal,
+        controlMode: elicited.content.controlMode ?? 'normal',
+      })
+
+      return textResult('UI task started', startUiTask(buildTaskStartInput(parsed), uiServices))
+    },
+  )
+
+  server.registerTool(
+    'ui_task_start',
+    {
+      description: 'Start a task through the AgentILS UI-facing MCP entrypoint and return the updated runtime snapshot.',
+      inputSchema: taskStartSchema,
+    },
+    async (input) =>
+      textResult('UI task started', startUiTask(buildTaskStartInput(input), uiServices)),
+  )
+
+  server.registerTool(
+    'ui_task_continue',
+    {
+      description: 'Advance the active AgentILS task through the UI-facing MCP entrypoint.',
+      inputSchema: {
+        note: z.string().optional(),
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ note, preferredRunId }) =>
+      textResult(
+        'UI task continued',
+        continueUiTask(
+          {
+            note,
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_override_accept',
+    {
+      description: 'Record an override acknowledgement through the AgentILS UI-facing MCP entrypoint.',
+      inputSchema: {
+        acknowledgement: z.string().min(1),
+        level: z.enum(['soft', 'hard']).optional(),
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ acknowledgement, level, preferredRunId }) =>
+      textResult(
+        'UI override accepted',
+        acceptUiOverride(
+          {
+            acknowledgement,
+            level,
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_approval_begin',
+    {
+      description: 'Move the current AgentILS task into awaiting approval through the UI-facing MCP entrypoint.',
+      inputSchema: {
+        summary: z.string().min(1),
+        riskLevel: z.enum(['low', 'medium', 'high']),
+        toolName: z.string().optional(),
+        targets: z.array(z.string()).optional(),
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ summary, riskLevel, toolName, targets, preferredRunId }) =>
+      textResult(
+        'UI approval begun',
+        beginUiApproval(
+          {
+            summary,
+            riskLevel,
+            toolName,
+            targets,
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_approval_record',
+    {
+      description: 'Record an approval decision through the AgentILS UI-facing MCP entrypoint.',
+      inputSchema: {
+        summary: z.string().min(1),
+        action: z.enum(['accept', 'decline', 'cancel']),
+        status: z.enum(['continue', 'done', 'revise']).optional(),
+        message: z.string().optional(),
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ summary, action, status, message, preferredRunId }) =>
+      textResult(
+        'UI approval recorded',
+        recordUiApproval(
+          {
+            summary,
+            action,
+            status,
+            message,
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_feedback_record',
+    {
+      description: 'Record a feedback decision through the AgentILS UI-facing MCP entrypoint.',
+      inputSchema: {
+        status: z.enum(['continue', 'done', 'revise']),
+        message: z.string().optional(),
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ status, message, preferredRunId }) =>
+      textResult(
+        'UI feedback recorded',
+        recordUiFeedback(
+          {
+            status,
+            message,
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_task_done',
+    {
+      description: 'Mark the active AgentILS task done through the UI-facing MCP entrypoint.',
+      inputSchema: {
+        summary: z.string().optional(),
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ summary, preferredRunId }) =>
+      textResult(
+        'UI task done',
+        markUiTaskDone(
+          {
+            summary,
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'ui_conversation_finish',
+    {
+      description: 'Attempt to finish the current conversation through the AgentILS UI-facing MCP entrypoint.',
+      inputSchema: {
+        preferredRunId: z.string().optional(),
+      },
+    },
+    async ({ preferredRunId }) =>
+      textResult(
+        'UI conversation finish',
+        finishUiConversation(
+          {
+            preferredRunId,
+          },
+          uiServices,
+        ),
+      ),
   )
 }
 

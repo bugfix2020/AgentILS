@@ -7,31 +7,8 @@
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}/extensions/agentils-vscode"
-      ],
-      "preLaunchTask": "prepare:agentils-extensions",
-      "outFiles": [
-        "${workspaceFolder}/extensions/agentils-vscode/dist/**/*.js"
-      ]
-    },
-    {
-      "name": "AgentILS: UI Helper Extension",
-      "type": "extensionHost",
-      "request": "launch",
-      "runtimeExecutable": "${execPath}",
-      "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}/extensions/agentils-ui-helper"
-      ],
-      "preLaunchTask": "prepare:agentils-extensions"
-    },
-    {
-      "name": "AgentILS: Both Extensions",
-      "type": "extensionHost",
-      "request": "launch",
-      "runtimeExecutable": "${execPath}",
-      "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/extensions/agentils-vscode",
-        "--extensionDevelopmentPath=${workspaceFolder}/extensions/agentils-ui-helper"
+        "--folder-uri=file://${workspaceFolder}/apps/vscode-debug"
       ],
       "preLaunchTask": "prepare:agentils-extensions",
       "outFiles": [

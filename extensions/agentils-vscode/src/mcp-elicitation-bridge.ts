@@ -21,6 +21,7 @@
 import * as vscode from 'vscode'
 
 import { log } from './logger'
+import type { AgentILSMcpElicitationParams, AgentILSMcpElicitationResult } from './model'
 import type { ConversationSessionManager } from './session/conversation-session-manager'
 
 // Lazily loaded MCP SDK types — imported via require() to avoid static import
@@ -28,22 +29,6 @@ import type { ConversationSessionManager } from './session/conversation-session-
 // When @modelcontextprotocol/sdk is properly installed these resolve correctly.
 type McpClient = any
 type McpTransport = any
-
-interface ElicitationParams {
-  mode?: string
-  message?: string
-  summary?: string
-  riskLevel?: 'low' | 'medium' | 'high'
-  targets?: string[]
-  runId?: string
-  requestedSchema?: Record<string, unknown>
-  [key: string]: unknown
-}
-
-interface ElicitationResult {
-  action: string
-  content?: Record<string, unknown> | null
-}
 
 export class AgentILSMcpElicitationBridge implements vscode.Disposable {
   private client: McpClient | null = null
@@ -107,7 +92,7 @@ export class AgentILSMcpElicitationBridge implements vscode.Disposable {
     // The handler must return AgentGateElicitResult: { action, content? }
     this.client.setRequestHandler(
       ElicitRequestSchema,
-      async (request: { params?: ElicitationParams }) => {
+      async (request: { params?: AgentILSMcpElicitationParams }) => {
         return this._handleElicitation(request.params ?? {})
       },
     )
@@ -116,61 +101,13 @@ export class AgentILSMcpElicitationBridge implements vscode.Disposable {
     log('mcp-bridge', 'MCP client connected to server', { serverPath })
   }
 
-  private async _handleElicitation(params: ElicitationParams): Promise<ElicitationResult> {
-    log('mcp-bridge', 'elicitation received', { mode: params.mode, runId: params.runId })
-    const mode = params.mode ?? ''
-    const summary = params.message ?? params.summary ?? ''
-    const riskLevel = (params.riskLevel as 'low' | 'medium' | 'high') ?? 'medium'
-    const targets = Array.isArray(params.targets) ? params.targets : []
-    const runId = typeof params.runId === 'string' ? params.runId : undefined
-
-    if (mode === 'approval') {
-      return this._handleApproval({ summary, riskLevel, targets, runId })
-    }
-
-    // 'feedback' or empty string → feedback gate
-    return this._handleFeedback({ summary, runId })
-  }
-
-  private async _handleApproval(input: {
-    summary: string
-    riskLevel: 'low' | 'medium' | 'high'
-    targets: string[]
-    runId: string | undefined
-  }): Promise<ElicitationResult> {
-    try {
-      const result = await this.sessionManager.requestApproval({
-        summary: input.summary,
-        riskLevel: input.riskLevel,
-        targets: input.targets,
-        preferredRunId: input.runId,
-      })
-      return {
-        action: result.action,
-        content: { status: result.status, msg: result.message },
-      }
-    } catch {
-      return { action: 'cancel', content: null }
-    }
-  }
-
-  private async _handleFeedback(input: {
-    summary: string
-    runId: string | undefined
-  }): Promise<ElicitationResult> {
-    try {
-      const result = await this.sessionManager.requestFeedback({
-        question: input.summary,
-        summary: input.summary,
-        preferredRunId: input.runId,
-      })
-      return {
-        action: 'accepted',
-        content: { status: result.status, msg: result.message },
-      }
-    } catch {
-      return { action: 'cancel', content: null }
-    }
+  private async _handleElicitation(params: AgentILSMcpElicitationParams): Promise<AgentILSMcpElicitationResult> {
+    log('mcp-bridge', 'elicitation received', {
+      mode: params.mode,
+      interactionKind: params._meta?.agentilsInteractionKind,
+      runId: params.runId,
+    })
+    return this.sessionManager.handleMcpElicitation(params)
   }
 
   dispose() {

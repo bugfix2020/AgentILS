@@ -184,13 +184,12 @@ pnpm start
 `.github` 下的 customizations 目前也已经收口到新结构：
 
 - instructions: 全局与模块规则
-- agents: gate / planner / implementer / reviewer
 - prompts: start / resume / verify / handoff
 - hooks: approval / post-verify / stop-gate / audit
 
 ## CLI 注入
 
-`packages/cli` 提供 `agentils inject`，用于把 AgentILS 的 prompts、instructions 和 MCP 配置注入到不同宿主。
+`packages/cli` 提供 `agentils inject` 与 `agentils uninstall`，用于把 AgentILS 的 prompts、instructions 和 MCP 配置注入到不同宿主，或清理这些注入项。
 
 当前首批支持：
 

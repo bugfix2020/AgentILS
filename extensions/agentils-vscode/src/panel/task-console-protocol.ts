@@ -13,6 +13,9 @@ export type TaskConsoleMessage =
       status?: string
       responseAction?: string
       message?: string
+      title?: string
+      goal?: string
+      controlMode?: string
     }
   | { action: 'cancelPendingInteraction'; requestId: string }
   | { action: 'submitApprovalConfirm'; requestId: string }

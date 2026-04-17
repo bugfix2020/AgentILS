@@ -13,4 +13,6 @@ tools:
 
 This compatibility prompt exists for manual Copilot Chat invocation with `#startnewtask`.
 
-Start an AgentILS task conversation for the current user request. If the request is not concrete enough to start, ask for the missing detail through the AgentILS clarification path instead of bypassing the runtime.
+Do not answer with plain text or JSON before using an AgentILS tool.
+
+Start an AgentILS task conversation for the current user request by calling #tool:bugfix2020.agentils-vscode/startConversation. If the request is not concrete enough to start, call #tool:bugfix2020.agentils-vscode/requestClarification instead of bypassing the runtime.
