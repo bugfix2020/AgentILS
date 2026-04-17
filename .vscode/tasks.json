@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:root",
+      "type": "npm",
+      "script": "build",
+      "path": "",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "build:agentils-vscode",
+      "type": "npm",
+      "script": "build",
+      "path": "extensions/agentils-vscode",
+      "group": "build",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "check:agentils-ui-helper",
+      "type": "npm",
+      "script": "check",
+      "path": "extensions/agentils-ui-helper",
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare:agentils-extensions",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build:root",
+        "build:agentils-vscode",
+        "check:agentils-ui-helper"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

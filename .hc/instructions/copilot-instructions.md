@@ -17,8 +17,8 @@ Core working rules:
 
 State and truth-source rules:
 
-- Trust `src/store/conversation-store.ts` as the preferred truth source for conversation state.
-- Trust `src/gateway/context.ts` and gateway tests for request-scoped interaction behavior.
+- Trust `packages/mcp/src/store/conversation-store.ts` as the preferred truth source for conversation state.
+- Trust `packages/mcp/src/gateway/context.ts` and gateway tests for request-scoped interaction behavior.
 - Use the task summary document as the only default cross-task memory artifact.
 - Distinguish `task_done` from `conversation_done`.
 - Persist task state in `taskCard`, handoff state in `handoffPacket`, and inherited state in the summary document.

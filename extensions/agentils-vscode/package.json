@@ -12,13 +12,7 @@
     "AI"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:agentils.openTaskConsole",
-    "onCommand:agentils.newTask",
-    "onCommand:agentils.continueTask",
-    "onCommand:agentils.markTaskDone",
-    "onCommand:agentils.acceptOverride",
-    "onCommand:agentils.openSummary"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -46,15 +40,223 @@
       {
         "command": "agentils.openSummary",
         "title": "AgentILS: Open Summary"
+      },
+      {
+        "command": "agentils.installPromptPack",
+        "title": "AgentILS: Install Prompt Pack"
       }
     ],
-        "configuration": {
+    "languageModelTools": [
+      {
+        "name": "agentils_start_conversation",
+        "displayName": "Start Conversation",
+        "modelDescription": "MANDATORY entry point for EVERY user message in this workspace. This tool initializes AgentILS task tracking. Call it with the user's raw input as the goal. Must be called before any other action — file edits, searches, or responses.",
+        "userDescription": "Start a new AgentILS task conversation.",
+        "description": "Start a new AgentILS task conversation and return the latest runtime snapshot.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Task title"
+            },
+            "goal": {
+              "type": "string",
+              "description": "Desired outcome and constraints"
+            },
+            "controlMode": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "alternate",
+                "direct"
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "goal"
+          ]
+        },
+        "tags": [
+          "agentils",
+          "task",
+          "conversation",
+          "required",
+          "entry-point",
+          "always-use"
+        ]
+      },
+      {
+        "name": "agentils_continue_task",
+        "displayName": "Continue Task",
+        "modelDescription": "REQUIRED: After starting a conversation, call this tool to advance the active AgentILS task. Include progress notes about what was accomplished.",
+        "userDescription": "Continue the active AgentILS task.",
+        "description": "Advance the active AgentILS task with an optional continuation note.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "string"
+            },
+            "preferredRunId": {
+              "type": "string"
+            }
+          }
+        },
+        "tags": [
+          "agentils",
+          "task"
+        ]
+      },
+      {
+        "name": "agentils_request_clarification",
+        "displayName": "Request Clarification",
+        "modelDescription": "REQUIRED when user input is needed: Request blocking clarification from the user through the AgentILS interaction panel. Do not use other clarification tools.",
+        "userDescription": "Ask the user for missing detail through AgentILS.",
+        "description": "Request blocking clarification from the user through the AgentILS interaction panel.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string"
+            },
+            "context": {
+              "type": "string"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "preferredRunId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ]
+        },
+        "tags": [
+          "agentils",
+          "clarification",
+          "user-input"
+        ]
+      },
+      {
+        "name": "agentils_request_feedback",
+        "displayName": "Request Feedback",
+        "modelDescription": "REQUIRED at decision points: Request user feedback through the AgentILS interaction panel. Do not use other feedback tools.",
+        "userDescription": "Ask the user for feedback through AgentILS.",
+        "description": "Request user feedback for the current AgentILS task state and persist the response.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "allowedActions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "continue",
+                  "done",
+                  "revise"
+                ]
+              }
+            },
+            "preferredRunId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ]
+        },
+        "tags": [
+          "agentils",
+          "feedback",
+          "user-input"
+        ]
+      },
+      {
+        "name": "agentils_request_approval",
+        "displayName": "Request Approval",
+        "modelDescription": "REQUIRED before risky actions: Request user approval through the AgentILS interaction panel. Do not proceed without approval.",
+        "userDescription": "Ask the user to approve a risky AgentILS action.",
+        "description": "Request approval for a risky AgentILS action and persist the approval decision.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string"
+            },
+            "riskLevel": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "preferredRunId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "summary"
+          ]
+        },
+        "tags": [
+          "agentils",
+          "approval",
+          "risk"
+        ]
+      },
+      {
+        "name": "agentils_finish_conversation",
+        "displayName": "Finish Conversation",
+        "modelDescription": "REQUIRED to end: Call this to finish the AgentILS conversation when all tasks are complete. Must be called before ending the interaction.",
+        "userDescription": "Attempt to finish the current AgentILS conversation.",
+        "description": "Ask the AgentILS runtime to finish the current conversation if gates are satisfied.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "preferredRunId": {
+              "type": "string"
+            }
+          }
+        },
+        "tags": [
+          "agentils",
+          "conversation",
+          "finish"
+        ]
+      }
+    ],
+    "configuration": {
       "title": "AgentILS",
       "properties": {
+        "agentils.runtime.httpBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional base URL for a running AgentILS HTTP debug server. Leave empty to use the local built control-plane module."
+        },
         "agentils.runtime.controlPlaneModulePath": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to the built AgentILS control-plane module. Defaults to <workspace>/dist/control-plane/index.js."
+          "description": "Optional absolute path to the built AgentILS control-plane module. Defaults to the extension's sibling repo build output when available, otherwise <workspace>/packages/mcp/dist/control-plane/index.js."
         },
         "agentils.runtime.stateFilePath": {
           "type": "string",
@@ -73,6 +275,9 @@
     "build": "tsc -p .",
     "watch": "tsc -p . -w",
     "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

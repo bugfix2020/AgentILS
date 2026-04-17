@@ -1,7 +1,2 @@
 {
-    "chat.mcp.serverSampling": {
-        "agent-gate/.vscode/mcp.json: agentils": {
-            "allowedDuringChat": true
-        }
-    }
 }

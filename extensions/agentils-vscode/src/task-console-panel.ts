@@ -1,111 +1,23 @@
 import * as vscode from 'vscode'
-import type { AgentILSRuntimeSnapshot } from './model'
-import type { AgentILSTaskServiceClient } from './task-service-client'
+import type { StartTaskInput } from './model'
+import { renderTaskConsoleHtml } from './panel/task-console-renderer'
+import type { TaskConsoleComposerMode, TaskConsoleMessage } from './panel/task-console-protocol'
+import { log } from './logger'
+import { ConversationSessionManager } from './session/conversation-session-manager'
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
-}
-
-function renderList(title: string, values: string[]) {
-  if (values.length === 0) {
-    return `<section class="card"><h3>${escapeHtml(title)}</h3><p class="muted">None</p></section>`
-  }
-
-  return `
-    <section class="card">
-      <h3>${escapeHtml(title)}</h3>
-      <ul>
-        ${values.map((value) => `<li>${escapeHtml(value)}</li>`).join('')}
-      </ul>
-    </section>
-  `
-}
-
-function renderSnapshot(snapshot: AgentILSRuntimeSnapshot) {
-  const task = snapshot.activeTask
-  const conversation = snapshot.conversation
-  const summary = snapshot.latestSummary
-  const taskCount = snapshot.taskHistory.length
-  const mode = task?.controlMode ?? 'normal'
-  const phase = task?.phase ?? 'await_next_task'
-  const status = task?.status ?? 'idle'
-
-  return `
-    <section class="hero">
-      <div>
-        <p class="eyebrow">AgentILS Task Console</p>
-        <h1>${task ? escapeHtml(task.title) : 'No active task'}</h1>
-        <p class="muted">${task ? escapeHtml(task.goal) : 'Start a new task to begin a fresh conversation loop.'}</p>
-      </div>
-      <div class="badges">
-        <span class="badge badge-mode">${escapeHtml(mode)}</span>
-        <span class="badge">${escapeHtml(conversation.state)}</span>
-        <span class="badge">${escapeHtml(phase)}</span>
-        <span class="badge">${escapeHtml(status)}</span>
-      </div>
-    </section>
-
-    <section class="grid">
-      <section class="card">
-        <h3>Conversation</h3>
-        <p><strong>ID:</strong> ${escapeHtml(conversation.conversationId)}</p>
-        <p><strong>Tasks:</strong> ${taskCount}</p>
-        <p><strong>Active task:</strong> ${task ? escapeHtml(task.taskId) : 'None'}</p>
-        <div class="actions">
-          <button data-action="newTask">New task</button>
-          <button data-action="continueTask" ${task ? '' : 'disabled'}>Continue task</button>
-          <button data-action="markTaskDone" ${task ? '' : 'disabled'}>Mark task done</button>
-          <button data-action="acceptOverride" ${task ? '' : 'disabled'}>Accept override</button>
-          <button data-action="openSummary" ${summary ? '' : 'disabled'}>Open summary</button>
-        </div>
-      </section>
-
-      ${task ? `
-        <section class="card">
-          <h3>Task</h3>
-          <p><strong>Title:</strong> ${escapeHtml(task.title)}</p>
-          <p><strong>Goal:</strong> ${escapeHtml(task.goal)}</p>
-          <p><strong>Scope:</strong> ${escapeHtml(task.scope.length ? task.scope.join(', ') : 'None')}</p>
-          <p><strong>Constraints:</strong> ${escapeHtml(task.constraints.length ? task.constraints.join(', ') : 'None')}</p>
-          <p><strong>Risks:</strong> ${escapeHtml(task.risks.length ? task.risks.join(', ') : 'None')}</p>
-          <p><strong>Override:</strong> ${task.overrideState.confirmed ? 'confirmed' : 'not confirmed'}</p>
-          <p><strong>Updated:</strong> ${escapeHtml(task.updatedAt)}</p>
-        </section>
-      ` : `
-        <section class="card">
-          <h3>Task</h3>
-          <p class="muted">No active task. Use <strong>New task</strong> to start one.</p>
-        </section>
-      `}
-    </section>
-
-    <section class="grid">
-      ${renderList('Open questions', task?.openQuestions ?? [])}
-      ${renderList('Assumptions', task?.assumptions ?? [])}
-      ${renderList('User decisions needed', task?.decisionNeededFromUser ?? [])}
-    </section>
-
-    <section class="card">
-      <h3>Summary</h3>
-      <p class="muted">${summary ? `Latest summary: ${escapeHtml(summary.filePath)}` : 'No summary document has been generated yet.'}</p>
-    </section>
-  `
-}
+export type { TaskConsoleComposerMode } from './panel/task-console-protocol'
 
 export class TaskConsolePanel implements vscode.Disposable {
   private static currentPanel: TaskConsolePanel | null = null
 
   static createOrShow(
     extensionUri: vscode.Uri,
-    client: AgentILSTaskServiceClient,
+    sessionManager: ConversationSessionManager,
+    composerMode: TaskConsoleComposerMode = 'newTask',
     onDispose?: () => void,
   ) {
     if (TaskConsolePanel.currentPanel) {
+      TaskConsolePanel.currentPanel.setComposerMode(composerMode)
       TaskConsolePanel.currentPanel.panel.reveal(vscode.ViewColumn.Active)
       return TaskConsolePanel.currentPanel
     }
@@ -117,41 +29,49 @@ export class TaskConsolePanel implements vscode.Disposable {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
+        localResourceRoots: [extensionUri],
       },
     )
 
-    TaskConsolePanel.currentPanel = new TaskConsolePanel(panel, extensionUri, client, onDispose)
+    log('panel', 'TaskConsolePanel created')
+    TaskConsolePanel.currentPanel = new TaskConsolePanel(panel, sessionManager, composerMode, onDispose)
     return TaskConsolePanel.currentPanel
   }
 
-  private disposables: vscode.Disposable[] = []
+  private readonly disposables: vscode.Disposable[] = []
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
-    private readonly extensionUri: vscode.Uri,
-    private readonly client: AgentILSTaskServiceClient,
+    private readonly sessionManager: ConversationSessionManager,
+    private composerMode: TaskConsoleComposerMode,
     private readonly onDispose?: () => void,
   ) {
-    this.panel.webview.html = this.getHtml(this.client.snapshot())
-
     this.disposables.push(
       this.panel.onDidDispose(() => this.dispose()),
-      this.client.onDidChange((snapshot) => {
-        this.panel.webview.html = this.getHtml(snapshot)
+      this.panel.webview.onDidReceiveMessage((message) => {
+        void this.handleMessage(message)
       }),
-      this.panel.webview.onDidReceiveMessage(async (message) => {
-        await this.handleMessage(message)
-      }),
+      this.sessionManager.onDidChange(() => this.render()),
     )
+
+    this.render()
   }
 
   dispose() {
     TaskConsolePanel.currentPanel = null
     while (this.disposables.length > 0) {
-      const disposable = this.disposables.pop()
-      disposable?.dispose()
+      this.disposables.pop()?.dispose()
     }
     this.onDispose?.()
+  }
+
+  private setComposerMode(composerMode: TaskConsoleComposerMode) {
+    this.composerMode = composerMode
+    this.render()
+  }
+
+  private render() {
+    this.panel.webview.html = renderTaskConsoleHtml(this.sessionManager.snapshot(), this.composerMode)
   }
 
   private async handleMessage(message: unknown) {
@@ -159,172 +79,160 @@ export class TaskConsolePanel implements vscode.Disposable {
       return
     }
 
-    const payload = message as { action?: string }
+    const payload = message as TaskConsoleMessage
+    log('panel', 'handleMessage', { action: (payload as { action?: string }).action })
     switch (payload.action) {
       case 'newTask':
-        await vscode.commands.executeCommand('agentils.newTask')
+        this.setComposerMode('newTask')
         return
       case 'continueTask':
-        await vscode.commands.executeCommand('agentils.continueTask')
+        this.setComposerMode('continueTask')
         return
       case 'markTaskDone':
-        await vscode.commands.executeCommand('agentils.markTaskDone')
+        this.setComposerMode('markTaskDone')
         return
       case 'acceptOverride':
-        await vscode.commands.executeCommand('agentils.acceptOverride')
+        this.setComposerMode('acceptOverride')
         return
       case 'openSummary':
-        await vscode.commands.executeCommand('agentils.openSummary')
+        await this.openSummary()
+        return
+      case 'submitNewTask':
+        await this.submitNewTask({
+          title: payload.title ?? '',
+          goal: payload.goal ?? '',
+        })
+        return
+      case 'submitContinueTask':
+        await this.submitContinueTask(payload.note ?? '')
+        return
+      case 'submitMarkTaskDone':
+        await this.submitMarkTaskDone(payload.summary ?? '')
+        return
+      case 'submitAcceptOverride':
+        await this.submitAcceptOverride(payload.acknowledgement ?? '')
+        return
+      case 'submitPendingInteraction':
+        await this.submitPendingInteraction(payload)
+        return
+      case 'cancelPendingInteraction':
+        this.sessionManager.cancelPendingInteractionFromPanel()
+        return
+      case 'submitApprovalConfirm':
+        if ('requestId' in payload) {
+          this.sessionManager.submitApproval(payload.requestId, 'accept', 'continue', '')
+        }
+        return
+      case 'submitApprovalDecline':
+        if ('requestId' in payload) {
+          this.sessionManager.submitApproval(
+            payload.requestId,
+            'decline',
+            'cancel',
+            ('reason' in payload ? (payload as { reason?: string }).reason?.trim() : '') ?? '',
+          )
+        }
         return
       default:
         return
     }
   }
 
-  private getHtml(snapshot: AgentILSRuntimeSnapshot) {
-    const nonce = `${Date.now()}${Math.random().toString(36).slice(2)}`
-    const content = renderSnapshot(snapshot)
+  private async openSummary() {
+    const uri = await this.sessionManager.openSummaryDocument()
+    if (!uri) {
+      vscode.window.showInformationMessage('No task summary has been generated yet.')
+      return
+    }
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgentILS Task Console</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #151922;
-      --panel: #1d2330;
-      --panel-2: #242a39;
-      --text: #e8ecf4;
-      --muted: #97a3b7;
-      --accent: #7cc4ff;
-      --accent-2: #8be28b;
-      --warn: #ffbf69;
-      --border: #31394d;
+    const document = await vscode.workspace.openTextDocument(uri)
+    await vscode.window.showTextDocument(document, { preview: false })
+  }
+
+  private async submitNewTask(input: StartTaskInput) {
+    const title = input.title.trim()
+    const goal = input.goal.trim()
+    if (!title || !goal) {
+      vscode.window.showWarningMessage('Task title and goal are required.')
+      return
     }
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(124, 196, 255, 0.14), transparent 32%),
-        radial-gradient(circle at top right, rgba(139, 226, 139, 0.12), transparent 28%),
-        var(--bg);
-      color: var(--text);
+
+    try {
+      await this.sessionManager.startTask({
+        title,
+        goal,
+        controlMode: 'normal',
+      })
+      this.setComposerMode('continueTask')
+      vscode.window.showInformationMessage(`AgentILS started task "${title}".`)
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to start a new task.')
     }
-    .hero, .grid {
-      display: grid;
-      gap: 16px;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      margin-bottom: 16px;
-    }
-    .hero {
-      align-items: start;
-      padding: 20px;
-      background: linear-gradient(145deg, rgba(36, 42, 57, 0.98), rgba(29, 35, 48, 0.98));
-      border: 1px solid var(--border);
-      border-radius: 16px;
-    }
-    .card {
-      padding: 16px;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-    }
-    .eyebrow {
-      margin: 0 0 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 11px;
-      color: var(--muted);
-    }
-    h1, h3, p {
-      margin-top: 0;
-    }
-    h1 {
-      font-size: 28px;
-      margin-bottom: 6px;
-    }
-    h3 {
-      font-size: 16px;
-      margin-bottom: 12px;
-    }
-    .muted {
-      color: var(--muted);
-    }
-    .badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: flex-start;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--border);
-      font-size: 12px;
-    }
-    .badge-mode {
-      color: var(--accent);
-    }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 14px;
-    }
-    button {
-      appearance: none;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 10px;
-      cursor: pointer;
-      font: inherit;
-    }
-    button:hover {
-      border-color: var(--accent);
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-    ul {
-      margin: 0;
-      padding-left: 18px;
-    }
-    li + li {
-      margin-top: 6px;
-    }
-    strong {
-      color: #ffffff;
-    }
-  </style>
-</head>
-<body>
-  ${content}
-  <script nonce="${nonce}">
-    const vscode = acquireVsCodeApi();
-    document.addEventListener('click', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLButtonElement)) {
-        return;
+  }
+
+  private async submitContinueTask(note: string) {
+    try {
+      const state = await this.sessionManager.continueTask(note.trim() ? { note: note.trim() } : {})
+      if (!state.snapshot.activeTask) {
+        vscode.window.showWarningMessage('No active task to continue.')
       }
-      const action = target.dataset.action;
-      if (!action) {
-        return;
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to continue the current task.')
+    }
+  }
+
+  private async submitMarkTaskDone(summary: string) {
+    try {
+      const state = await this.sessionManager.markTaskDone(summary.trim() ? { summary: summary.trim() } : {})
+      if (!state.snapshot.activeTask) {
+        vscode.window.showInformationMessage('AgentILS marked the current task as done.')
       }
-      vscode.postMessage({ action });
-    });
-  </script>
-</body>
-</html>`
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to mark the current task as done.')
+    }
+  }
+
+  private async submitAcceptOverride(acknowledgement: string) {
+    const message = acknowledgement.trim()
+    if (!message) {
+      vscode.window.showWarningMessage('Risk acknowledgement is required.')
+      return
+    }
+
+    try {
+      await this.sessionManager.acceptOverride({ acknowledgement: message })
+      this.setComposerMode('continueTask')
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to accept override.')
+    }
+  }
+
+  private async submitPendingInteraction(message: Extract<TaskConsoleMessage, { action: 'submitPendingInteraction' }>) {
+    const pending = this.sessionManager.snapshot().pendingInteraction
+    if (!pending || pending.requestId !== message.requestId) {
+      vscode.window.showWarningMessage('The pending interaction has already changed. Please retry.')
+      return
+    }
+
+    if (pending.kind === 'clarification') {
+      this.sessionManager.submitClarification(message.requestId, message.content?.trim() ?? '')
+      return
+    }
+
+    if (pending.kind === 'feedback') {
+      this.sessionManager.submitFeedback(
+        message.requestId,
+        (message.status as 'continue' | 'done' | 'revise' | 'cancel') || 'continue',
+        message.message?.trim() ?? '',
+      )
+      return
+    }
+
+    this.sessionManager.submitApproval(
+      message.requestId,
+      (message.responseAction as 'accept' | 'decline' | 'cancel') || 'accept',
+      (message.status as 'continue' | 'done' | 'revise' | 'cancel') || 'continue',
+      message.message?.trim() ?? '',
+    )
   }
 }

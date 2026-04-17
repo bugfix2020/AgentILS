@@ -1,0 +1,24 @@
+{
+  "name": "@agentils/cli",
+  "version": "0.1.0",
+  "description": "AgentILS CLI for IDE prompt and instruction injection",
+  "type": "module",
+  "bin": {
+    "agentils": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentils/mcp": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "tsup": "^8.5.1",
+    "typescript": "^5.8.3"
+  }
+}

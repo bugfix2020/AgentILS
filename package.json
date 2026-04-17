@@ -1,118 +1,24 @@
 {
-    "name": "agentils",
-    "version": "0.1.0",
-    "description": "AgentILS MCP control plane skeleton for disciplined VS Code agent workflows",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/bugfix2020/AgentILS.git"
-    },
-    "homepage": "https://github.com/bugfix2020/AgentILS",
-    "bugs": {
-        "url": "https://github.com/bugfix2020/AgentILS/issues"
-    },
-    "type": "module",
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "bin": {
-        "agentils": "./dist/index.js"
-    },
-    "files": [
-        "dist",
-        "README.md"
-    ],
-    "exports": {
-        ".": {
-            "import": "./dist/index.js",
-            "types": "./dist/index.d.ts"
-        },
-        "./interaction": {
-            "import": "./dist/interaction/index.js",
-            "types": "./dist/interaction/index.d.ts"
-        },
-        "./interaction/sampling": {
-            "import": "./dist/interaction/sampling.js",
-            "types": "./dist/interaction/sampling.d.ts"
-        },
-        "./interaction/channel-mcp": {
-            "import": "./dist/interaction/channel-mcp.js",
-            "types": "./dist/interaction/channel-mcp.d.ts"
-        },
-        "./interaction/channel-hc": {
-            "import": "./dist/interaction/channel-hc.js",
-            "types": "./dist/interaction/channel-hc.d.ts"
-        },
-        "./gateway": {
-            "import": "./dist/gateway/index.js",
-            "types": "./dist/gateway/index.d.ts"
-        },
-        "./orchestrator": {
-            "import": "./dist/orchestrator/index.js",
-            "types": "./dist/orchestrator/index.d.ts"
-        },
-        "./control-plane": {
-            "import": "./dist/control-plane/index.js",
-            "types": "./dist/control-plane/index.d.ts"
-        },
-        "./store": {
-            "import": "./dist/store/index.js",
-            "types": "./dist/store/index.d.ts"
-        },
-        "./summary": {
-            "import": "./dist/summary/index.js",
-            "types": "./dist/summary/index.d.ts"
-        },
-        "./control": {
-            "import": "./dist/control/index.js",
-            "types": "./dist/control/index.d.ts"
-        },
-        "./audit": {
-            "import": "./dist/audit/index.js",
-            "types": "./dist/audit/index.d.ts"
-        },
-        "./budget": {
-            "import": "./dist/budget/index.js",
-            "types": "./dist/budget/index.d.ts"
-        },
-        "./policy": {
-            "import": "./dist/policy/index.js",
-            "types": "./dist/policy/index.d.ts"
-        },
-        "./config": {
-            "import": "./dist/config/index.js",
-            "types": "./dist/config/index.d.ts"
-        },
-        "./types": {
-            "import": "./dist/types/index.js",
-            "types": "./dist/types/index.d.ts"
-        }
-    },
-    "scripts": {
-        "build": "tsup",
-        "dev": "tsup --watch",
-        "dev:http": "tsx src/index.ts --http",
-        "generate:flowcharts": "node scripts/flowcharts/generate-all.mjs",
-        "smoke": "node -e \"import('./dist/index.js').then((m) => { const runtime = m.createAgentGateServer(); console.log(JSON.stringify({ ok: !!runtime.server, name: runtime.config.serverName })); }).catch((error) => { console.error(error); process.exit(1); })\"",
-        "sync:instructions": "node scripts/sync-agent-instructions.mjs",
-        "sync:instructions:check": "node scripts/sync-agent-instructions.mjs --check",
-        "start": "node dist/index.js",
-        "start:http": "node dist/index.js --http",
-        "test:unit": "tsx --test test/**/*.test.ts",
-        "typecheck": "tsc --noEmit",
-        "typecheck:vscode-host": "npx tsc -p extensions/agentils-vscode/tsconfig.json --noEmit",
-        "check:ui-helper": "node --check extensions/agentils-ui-helper/src/extension.js && node --check extensions/agentils-ui-helper/src/local-prompts.js && node --check extensions/agentils-ui-helper/src/local-files.js",
-        "verify:surfaces": "npm run typecheck:vscode-host && npm run check:ui-helper",
-        "prepublishOnly": "npm run typecheck && npm run build"
-    },
-    "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.27.1",
-        "zod": "^3.25.76"
-    },
-    "devDependencies": {
-        "@types/node": "^22.15.3",
-        "puppeteer-core": "^24.40.0",
-        "terser": "^5.46.1",
-        "tsup": "^8.5.1",
-        "tsx": "^4.19.4",
-        "typescript": "^5.8.3"
-    }
+  "name": "agentils-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:http": "pnpm --filter @agentils/mcp dev:http",
+    "generate:flowcharts": "node scripts/flowcharts/generate-all.mjs",
+    "sync:instructions": "node scripts/sync-agent-instructions.mjs",
+    "sync:instructions:check": "node scripts/sync-agent-instructions.mjs --check",
+    "smoke": "pnpm --filter @agentils/mcp smoke",
+    "start": "pnpm --filter @agentils/mcp start",
+    "start:http": "pnpm --filter @agentils/mcp start:http",
+    "test": "turbo run test",
+    "test:unit": "pnpm --filter @agentils/mcp test",
+    "typecheck": "turbo run typecheck",
+    "typecheck:vscode-host": "pnpm --filter agentils-vscode typecheck",
+    "verify:surfaces": "pnpm --filter agentils-vscode typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.6"
+  }
 }

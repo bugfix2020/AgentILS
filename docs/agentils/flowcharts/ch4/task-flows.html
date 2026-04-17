@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentILS 第四章 任务执行流程</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --stroke: #d8ddea;
+      --text: #20232d;
+      --muted: #667085;
+      --blue: #4669EA;
+      --red: #E74F4C;
+      --green: #0f9d58;
+      --amber: #f59e0b;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: Inter, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background:
+        linear-gradient(0deg, rgba(70,105,234,0.03), rgba(70,105,234,0.03)),
+        linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px),
+        linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+        var(--bg);
+      background-size: auto, 32px 32px, 32px 32px, auto;
+      color: var(--text);
+    }
+    .page {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 24px;
+      padding: 24px 28px;
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 34px;
+      line-height: 1.2;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+      max-width: 960px;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+    .grid.two {
+      grid-template-columns: 1.1fr 0.9fr;
+      align-items: start;
+    }
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+    .panel h2,
+    .panel h3 {
+      margin: 0 0 14px;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+    }
+    .card {
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 16px 18px;
+      background: #fcfcff;
+      flex: 1;
+    }
+    .card .label {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .card .desc {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-line;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .tag.blue { background: rgba(70,105,234,0.12); color: var(--blue); }
+    .tag.red { background: rgba(231,79,76,0.12); color: var(--red); }
+    .tag.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
+    .tag.green { background: rgba(15,157,88,0.12); color: var(--green); }
+    .note {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .rail {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rail-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 14px;
+      align-items: start;
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: #fff;
+    }
+    .rail-head {
+      font-weight: 800;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .rail-body {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+      white-space: pre-line;
+    }
+    /* ── mini-flow (from ch2/ch3) ── */
+    .mini-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mini-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .mini-line.fill {
+      flex-wrap: nowrap;
+      justify-content: stretch;
+    }
+    .mini-line.fill .mini-node {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .mini-line.tight {
+      flex-wrap: nowrap;
+      justify-content: stretch;
+      gap: 8px;
+    }
+    .mini-line.tight .mini-node {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .mini-line.tight .mini-arrow {
+      font-size: 16px;
+      flex: 0 0 auto;
+    }
+    .mini-node {
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+      min-width: 130px;
+      text-align: center;
+    }
+    .mini-node.blue {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: rgba(70,105,234,0.07);
+    }
+    .mini-node.amber {
+      border-color: var(--amber);
+      color: #8a5a00;
+      background: rgba(245,158,11,0.08);
+    }
+    .mini-node.red {
+      border-color: var(--red);
+      color: var(--red);
+      background: rgba(231,79,76,0.08);
+    }
+    .mini-node.green {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(15,157,88,0.08);
+    }
+    .mini-arrow {
+      color: var(--blue);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    /* ── ch4-specific: flow-label (transition text) ── */
+    .flow-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      flex: 0 0 auto;
+      max-width: 120px;
+      line-height: 1.4;
+    }
+
+    /* ── ch4-specific: user-bubble ── */
+    .user-bubble {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-top: 8px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: rgba(70,105,234,0.06);
+      border: 1px solid rgba(70,105,234,0.18);
+      font-size: 13px;
+      color: var(--blue);
+      font-style: italic;
+      line-height: 1.5;
+    }
+    .user-bubble::before {
+      content: "●";
+      font-size: 8px;
+      margin-top: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ── ch4-specific: loop-back (feedback loop annotations) ── */
+    .loop-back {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+    .loop-back.red {
+      background: rgba(231,79,76,0.07);
+      border: 1px dashed var(--red);
+      color: var(--red);
+    }
+    .loop-back.amber {
+      background: rgba(245,158,11,0.07);
+      border: 1px dashed var(--amber);
+      color: #8a5a00;
+    }
+    .loop-back .loop-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    /* ── ch4-specific: tip-box ── */
+    .tip-box {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: #fdf8ef;
+      border: 1px solid #eadcbf;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #5c4a1e;
+    }
+    .tip-box strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #3d3012;
+    }
+
+    /* ── ch4-specific: flow-with-labels (flow + labels together) ── */
+    .flow-diagram {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .flow-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .flow-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .flow-cell .mini-node {
+      width: 100%;
+      min-width: 0;
+    }
+    .flow-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      padding: 0 2px;
+    }
+    .flow-connector .mini-arrow {
+      font-size: 18px;
+    }
+    .flow-connector .flow-label {
+      max-width: 130px;
+      margin-top: 2px;
+    }
+
+    /* ── ch4-specific: two-row layout for 4.7 / 4.8 ── */
+    .two-row-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .two-row-flow .row-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── section wrapper with side tip-box ── */
+    .section-with-tip {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 18px;
+      align-items: start;
+    }
+    .section-with-tip .tip-box {
+      margin-top: 0;
+    }
+
+    @media (max-width: 1100px) {
+      body { padding: 18px; }
+      .grid.two, .grid.three { grid-template-columns: 1fr; }
+      .rail-row { grid-template-columns: 1fr; }
+      .section-with-tip { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+<!-- ═══════════════════════════════════════════════ Hero ═══════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="eyebrow">Chapter 4</div>
+  <h1>第四章 任务执行流程</h1>
+  <div class="subtitle">
+    本章展示 AgentILS 6 个典型任务执行场景的完整流程图。
+    相比原版流程，新增了 <strong>approval</strong>（执行审批）和 <strong>handoff_prepare</strong>（交接准备）两个阶段，
+    覆盖从简单直通到控制法则切换的所有路径。
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ 4.1 ═══════════════════════════════════════════════ -->
+<section class="panel">
+  <h2>4.1 简单直通 Simple Pass</h2>
+  <div class="section-with-tip">
+    <div class="flow-diagram">
+      <!-- main flow -->
+      <div class="flow-row">
+        <div class="flow-cell">
+          <div class="mini-node">collect<br/>需求收集</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">接收需求</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">confirm_elements<br/>关键要素确认</div>
+          <div class="user-bubble">用户：把这处文案改掉</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">LLM 判断：目标明确</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">plan<br/>计划生成</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">方案就绪</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node blue">approval<br/>执行审批</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">审批通过，直接进入正常法则</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">execute<br/>执行改动</div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:12px;">这是最简单的 happy path — 不包含任何回退循环。需求清晰、方案稳定、审批通过后直接进入执行。</p>
+    </div>
+
+    <div class="tip-box">
+      <strong>提示：</strong>
+      Agent 负责需求收敛、规划、执行与验证辅助。<br/>
+      不能保证 100% 正确或完全符合预期。<br/>
+      效果受任务复杂度、工具可用性和模型自身影响。<br/><br/>
+      复杂任务时建议优先使用 T0 梯队模型：<br/>
+      Claude Sonnet 4.6 / Opus 4.6<br/>
+      GPT-5.4 / GPT-5.3-Codex<br/>
+      Gemini 3.1 Pro<br/>
+      以平台实际提供为准。
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ 4.2 ═══════════════════════════════════════════════ -->
+<section class="panel">
+  <h2>4.2 方案收敛循环 Plan Convergence Loop</h2>
+  <div class="flow-diagram">
+    <!-- main flow -->
+    <div class="flow-row">
+      <div class="flow-cell">
+        <div class="mini-node">collect<br/>需求收集</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">接收需求</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">confirm_elements<br/>关键要素确认</div>
+        <div class="user-bubble">用户：先按这个方案做</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">LLM 判断：先进入确认与规划</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">plan<br/>计划生成</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">方案就绪</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node blue">approval<br/>执行审批</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">方案准备执行</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">execute<br/>执行改动</div>
+      </div>
+    </div>
+
+    <!-- feedback loop -->
+    <div class="loop-back red">
+      <span class="loop-icon">↩</span>
+      <span>从 approval / plan 回退到 confirm_elements — 方案被用户否决 / 信息仍不稳定</span>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px;">
+    当方案不够稳定或被用户否决时，系统回到 confirm_elements 重新收敛要素，直到方案收敛稳定后才继续执行。
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════ 4.3 ═══════════════════════════════════════════════ -->
+<section class="panel">
+  <h2>4.3 执行回退循环 Execute Rollback Loop</h2>
+  <div class="flow-diagram">
+    <!-- main flow -->
+    <div class="flow-row">
+      <div class="flow-cell">
+        <div class="mini-node">collect<br/>需求收集</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">接收需求</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">confirm_elements<br/>关键要素确认</div>
+        <div class="user-bubble">用户：帮我直接把这个点改掉</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">LLM 判断：当前信息足够进入规划</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">plan<br/>计划生成</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">方案就绪</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node blue">approval<br/>执行审批</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">开始执行</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">execute<br/>执行改动</div>
+      </div>
+    </div>
+
+    <!-- feedback loops -->
+    <div class="loop-back red">
+      <span class="loop-icon">↩</span>
+      <span>从 plan 回退到 confirm_elements — 原方案不成立 / 需要重新确认</span>
+    </div>
+    <div class="loop-back red" style="margin-top:6px;">
+      <span class="loop-icon">⟲</span>
+      <span>从 execute 回退到 confirm_elements（长弧回退）— 执行中发现新的影响面 / 新问题</span>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px;">
+    执行过程中也可能发现新问题。此时系统回退到 confirm_elements，重新梳理影响面后再规划执行。
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════ 4.4 ═══════════════════════════════════════════════ -->
+<section class="panel">
+  <h2>4.4 验证回退循环 Verify Rollback Loop</h2>
+  <div class="flow-diagram">
+    <!-- main flow — all 7 steps -->
+    <div class="flow-row">
+      <div class="flow-cell">
+        <div class="mini-node">collect<br/>需求收集</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">接收需求</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">confirm_elements<br/>关键要素确认</div>
+        <div class="user-bubble">用户：改完后帮我确认结果</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">LLM 判断：先完成规划</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">plan<br/>计划生成</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">→</div>
+        <div class="flow-label">方案就绪</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node blue">approval<br/>执行审批</div>
+      </div>
+    </div>
+    <!-- second row -->
+    <div class="flow-row" style="margin-top:8px;">
+      <div class="flow-cell" style="flex:0 0 auto; width: 0;"></div>
+      <div class="flow-connector" style="flex:0 0 auto; visibility:hidden; width:0;"></div>
+      <div class="flow-cell" style="flex:0 0 auto; visibility:hidden; width:0;"></div>
+      <div class="flow-connector" style="flex:0 0 auto; visibility:hidden; width:0;"></div>
+      <div class="flow-cell" style="flex:0 0 auto; visibility:hidden; width:0;"></div>
+      <div class="flow-connector">
+        <div class="mini-arrow" style="visibility:hidden;">→</div>
+      </div>
+      <div class="flow-cell" style="visibility:hidden; flex:0 0 auto; width:0;"></div>
+      <div class="flow-connector">
+        <div class="mini-arrow">↓</div>
+        <div class="flow-label">进入执行</div>
+      </div>
+    </div>
+    <div class="flow-row">
+      <div class="flow-cell" style="flex: 0 0 auto; width:0; visibility:hidden;"></div>
+      <div class="flow-connector" style="flex: 0 0 auto; visibility:hidden; width:0;"></div>
+      <div class="flow-cell" style="flex: 0 0 auto; visibility:hidden; width:0;"></div>
+      <div class="flow-connector" style="visibility:hidden; flex:0 0 auto; width:0;"></div>
+      <div class="flow-cell">
+        <div class="mini-node blue">verify<br/>结果验证</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">←</div>
+        <div class="flow-label">进入验证</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node blue">handoff_prepare<br/>交接准备</div>
+      </div>
+      <div class="flow-connector">
+        <div class="mini-arrow">←</div>
+        <div class="flow-label">执行完成</div>
+      </div>
+      <div class="flow-cell">
+        <div class="mini-node">execute<br/>执行改动</div>
+      </div>
+    </div>
+
+    <!-- feedback loops -->
+    <div class="loop-back red" style="margin-top:10px;">
+      <span class="loop-icon">↩</span>
+      <span>从 approval / plan 回退到 confirm_elements — 方案被用户否决 / 信息仍不稳定</span>
+    </div>
+    <div class="loop-back red" style="margin-top:6px;">
+      <span class="loop-icon">⟲</span>
+      <span>从 verify 回退到 plan（长弧回退）— 验证失败 / 需要重新规划</span>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px;">
+    这是唯一展示全部 7 个阶段（含 handoff_prepare 和 verify）的场景。验证失败后回退到 plan 重新规划，而非直接重新执行。
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════ 4.7 ═══════════════════════════════════════════════ -->
+<section class="panel">
+  <h2>4.7 备用法则 Alternate Mode</h2>
+  <div class="two-row-flow">
+    <!-- Row 1 -->
+    <div>
+      <div class="row-label">Row 1 — 正常法则尝试收敛</div>
+      <div class="flow-row">
+        <div class="flow-cell">
+          <div class="mini-node">collect<br/>需求收集</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">接收需求</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">confirm_elements<br/>关键要素确认</div>
+          <div class="user-bubble">用户：我想直接做这个修改</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">plan<br/>计划生成</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">正常法则：无法继续收敛</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node green">正常法则<br/>仍需继续收敛</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node" style="border-color: var(--blue); color: var(--blue);">用户明确继续<br/>explicit continue</div>
+          <div class="user-bubble">用户：我已知晓风险，继续</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2 -->
+    <div>
+      <div class="row-label">Row 2 — 进入备用法则</div>
+      <div class="flow-row">
+        <div class="flow-cell">
+          <div class="mini-node" style="border-color: var(--blue); color: var(--blue);">用户明确继续<br/>(从 Row 1 续接)</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">用户明确继续</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node amber">风险确认<br/>risk acknowledgement</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">进入 alternate</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node amber">alternate<br/>备用法则</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node blue">approval<br/>执行审批</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">恢复执行</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">execute<br/>执行改动</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px;">
+    正常法则无法继续收敛时，用户可选择"继续"以切入备用法则。系统保留基础控制，仍需通过 approval 后才执行。
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════ 4.8 ═══════════════════════════════════════════════ -->
+<section class="panel">
+  <h2>4.8 直接法则 Direct Mode</h2>
+  <div class="two-row-flow">
+    <!-- Row 1 -->
+    <div>
+      <div class="row-label">Row 1 — 正常法则尝试收敛</div>
+      <div class="flow-row">
+        <div class="flow-cell">
+          <div class="mini-node">collect<br/>需求收集</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">接收需求</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">confirm_elements<br/>关键要素确认</div>
+          <div class="user-bubble">用户：我想直接做这个修改</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">plan<br/>计划生成</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">正常法则：无法继续收敛</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node green">正常法则<br/>无法继续收敛</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node" style="border-color: var(--blue); color: var(--blue);">用户明确继续<br/>explicit continue</div>
+          <div class="user-bubble">用户：我已知晓风险，直接做</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2 -->
+    <div>
+      <div class="row-label">Row 2 — 进入直接法则</div>
+      <div class="flow-row">
+        <div class="flow-cell">
+          <div class="mini-node" style="border-color: var(--blue); color: var(--blue);">用户明确继续<br/>(从 Row 1 续接)</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">用户明确继续</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node red">强风险确认<br/>strong acknowledgement</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">进入 direct</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node red">direct<br/>直接法则</div>
+        </div>
+        <div class="flow-connector">
+          <div class="mini-arrow">→</div>
+          <div class="flow-label">跳过审批，直接执行</div>
+        </div>
+        <div class="flow-cell">
+          <div class="mini-node">execute<br/>执行改动</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px;">
+    Direct 法则下，用户已完全接管决策责任，approval 被跳过。系统只保留最小审计与辅助，直接进入执行。
+  </p>
+</section>
+
+  </main>
+</body>
+</html>

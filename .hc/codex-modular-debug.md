@@ -8,6 +8,10 @@
 后续写代码时，应先读这份文件，再决定是否继续打开具体源码。  
 默认不要大范围扫全仓，只沿着本文件给出的模块边界继续读取。
 
+Monorepo note:
+- Unless a section explicitly says `extensions/agentils-vscode` or `packages/cli`, every `src/...` path in this document now resolves to `packages/mcp/src/...`.
+- Every `test/...` path in this document now resolves to `packages/mcp/test/...`.
+
 ---
 
 ## 一、给 Codex 的提示词

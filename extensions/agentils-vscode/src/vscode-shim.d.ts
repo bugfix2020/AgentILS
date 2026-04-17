@@ -1,8 +1,13 @@
 declare module 'vscode' {
   export type Thenable<T> = PromiseLike<T>
+  export type ProviderResult<T> = T | undefined | null | Thenable<T | undefined | null>
 
   export interface Disposable {
     dispose(): void
+  }
+
+  export interface CancellationToken {
+    readonly isCancellationRequested: boolean
   }
 
   export type Event<T> = (listener: (e: T) => any, thisArgs?: any, disposables?: Disposable[]) => Disposable
@@ -79,6 +84,46 @@ declare module 'vscode' {
 
   export interface WorkspaceConfiguration {
     get<T>(section: string): T | undefined
+    update(section: string, value: unknown, configurationTarget?: ConfigurationTarget): Thenable<void>
+  }
+
+  export const ConfigurationTarget: {
+    Global: number
+    Workspace: number
+    WorkspaceFolder: number
+  }
+
+  export const env: {
+    appName: string
+    remoteName?: string
+  }
+
+  export interface LanguageModelToolInvocationOptions<T> {
+    input: T
+  }
+
+  export interface LanguageModelTool<T> {
+    invoke(
+      options: LanguageModelToolInvocationOptions<T>,
+      token: CancellationToken,
+    ): ProviderResult<LanguageModelToolResult>
+  }
+
+  export interface LanguageModelToolInformation {
+    readonly name: string
+    readonly description: string
+    readonly inputSchema: object | undefined
+    readonly tags: readonly string[]
+  }
+
+  export class LanguageModelTextPart {
+    constructor(value: string)
+    readonly value: string
+  }
+
+  export class LanguageModelToolResult {
+    constructor(content: readonly unknown[])
+    readonly content: readonly unknown[]
   }
 
   export const workspace: {
@@ -113,5 +158,10 @@ declare module 'vscode' {
   export const commands: {
     registerCommand(command: string, callback: (...args: any[]) => any): Disposable
     executeCommand<T = unknown>(command: string, ...rest: any[]): Thenable<T>
+  }
+
+  export namespace lm {
+    const tools: readonly LanguageModelToolInformation[]
+    function registerTool<T>(name: string, tool: LanguageModelTool<T>): Disposable
   }
 }

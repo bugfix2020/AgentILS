@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agentils": {
+      "command": "node",
+      "args": [
+        "/Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/mcp/dist/index.js"
+      ]
+    }
+  }
+}

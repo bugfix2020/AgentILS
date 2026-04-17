@@ -1,0 +1,17 @@
+
+> @agentils/cli@0.1.0 build /Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/cli
+> tsup
+
+CLI Building entry: {"index":"src/index.ts"}
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/cli/tsup.config.ts
+CLI Target: node20
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.js     11.00 KB
+ESM dist/index.js.map 19.19 KB
+ESM ⚡️ Build success in 49ms
+DTS Build start
+DTS ⚡️ Build success in 540ms
+DTS dist/index.d.ts 552.00 B
