@@ -9,6 +9,17 @@ import type {
   AgentILSConversationSnapshot,
   AgentILSElicitationHandler,
   AgentILSFinishConversationResult,
+  AgentILSFeedbackRequestInput,
+  AgentILSFeedbackResult,
+  AgentILSSessionAssistantMessageInput,
+  AgentILSSessionConsumeUserMessageInput,
+  AgentILSSessionFinishInput,
+  AgentILSSessionState,
+  AgentILSSessionToolEventInput,
+  AgentILSSessionUserMessageInput,
+  AgentILSApprovalResult,
+  AgentILSClarificationRequestInput,
+  AgentILSClarificationResult,
   AgentILSRecordApprovalInput,
   AgentILSRecordFeedbackInput,
   AgentILSRuntimeSnapshot,
@@ -45,6 +56,7 @@ function createEmptySnapshot(): AgentILSRuntimeSnapshot {
     activeTask: null,
     taskHistory: [],
     latestSummary: null,
+    session: null,
   }
 }
 
@@ -147,9 +159,18 @@ export interface AgentILSTaskServiceClient extends vscode.Disposable {
   markTaskDone(input?: MarkTaskDoneInput): Promise<AgentILSRuntimeSnapshot | null>
   acceptOverride(input: AcceptOverrideInput): Promise<AgentILSRuntimeSnapshot | null>
   beginApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSRuntimeSnapshot>
+  requestClarification(input: AgentILSClarificationRequestInput): Promise<AgentILSClarificationResult>
+  requestFeedback(input: AgentILSFeedbackRequestInput): Promise<AgentILSFeedbackResult>
+  requestApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSApprovalResult>
   recordApproval(input: AgentILSRecordApprovalInput): Promise<AgentILSRuntimeSnapshot>
   recordFeedback(input: AgentILSRecordFeedbackInput): Promise<AgentILSRuntimeSnapshot>
   finishConversation(input?: { preferredRunId?: string }): Promise<AgentILSFinishConversationResult>
+  getSession(preferredRunId?: string, preferredSessionId?: string): Promise<AgentILSSessionState | null>
+  appendSessionUserMessage(input: AgentILSSessionUserMessageInput): Promise<AgentILSSessionState>
+  appendSessionAssistantMessage(input: AgentILSSessionAssistantMessageInput): Promise<AgentILSSessionState>
+  appendSessionToolEvent(input: AgentILSSessionToolEventInput): Promise<AgentILSSessionState>
+  consumeSessionUserMessage(input: AgentILSSessionConsumeUserMessageInput): Promise<AgentILSSessionState>
+  finishSession(input?: AgentILSSessionFinishInput): Promise<AgentILSSessionState>
   getSummaryDocument(taskId?: string | null): AgentILSTaskSummaryDocument | null
   openSummaryDocument(taskId?: string | null): Promise<vscode.Uri | null>
   setElicitationHandler(handler: AgentILSElicitationHandler | undefined): void
@@ -236,6 +257,24 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
     return snapshot
   }
 
+  async requestClarification(input: AgentILSClarificationRequestInput): Promise<AgentILSClarificationResult> {
+    const result = await this.invokeLocalTool<AgentILSClarificationResult>('clarification_request', input)
+    await this.refresh()
+    return result
+  }
+
+  async requestFeedback(input: AgentILSFeedbackRequestInput): Promise<AgentILSFeedbackResult> {
+    const result = await this.invokeLocalTool<AgentILSFeedbackResult>('feedback_gate', input)
+    await this.refresh()
+    return result
+  }
+
+  async requestApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSApprovalResult> {
+    const result = await this.invokeLocalTool<AgentILSApprovalResult>('approval_request', input)
+    await this.refresh()
+    return result
+  }
+
   async recordApproval(input: AgentILSRecordApprovalInput): Promise<AgentILSRuntimeSnapshot> {
     const snapshot = await this.invokeSnapshotTool<AgentILSRuntimeSnapshot>(
       'ui_approval_record',
@@ -276,6 +315,43 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
     return result
   }
 
+  async getSession(preferredRunId?: string, preferredSessionId?: string): Promise<AgentILSSessionState | null> {
+    return this.invokeLocalTool<AgentILSSessionState | null>('ui_session_get', {
+      preferredRunId,
+      preferredSessionId,
+    })
+  }
+
+  async appendSessionUserMessage(input: AgentILSSessionUserMessageInput): Promise<AgentILSSessionState> {
+    const snapshot = await this.invokeLocalTool<AgentILSRuntimeSnapshot>('ui_session_append_user_message', input)
+    this.applySnapshot(snapshot)
+    return snapshot.session!
+  }
+
+  async appendSessionAssistantMessage(input: AgentILSSessionAssistantMessageInput): Promise<AgentILSSessionState> {
+    const snapshot = await this.invokeLocalTool<AgentILSRuntimeSnapshot>('ui_session_append_assistant_message', input)
+    this.applySnapshot(snapshot)
+    return snapshot.session!
+  }
+
+  async appendSessionToolEvent(input: AgentILSSessionToolEventInput): Promise<AgentILSSessionState> {
+    const snapshot = await this.invokeLocalTool<AgentILSRuntimeSnapshot>('ui_session_append_tool_event', input)
+    this.applySnapshot(snapshot)
+    return snapshot.session!
+  }
+
+  async consumeSessionUserMessage(input: AgentILSSessionConsumeUserMessageInput): Promise<AgentILSSessionState> {
+    const snapshot = await this.invokeLocalTool<AgentILSRuntimeSnapshot>('ui_session_consume_user_message', input)
+    this.applySnapshot(snapshot)
+    return snapshot.session!
+  }
+
+  async finishSession(input: AgentILSSessionFinishInput = {}): Promise<AgentILSSessionState> {
+    const result = await this.invokeLocalTool<AgentILSFinishConversationResult>('ui_session_finish', input)
+    this.applySnapshot(result.snapshot)
+    return result.snapshot.session!
+  }
+
   getSummaryDocument(taskId?: string | null): AgentILSTaskSummaryDocument | null {
     if (taskId) {
       const task = this.currentSnapshot.taskHistory.find((candidate) => candidate.taskId === taskId)
@@ -293,6 +369,13 @@ export class RepoBackedAgentILSTaskServiceClient implements AgentILSTaskServiceC
   }
 
   private applySnapshot(snapshot: AgentILSRuntimeSnapshot) {
+    log('client', 'applySnapshot', {
+      hasSession: !!snapshot.session,
+      sessionId: snapshot.session?.sessionId,
+      sessionStatus: snapshot.session?.status,
+      messageCount: snapshot.session?.messages?.length ?? 0,
+      queuedCount: snapshot.session?.queuedUserMessageIds?.length ?? 0,
+    })
     this.currentSnapshot = snapshot
     this.emitter.fire(snapshot)
   }

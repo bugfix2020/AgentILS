@@ -1,41 +1,21 @@
 # AgentILS Copilot Instructions
 
-Read `AGENTS.md` first.
+**先阅读根目录 `README.md`**，了解三层架构、数据流、有/无插件形态和 Session-Driven Continuation 架构。
 
-Before reading the repository broadly, read `.hc/codex-modular-debug.md`.
+然后阅读以下指令文件：
 
-Core working rules:
+- `AGENTS.md` — 模块拆分、读取顺序、数据流规则
+- `.github/instructions/agentils.instructions.md` — 通用开发规则
+- `.github/instructions/mcp.instructions.md` — MCP 包开发边界
+- `.github/instructions/vscode-ext.instructions.md` — VS Code 扩展开发边界
+- `.github/instructions/cli.instructions.md` — CLI 开发边界
+- `.hc/codex-modular-debug.md` — 链路级调试提示
 
-- Treat AgentILS as a TypeScript runtime control plane, not as a free-form chatbot shell.
-- In VS Code, when AgentILS prompts are installed, prefer `/agentils.run-code` or `/agentils.run-task` as the explicit entrypoint for AgentILS work.
-- Do not start with full-repo scanning. Work by active call chain and module boundary.
-- First classify the issue into one of the main chains: `task start`, `approval`, `feedback`, `verify`, `conversation state`, or `summary`.
-- Follow React-like one-way data flow: commands may enter from multiple gateways, but derived state must have one truth source and flow outward from that source.
-- Use test-first development. Define structure and I/O contracts before implementation.
-- Prefer type contracts over inferred behavior.
-- Check upstream output and downstream input before proposing or making a fix.
-- Do not recompute core state across multiple modules.
+## Copilot 专属规则
 
-State and truth-source rules:
-
-- Trust `packages/mcp/src/store/conversation-store.ts` as the preferred truth source for conversation state.
-- Trust `packages/mcp/src/gateway/context.ts` and gateway tests for request-scoped interaction behavior.
-- Use the task summary document as the only default cross-task memory artifact.
-- Distinguish `task_done` from `conversation_done`.
-- Persist task state in `taskCard`, handoff state in `handoffPacket`, and inherited state in the summary document.
-
-Execution rules:
-
-- In task execution mode, progress through `collect`, `confirm_elements`, `plan`, `approval`, `execute`, `handoff_prepare`, `verify`, `done`.
-- Inside an AgentILS VS Code flow, prefer AgentILS tools and the AgentILS interaction panel over plain-text clarification or unrelated extension tools.
-- Do not mark a task done until result verification, handoff verification, and summary state are aligned.
-- High-risk actions require explicit approval or user override acknowledgement.
-- Control modes are `normal`, `alternate`, and `direct`; `direct` reduces gating but does not remove audit visibility.
-- Only ask for the minimum blocking clarification required to continue the active task.
-
-Gateway boundary rules:
-
-- Gateway should only parse input, create request context, call `ctx.elicitUser()`, and delegate to orchestrator.
-- Gateway must not directly perform domain writes such as run transitions, decision appends, override updates, or control-mode transitions.
-
-When in doubt, prefer the smallest relevant module set and avoid expanding context beyond the active chain.
+- 在 VS Code 中，优先使用 `@agentils` 启动 AgentILS WebView 会话。使用 `/agentils.run-code` 或 `/agentils.run-task` 作为 prompt 入口。
+- AgentILS WebView 会话启动后，WebView 是主要的输入输出界面。不要要求用户在普通 Copilot chat 中继续主流程。
+- 仅通过 AgentILS WebView 的 finish 操作结束会话，除非用户明确要求其他方式。
+- WebView transcript 中渲染实质性进展；Copilot chat 输出保持最小化，只展示状态。
+- 在 AgentILS VS Code 流程中，优先使用 AgentILS tools 和交互面板，而非纯文本澄清或无关扩展工具。
+- 只询问继续当前任务所需的最小阻塞性澄清。

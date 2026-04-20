@@ -91,6 +91,52 @@ export function registerGatewayResources(runtime: AgentGateServerRuntime): void 
   )
 
   server.registerResource(
+    'session-resource',
+    'session://current',
+    {
+      title: 'Session',
+      description: 'Current AgentILS session transcript and pending interaction state.',
+      mimeType: 'application/json',
+    },
+    async () => {
+      const snapshot = readGatewayRunSnapshot(store)
+      return {
+        contents: [
+          {
+            uri: 'session://current',
+            text: asJson({
+              session: store.getCurrentSession(snapshot?.runId),
+            }),
+          },
+        ],
+      }
+    },
+  )
+
+  server.registerResource(
+    'session-resource-by-run',
+    new ResourceTemplate('session://{runId}', { list: undefined }),
+    {
+      title: 'Session',
+      description: 'AgentILS session transcript and pending interaction for a run.',
+      mimeType: 'application/json',
+    },
+    async (_uri, variables) => {
+      const runId = String(variables.runId ?? '')
+      return {
+        contents: [
+          {
+            uri: `session://${runId}`,
+            text: asJson({
+              session: store.getCurrentSession(runId),
+            }),
+          },
+        ],
+      }
+    },
+  )
+
+  server.registerResource(
     'task-summary-resource',
     new ResourceTemplate('task-summary://{runId}', { list: undefined }),
     {

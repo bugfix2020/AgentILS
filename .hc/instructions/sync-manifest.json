@@ -12,11 +12,15 @@
     "target": ".github/instructions/agentils.instructions.md"
   },
   {
-    "source": ".hc/instructions/backend.instructions.md",
-    "target": ".github/instructions/backend.instructions.md"
+    "source": ".hc/instructions/mcp.instructions.md",
+    "target": ".github/instructions/mcp.instructions.md"
   },
   {
-    "source": ".hc/instructions/frontend.instructions.md",
-    "target": ".github/instructions/frontend.instructions.md"
+    "source": ".hc/instructions/vscode-ext.instructions.md",
+    "target": ".github/instructions/vscode-ext.instructions.md"
+  },
+  {
+    "source": ".hc/instructions/cli.instructions.md",
+    "target": ".github/instructions/cli.instructions.md"
   }
 ]

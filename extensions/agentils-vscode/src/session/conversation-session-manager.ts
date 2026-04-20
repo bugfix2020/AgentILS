@@ -14,6 +14,7 @@ import type {
   AgentILSPendingInteraction,
   AgentILSRecordApprovalInput,
   AgentILSRecordFeedbackInput,
+  AgentILSSessionState,
   AgentILSStartTaskGateInput,
   AgentILSStartTaskGateResult,
   ContinueTaskInput,
@@ -25,6 +26,7 @@ import type { TaskConsoleComposerMode } from '../panel/task-console-protocol'
 import type { AgentILSTaskServiceClient } from '../task-service-client'
 import { log } from '../logger'
 import { PendingInteractionRegistry } from './pending-interaction-registry'
+import { SessionRunner } from './session-runner'
 
 function nowIso() {
   return new Date().toISOString()
@@ -38,14 +40,18 @@ export class ConversationSessionManager implements vscode.Disposable {
   private readonly emitter = new vscode.EventEmitter<AgentILSPanelState>()
   private readonly registry = new PendingInteractionRegistry()
   private readonly disposables: vscode.Disposable[] = []
+  private readonly sessionRunner: SessionRunner
   private interactionChannel?: AgentILSInteractionChannel
+  private _participantLoopActive = false
 
   readonly onDidChange = this.emitter.event
 
   constructor(private readonly client: AgentILSTaskServiceClient) {
+    this.sessionRunner = new SessionRunner(this)
     this.disposables.push(
       this.client.onDidChange(() => this.emitChange()),
       this.registry.onDidChange(() => this.emitChange()),
+      this.sessionRunner,
     )
   }
 
@@ -61,11 +67,20 @@ export class ConversationSessionManager implements vscode.Disposable {
     this.interactionChannel = interactionChannel
   }
 
+  /** Mark the chat-participant LLM loop as active/inactive. */
+  set participantLoopActive(active: boolean) { this._participantLoopActive = active }
+  get participantLoopActive(): boolean { return this._participantLoopActive }
+
+  revealConsole(composerMode: TaskConsoleComposerMode = 'newTask', forceNewPanel = false) {
+    this.interactionChannel?.revealConsole(composerMode, forceNewPanel)
+  }
+
   snapshot(): AgentILSPanelState {
     const runtimeSnapshot = this.client.snapshot()
+    const registryInteraction = this.registry.snapshot()
     return {
       snapshot: runtimeSnapshot,
-      pendingInteraction: this.registry.snapshot(),
+      pendingInteraction: registryInteraction ?? this.toPanelPendingInteraction(runtimeSnapshot.session),
       controlMode: runtimeSnapshot.activeTask?.controlMode,
       overrideActive: runtimeSnapshot.activeTask?.overrideState.confirmed,
     }
@@ -133,6 +148,74 @@ export class ConversationSessionManager implements vscode.Disposable {
     return this.client.finishConversation({ preferredRunId })
   }
 
+  getSession(preferredRunId?: string, preferredSessionId?: string) {
+    return this.client.getSession(preferredRunId, preferredSessionId)
+  }
+
+  async submitSessionMessage(content: string, preferredRunId?: string, preferredSessionId?: string) {
+    const trimmed = content.trim()
+    if (!trimmed) {
+      return this.snapshot()
+    }
+    await this.client.appendSessionUserMessage({
+      preferredRunId,
+      preferredSessionId,
+      content: trimmed,
+    })
+    // Only trigger the standalone SessionRunner when no chat participant
+    // loop is active.  When active, the participant loop picks up queued
+    // messages via waitForPanelInputOrFinish and drives the LLM itself.
+    if (!this._participantLoopActive) {
+      void this.sessionRunner.continueSession(preferredSessionId ?? undefined)
+    }
+    return this.snapshot()
+  }
+
+  async appendAssistantMessage(content: string, state: 'streaming' | 'final' = 'final', preferredRunId?: string, preferredSessionId?: string, messageId?: string) {
+    const session = await this.client.appendSessionAssistantMessage({
+      messageId,
+      preferredRunId,
+      preferredSessionId,
+      content,
+      state,
+    })
+    return { panelState: this.snapshot(), session }
+  }
+
+  async appendToolEvent(
+    kind: 'tool_call' | 'tool_result' | 'status',
+    content: string,
+    state: 'pending' | 'streaming' | 'final' = 'final',
+    preferredRunId?: string,
+    preferredSessionId?: string,
+  ) {
+    await this.client.appendSessionToolEvent({
+      preferredRunId,
+      preferredSessionId,
+      kind,
+      content,
+      state,
+    })
+    return this.snapshot()
+  }
+
+  async consumeSessionUserMessage(messageId: string, preferredRunId?: string, preferredSessionId?: string) {
+    await this.client.consumeSessionUserMessage({
+      preferredRunId,
+      preferredSessionId,
+      messageId,
+    })
+    return this.snapshot()
+  }
+
+  async finishSession(preferredRunId?: string, preferredSessionId?: string) {
+    await this.client.finishSession({
+      preferredRunId,
+      preferredSessionId,
+    })
+    return this.snapshot()
+  }
+
   async requestClarification(input: AgentILSClarificationRequestInput): Promise<AgentILSClarificationResult> {
     log('session', 'requestClarification called', { question: input.question })
     this.ensureConsoleVisible('continueTask')
@@ -145,6 +228,11 @@ export class ConversationSessionManager implements vscode.Disposable {
       placeholder: input.placeholder ?? 'Provide the missing detail',
       required: input.required ?? true,
     })
+  }
+
+  async requestClarificationThroughRuntime(input: AgentILSClarificationRequestInput) {
+    await this.client.requestClarification(input)
+    return this.snapshot()
   }
 
   async requestTaskStart(input: AgentILSStartTaskGateInput & { message?: string }): Promise<AgentILSStartTaskGateResult> {
@@ -183,6 +271,11 @@ export class ConversationSessionManager implements vscode.Disposable {
     })
   }
 
+  async requestFeedbackThroughRuntime(input: AgentILSFeedbackRequestInput) {
+    await this.client.requestFeedback(input)
+    return this.snapshot()
+  }
+
   async requestApproval(input: AgentILSApprovalRequestInput): Promise<AgentILSApprovalResult> {
     log('session', 'requestApproval called', { summary: input.summary, riskLevel: input.riskLevel })
     this.ensureConsoleVisible('acceptOverride')
@@ -203,6 +296,11 @@ export class ConversationSessionManager implements vscode.Disposable {
       riskLevel: input.riskLevel,
       targets: input.targets ?? [],
     })
+  }
+
+  async requestApprovalThroughRuntime(input: AgentILSApprovalRequestInput) {
+    await this.client.requestApproval(input)
+    return this.snapshot()
   }
 
   submitClarification(requestId: string, content: string) {
@@ -366,10 +464,36 @@ export class ConversationSessionManager implements vscode.Disposable {
 
   private ensureConsoleVisible(composerMode: TaskConsoleComposerMode) {
     log('session', 'ensureConsoleVisible', { composerMode, hasChannel: !!this.interactionChannel })
-    this.interactionChannel?.revealConsole(composerMode)
+    this.revealConsole(composerMode)
   }
 
   private resolveRunId(preferredRunId?: string) {
     return preferredRunId ?? this.client.snapshot().activeTask?.runId ?? null
+  }
+
+  private toPanelPendingInteraction(session: AgentILSSessionState | null): AgentILSPendingInteraction | null {
+    const interaction = session?.pendingInteraction
+    if (!interaction) {
+      return null
+    }
+
+    return {
+      requestId: interaction.requestId,
+      kind: interaction.kind,
+      runId: interaction.runId,
+      title: interaction.title,
+      description: interaction.description,
+      placeholder: interaction.placeholder,
+      required: interaction.required,
+      options: interaction.options,
+      summary: interaction.summary,
+      riskLevel: interaction.riskLevel,
+      targets: interaction.targets,
+      risks: interaction.risks,
+      controlMode: interaction.controlMode,
+      draftTitle: interaction.draftTitle,
+      draftGoal: interaction.draftGoal,
+      draftControlMode: interaction.draftControlMode,
+    }
   }
 }

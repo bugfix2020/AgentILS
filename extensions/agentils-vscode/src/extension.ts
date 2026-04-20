@@ -6,6 +6,7 @@ import { registerAgentILSChatParticipant } from './chat-participant'
 import { LocalPanelInteractionChannel } from './interaction-channel/local-panel-channel'
 import { registerAgentILSLanguageModelTools } from './lm-tools'
 import { initLogger, log } from './logger'
+import { JsonlLogger } from './jsonl-logger'
 import { AgentILSMcpElicitationBridge } from './mcp-elicitation-bridge'
 import { registerAgentILSPromptPackCommands } from './prompt-pack'
 import { ConversationSessionManager } from './session/conversation-session-manager'
@@ -36,6 +37,13 @@ function resolveMcpServerPath(context: vscode.ExtensionContext): string | null {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+  // 启用 JSONL 日志（默认启用以进行诊断）
+  const debugMode = process.env.AGENTILS_DEBUG === 'true' || true  // 暂时默认启用
+  if (debugMode) {
+    JsonlLogger.enable()
+  }
+  JsonlLogger.info('extension', 'activate', 'Extension activating', { debugMode, logsDir: JsonlLogger.getLogsDir() })
+
   initLogger()
   log('activate', 'Extension activating')
   const client = new RepoBackedAgentILSTaskServiceClient(context)

@@ -10,6 +10,9 @@
         "--extensionDevelopmentPath=${workspaceFolder}/extensions/agentils-vscode",
         "--folder-uri=file://${workspaceFolder}/apps/vscode-debug"
       ],
+      "env": {
+        "AGENTILS_DEBUG": "true"
+      },
       "preLaunchTask": "prepare:agentils-extensions",
       "outFiles": [
         "${workspaceFolder}/extensions/agentils-vscode/dist/**/*.js"

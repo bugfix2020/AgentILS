@@ -1,5 +1,6 @@
 export * from './control-mode.js'
 export * from './conversation.js'
 export * from './hook.js'
+export * from './session.js'
 export * from './summary.js'
 export * from './task.js'

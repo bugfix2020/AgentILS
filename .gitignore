@@ -3,3 +3,4 @@ dist/
 .data/
 .turbo/
 .DS_Store
+.env

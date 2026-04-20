@@ -76,6 +76,7 @@ export interface AgentILSRuntimeSnapshot {
   activeTask: AgentILSTaskSnapshot | null
   taskHistory: AgentILSTaskSnapshot[]
   latestSummary: AgentILSTaskSummaryDocument | null
+  session: AgentILSSessionState | null
 }
 
 export type AgentILSInteractionKind = 'clarification' | 'feedback' | 'approval' | 'startTask'
@@ -102,7 +103,8 @@ export interface AgentILSMcpElicitationParams {
   controlMode?: AgentILSControlMode
   requestedSchema?: Record<string, unknown>
   _meta?: {
-    agentilsInteractionKind?: 'startTask' | 'approval' | 'feedback'
+    agentilsInteractionKind?: AgentILSInteractionKind
+    agentilsSessionId?: string
     [key: string]: unknown
   }
   [key: string]: unknown
@@ -175,6 +177,91 @@ export interface AgentILSPanelState {
   /** Derived from the active task's overrideState.confirmed for convenient access by the panel renderer. */
   overrideActive?: boolean
 }
+
+export type AgentILSSessionStatus = 'active' | 'finished'
+export type AgentILSSessionMessageRole = 'system' | 'user' | 'assistant' | 'tool'
+export type AgentILSSessionMessageKind =
+  | 'text'
+  | 'tool_call'
+  | 'tool_result'
+  | 'interaction_opened'
+  | 'interaction_resolved'
+  | 'status'
+export type AgentILSSessionMessageState = 'pending' | 'streaming' | 'final'
+
+export interface AgentILSSessionPendingInteraction {
+  requestId: string
+  kind: AgentILSInteractionKind
+  title: string
+  description: string
+  required: boolean
+  runId: string | null
+  controlMode?: AgentILSControlMode
+  options: AgentILSPendingInteractionOption[]
+  targets: string[]
+  risks: string[]
+  placeholder?: string
+  summary?: string
+  riskLevel?: AgentILSRiskLevel
+  draftTitle?: string
+  draftGoal?: string
+  draftControlMode?: AgentILSControlMode
+  createdAt: string
+}
+
+export interface AgentILSSessionMessage {
+  id: string
+  role: AgentILSSessionMessageRole
+  kind: AgentILSSessionMessageKind
+  content: string
+  timestamp: string
+  state: AgentILSSessionMessageState
+}
+
+export interface AgentILSSessionState {
+  sessionId: string
+  status: AgentILSSessionStatus
+  conversationId: string
+  runId: string | null
+  messages: AgentILSSessionMessage[]
+  queuedUserMessageIds: string[]
+  pendingInteraction: AgentILSSessionPendingInteraction | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AgentILSSessionToolRequestOptions extends AgentILSToolRequestOptions {
+  preferredSessionId?: string
+}
+
+export interface AgentILSSessionMessageInput extends AgentILSSessionToolRequestOptions {
+  role: AgentILSSessionMessageRole
+  kind: AgentILSSessionMessageKind
+  content: string
+  state?: AgentILSSessionMessageState
+}
+
+export interface AgentILSSessionUserMessageInput extends AgentILSSessionToolRequestOptions {
+  content: string
+}
+
+export interface AgentILSSessionAssistantMessageInput extends AgentILSSessionToolRequestOptions {
+  messageId?: string
+  content: string
+  state?: AgentILSSessionMessageState
+}
+
+export interface AgentILSSessionToolEventInput extends AgentILSSessionToolRequestOptions {
+  kind: 'tool_call' | 'tool_result' | 'status'
+  content: string
+  state?: AgentILSSessionMessageState
+}
+
+export interface AgentILSSessionConsumeUserMessageInput extends AgentILSSessionToolRequestOptions {
+  messageId: string
+}
+
+export interface AgentILSSessionFinishInput extends AgentILSSessionToolRequestOptions {}
 
 export interface AgentILSClarificationRequestInput extends AgentILSToolRequestOptions {
   question: string

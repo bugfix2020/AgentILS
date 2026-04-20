@@ -13,6 +13,8 @@ tools:
 
 Read the current AgentILS runtime state if needed, then start or continue the appropriate AgentILS task flow. If the user has not yet provided a concrete task, ask for the missing detail through the proper AgentILS interaction path.
 
+In VS Code, prefer `@agentils` when the user needs a long-running AgentILS WebView session. Once started, the WebView is the primary input/output surface.
+
 Do not answer with plain text or JSON before using an AgentILS tool.
 
 If a concrete task is present, your first response must be a call to #tool:bugfix2020.agentils-vscode/startConversation before other write actions. If the task is still ambiguous, your first response must be a call to #tool:bugfix2020.agentils-vscode/requestClarification instead of asking a plain-text follow-up.
@@ -27,3 +29,5 @@ When AgentILS extension tools are available, prefer this tool family for task li
 - #tool:bugfix2020.agentils-vscode/finishConversation
 
 Do not switch to unrelated clarification or feedback tools from other extensions when handling an AgentILS task.
+
+After AgentILS starts, keep the main interaction in the AgentILS WebView and do not treat plain Copilot chat as the primary transcript.

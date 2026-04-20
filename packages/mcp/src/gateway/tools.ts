@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import { ApprovalResultSchema, FeedbackDecisionSchema, HandoffPacketSchema, TaskCardSchema } from '../types/index.js'
+import {
+  ApprovalResultSchema,
+  FeedbackDecisionSchema,
+  HandoffPacketSchema,
+  TaskCardSchema,
+  createAgentILSSessionMessage,
+} from '../types/index.js'
 import {
   acceptUiOverride,
   beginUiApproval,
@@ -14,6 +20,7 @@ import {
 } from '../control-plane/ui-actions.js'
 import { createAgentGateRequestContext, type AgentGateRequestContext, type AgentGateServerRuntime } from './context.js'
 import { buildActiveTaskSnapshot, readGatewayRunSnapshot, resolveRun, resolveRunId, textResult } from './shared.js'
+import { JsonlLogger } from '../logger.js'
 
 const taskReadinessSchema = z.object({
   technicallyReady: z.boolean().optional(),
@@ -75,6 +82,22 @@ function createToolRequestContext(runtime: AgentGateServerRuntime, preferredRunI
   })
 }
 
+function resolveOrCreateSession(runtime: AgentGateServerRuntime, preferredRunId?: string | null, preferredSessionId?: string | null) {
+  const existing = runtime.store.getCurrentSession(preferredRunId, preferredSessionId)
+  if (existing) {
+    JsonlLogger.debug('mcp', 'resolveOrCreateSession', 'using_existing_session', { sessionId: existing.sessionId })
+    return existing
+  }
+
+  const run = preferredRunId ? runtime.store.getRun(preferredRunId) : null
+  const session = runtime.store.createSession({
+    conversationId: run?.conversationId ?? 'conversation_default',
+    runId: run?.runId ?? null,
+  })
+  JsonlLogger.info('mcp', 'resolveOrCreateSession', 'session_created', { sessionId: session.sessionId, runId: run?.runId ?? null })
+  return session
+}
+
 function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
   const { server, store, orchestrator } = runtime
   const uiServices = buildUiActionServices(store, orchestrator)
@@ -86,7 +109,9 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       inputSchema: taskStartSchema,
     },
     async (input) => {
+      JsonlLogger.info('mcp', 'new_task_request', 'tool_called', { title: input.title, goal: input.goal })
       const run = orchestrator.startRun(buildTaskStartInput(input))
+      JsonlLogger.info('mcp', 'new_task_request', 'run_started', { runId: run.runId, taskId: run.taskId })
       return textResult('New task requested', {
         run,
         conversation: store.getConversationRecord(run.runId),
@@ -371,7 +396,9 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId, summary, riskLevel, toolName, targets }) => {
+      JsonlLogger.info('mcp', 'approval_request', 'tool_called', { runId, riskLevel, summary: summary.substring(0, 100) })
       const ctx = createToolRequestContext(runtime, runId)
+      const session = resolveOrCreateSession(runtime, runId)
 
       orchestrator.beginApprovalRequest(ctx, {
         runId,
@@ -380,12 +407,39 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         toolName,
         targets: targets ?? [],
       })
+      JsonlLogger.info('mcp', 'approval_request', 'interaction_opened', { sessionId: session.sessionId, runId })
+      runtime.store.openSessionInteraction(session.sessionId, {
+        requestId: `approval_${Date.now()}`,
+        kind: 'approval',
+        runId,
+        title: 'Approval Required',
+        description: summary,
+        required: false,
+        options: [],
+        summary,
+        riskLevel,
+        targets: targets ?? [],
+        risks: [],
+      })
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_opened',
+          content: {
+            interactionKind: 'approval',
+            summary,
+            riskLevel,
+          },
+        }),
+      )
 
       const elicited = await ctx.elicitUser({
         mode: 'form',
         message: `Approval required (${riskLevel} risk): ${summary}`,
         _meta: {
           agentilsInteractionKind: 'approval',
+          agentilsSessionId: session.sessionId,
         },
         requestedSchema: {
           type: 'object',
@@ -425,6 +479,18 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
           action: elicited.action,
         }
         orchestrator.recordApproval(runId, summary, fallback as never, ctx)
+        runtime.store.appendSessionMessage(
+          session.sessionId,
+          createAgentILSSessionMessage({
+            role: 'system',
+            kind: 'interaction_resolved',
+            content: {
+              interactionKind: 'approval',
+              action: elicited.action,
+            },
+          }),
+        )
+        runtime.store.clearSessionInteraction(session.sessionId)
         return textResult('Approval result', fallback)
       }
 
@@ -437,6 +503,19 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       })
 
       orchestrator.recordApproval(runId, summary, result, ctx)
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_resolved',
+          content: {
+            interactionKind: 'approval',
+            action: result.action,
+            payload: result.payload,
+          },
+        }),
+      )
+      runtime.store.clearSessionInteraction(session.sessionId)
       return textResult('Approval result', result)
     },
   )
@@ -451,12 +530,39 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       },
     },
     async ({ runId, summary }) => {
+      JsonlLogger.info('mcp', 'feedback_gate', 'tool_called', { runId, summary: summary.substring(0, 100) })
       const ctx = createToolRequestContext(runtime, runId)
+      const session = resolveOrCreateSession(runtime, runId)
+      JsonlLogger.info('mcp', 'feedback_gate', 'interaction_opened', { sessionId: session.sessionId, runId })
+      runtime.store.openSessionInteraction(session.sessionId, {
+        requestId: `feedback_${Date.now()}`,
+        kind: 'feedback',
+        runId,
+        title: 'Feedback Required',
+        description: summary,
+        required: false,
+        options: [],
+        summary,
+        targets: [],
+        risks: [],
+      })
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_opened',
+          content: {
+            interactionKind: 'feedback',
+            summary,
+          },
+        }),
+      )
       const elicited = await ctx.elicitUser({
         mode: 'form',
         message: `Feedback gate: ${summary}`,
         _meta: {
           agentilsInteractionKind: 'feedback',
+          agentilsSessionId: session.sessionId,
         },
         requestedSchema: {
           type: 'object',
@@ -482,6 +588,18 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       })
 
       if (elicited.action !== 'accept' || !elicited.content) {
+        runtime.store.appendSessionMessage(
+          session.sessionId,
+          createAgentILSSessionMessage({
+            role: 'system',
+            kind: 'interaction_resolved',
+            content: {
+              interactionKind: 'feedback',
+              action: elicited.action,
+            },
+          }),
+        )
+        runtime.store.clearSessionInteraction(session.sessionId)
         return textResult('Feedback result', { action: elicited.action })
       }
 
@@ -490,7 +608,130 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         msg: elicited.content.msg ?? '',
       })
       orchestrator.recordFeedback(runId, decision, ctx)
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_resolved',
+          content: {
+            interactionKind: 'feedback',
+            status: decision.status,
+            msg: decision.msg,
+          },
+        }),
+      )
+      runtime.store.clearSessionInteraction(session.sessionId)
       return textResult('Feedback result', decision)
+    },
+  )
+
+  server.registerTool(
+    'clarification_request',
+    {
+      description: 'Collect blocking clarification using MCP elicitation and record it in the active AgentILS session.',
+      inputSchema: {
+        runId: z.string().optional(),
+        sessionId: z.string().optional(),
+        question: z.string().min(1),
+        context: z.string().optional(),
+        placeholder: z.string().optional(),
+        required: z.boolean().optional(),
+      },
+    },
+    async ({ runId, sessionId, question, context, placeholder, required }) => {
+      JsonlLogger.info('mcp', 'clarification_request', 'tool_called', { runId, question: question.substring(0, 100), sessionId })
+      const ctx = createToolRequestContext(runtime, runId)
+      const session = resolveOrCreateSession(runtime, runId, sessionId)
+      JsonlLogger.info('mcp', 'clarification_request', 'interaction_opened', { sessionId: session.sessionId, runId: runId ?? session.runId })
+      runtime.store.openSessionInteraction(session.sessionId, {
+        requestId: `clarification_${Date.now()}`,
+        kind: 'clarification',
+        runId: runId ?? session.runId,
+        title: 'Clarification Required',
+        description: [question, context].filter(Boolean).join('\n\n'),
+        placeholder,
+        required: required ?? true,
+        options: [],
+        targets: [],
+        risks: [],
+      })
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_opened',
+          content: {
+            interactionKind: 'clarification',
+            question,
+            context: context ?? '',
+          },
+        }),
+      )
+
+      const elicited = await ctx.elicitUser({
+        mode: 'form',
+        message: question,
+        _meta: {
+          agentilsInteractionKind: 'clarification',
+          agentilsSessionId: session.sessionId,
+        },
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            content: {
+              type: 'string',
+              title: 'Response',
+              description: context ?? placeholder ?? 'Provide the missing detail.',
+            },
+          },
+          required: required ?? true ? ['content'] : [],
+        },
+      })
+
+      if (elicited.action !== 'accept' || !elicited.content) {
+        runtime.store.appendSessionMessage(
+          session.sessionId,
+          createAgentILSSessionMessage({
+            role: 'system',
+            kind: 'interaction_resolved',
+            content: {
+              interactionKind: 'clarification',
+              action: elicited.action,
+            },
+          }),
+        )
+        runtime.store.clearSessionInteraction(session.sessionId)
+        return textResult('Clarification result', {
+          action: elicited.action,
+        })
+      }
+
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'user',
+          kind: 'text',
+          content: String(elicited.content.content ?? ''),
+        }),
+        true,
+      )
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_resolved',
+          content: {
+            interactionKind: 'clarification',
+            action: 'accept',
+          },
+        }),
+      )
+      runtime.store.clearSessionInteraction(session.sessionId)
+      return textResult('Clarification result', {
+        action: 'accept',
+        content: String(elicited.content.content ?? ''),
+        sessionId: session.sessionId,
+      })
     },
   )
 
@@ -515,6 +756,177 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
   )
 
   server.registerTool(
+    'ui_session_get',
+    {
+      description: 'Read the current AgentILS session transcript and pending interaction state.',
+      inputSchema: {
+        preferredRunId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async ({ preferredRunId, sessionId }) =>
+      textResult('UI session', runtime.store.getCurrentSession(preferredRunId, sessionId)),
+  )
+
+  server.registerTool(
+    'ui_session_append_user_message',
+    {
+      description: 'Append a user message into the current AgentILS session and queue it for the VS Code enhanced runner.',
+      inputSchema: {
+        content: z.string().min(1),
+        preferredRunId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async ({ content, preferredRunId, sessionId }) => {
+      const session = resolveOrCreateSession(runtime, preferredRunId, sessionId)
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'user',
+          kind: 'text',
+          content,
+        }),
+        true,
+      )
+      return textResult(
+        'UI session message appended',
+        buildUiRuntimeSnapshot(
+          {
+            preferredRunId: preferredRunId ?? session.runId ?? undefined,
+          },
+          uiServices,
+        ),
+      )
+    },
+  )
+
+  server.registerTool(
+    'ui_session_append_assistant_message',
+    {
+      description: 'Append or update an assistant message in the current AgentILS session transcript.',
+      inputSchema: {
+        messageId: z.string().optional(),
+        content: z.string(),
+        state: z.enum(['streaming', 'final']).default('final'),
+        preferredRunId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async ({ messageId, content, state, preferredRunId, sessionId }) => {
+      const session = resolveOrCreateSession(runtime, preferredRunId, sessionId)
+      if (messageId && session.messages.some((message) => message.id === messageId)) {
+        runtime.store.updateSessionMessage(session.sessionId, messageId, {
+          content,
+          state,
+          timestamp: new Date().toISOString(),
+        })
+      } else {
+        runtime.store.appendSessionMessage(
+          session.sessionId,
+          createAgentILSSessionMessage({
+            id: messageId,
+            role: 'assistant',
+            kind: 'text',
+            content,
+            state,
+          }),
+        )
+      }
+
+      return textResult(
+        'UI assistant message appended',
+        buildUiRuntimeSnapshot(
+          {
+            preferredRunId: preferredRunId ?? session.runId ?? undefined,
+          },
+          uiServices,
+        ),
+      )
+    },
+  )
+
+  server.registerTool(
+    'ui_session_append_tool_event',
+    {
+      description: 'Append a tool call or tool result event into the current AgentILS session transcript.',
+      inputSchema: {
+        kind: z.enum(['tool_call', 'tool_result', 'status']),
+        content: z.unknown(),
+        preferredRunId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async ({ kind, content, preferredRunId, sessionId }) => {
+      const session = resolveOrCreateSession(runtime, preferredRunId, sessionId)
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: kind === 'status' ? 'system' : 'tool',
+          kind,
+          content,
+        }),
+      )
+      return textResult(
+        'UI tool event appended',
+        buildUiRuntimeSnapshot(
+          {
+            preferredRunId: preferredRunId ?? session.runId ?? undefined,
+          },
+          uiServices,
+        ),
+      )
+    },
+  )
+
+  server.registerTool(
+    'ui_session_consume_user_message',
+    {
+      description: 'Mark a queued AgentILS session user message as consumed by the enhanced runner.',
+      inputSchema: {
+        messageId: z.string().min(1),
+        preferredRunId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async ({ messageId, preferredRunId, sessionId }) => {
+      const session = resolveOrCreateSession(runtime, preferredRunId, sessionId)
+      runtime.store.consumeSessionUserMessage(session.sessionId, messageId)
+      return textResult(
+        'UI session user message consumed',
+        buildUiRuntimeSnapshot(
+          {
+            preferredRunId: preferredRunId ?? session.runId ?? undefined,
+          },
+          uiServices,
+        ),
+      )
+    },
+  )
+
+  server.registerTool(
+    'ui_session_finish',
+    {
+      description: 'Finish the current AgentILS session and attempt to end the associated conversation.',
+      inputSchema: {
+        preferredRunId: z.string().optional(),
+        sessionId: z.string().optional(),
+      },
+    },
+    async ({ preferredRunId, sessionId }) => {
+      const session = resolveOrCreateSession(runtime, preferredRunId, sessionId)
+      runtime.store.finishSession(session.sessionId)
+      const finishResult = finishUiConversation(
+        {
+          preferredRunId: preferredRunId ?? session.runId ?? undefined,
+        },
+        uiServices,
+      )
+      return textResult('UI session finished', finishResult)
+    },
+  )
+
+  server.registerTool(
     'ui_task_start_gate',
     {
       description:
@@ -523,11 +935,63 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
     },
     async ({ title, goal, controlMode }) => {
       const ctx = createToolRequestContext(runtime)
+      const session = resolveOrCreateSession(runtime)
+
+      // 【Bug A 修复】如果已提供完整的任务信息，直接启动，不需要弹出 pending interaction
+      const hasCompleteInput = title && title.trim() && goal && goal.trim()
+      
+      if (hasCompleteInput) {
+        // 直接使用提供的参数启动任务
+        JsonlLogger.info('mcp', 'ui_task_start_gate', 'starting_with_provided_params', { title, goal, hasInteraction: false })
+        const parsed = taskStartSchema.parse({
+          title: title.trim(),
+          goal: goal.trim(),
+          controlMode: controlMode ?? 'normal',
+        })
+        const snapshot = startUiTask(buildTaskStartInput(parsed), uiServices)
+        const runId = snapshot.activeTask?.runId
+        if (runId) {
+          runtime.store.bindSessionToRun(session.sessionId, runId)
+        }
+        return textResult('UI task started', buildUiRuntimeSnapshot({ preferredRunId: runId ?? undefined }, uiServices))
+      }
+
+      // 【原有逻辑】如果缺少信息，打开 pending interaction 让用户填写
+      JsonlLogger.info('mcp', 'ui_task_start_gate', 'opening_interaction', { title, goal, hasInteraction: true })
+      runtime.store.openSessionInteraction(session.sessionId, {
+        requestId: `start_task_${Date.now()}`,
+        kind: 'startTask',
+        runId: null,
+        title: 'Start AgentILS Task',
+        description: 'Confirm or refine the initial AgentILS task before starting it.',
+        required: true,
+        options: [],
+        targets: [],
+        risks: [],
+        draftTitle: title ?? '',
+        draftGoal: goal ?? '',
+        draftControlMode: controlMode ?? 'normal',
+        controlMode: controlMode ?? 'normal',
+      })
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_opened',
+          content: {
+            interactionKind: 'startTask',
+            title: title ?? '',
+            goal: goal ?? '',
+            controlMode: controlMode ?? 'normal',
+          },
+        }),
+      )
       const elicited = await ctx.elicitUser({
         mode: 'form',
         message: 'Confirm or refine the initial AgentILS task before starting it.',
         _meta: {
           agentilsInteractionKind: 'startTask',
+          agentilsSessionId: session.sessionId,
         },
         title: title ?? '',
         goal: goal ?? '',
@@ -559,7 +1023,27 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
       })
 
       if (elicited.action !== 'accept' || !elicited.content) {
-        return textResult('UI task start cancelled', { action: elicited.action })
+        runtime.store.appendSessionMessage(
+          session.sessionId,
+          createAgentILSSessionMessage({
+            role: 'system',
+            kind: 'interaction_resolved',
+            content: {
+              interactionKind: 'startTask',
+              action: elicited.action,
+            },
+          }),
+        )
+        runtime.store.clearSessionInteraction(session.sessionId)
+        return textResult(
+          'UI task start cancelled',
+          buildUiRuntimeSnapshot(
+            {
+              preferredRunId: undefined,
+            },
+            uiServices,
+          ),
+        )
       }
 
       const parsed = taskStartSchema.parse({
@@ -567,8 +1051,25 @@ function registerTaskLifecycleTools(runtime: AgentGateServerRuntime) {
         goal: elicited.content.goal,
         controlMode: elicited.content.controlMode ?? 'normal',
       })
+      runtime.store.clearSessionInteraction(session.sessionId)
+      runtime.store.appendSessionMessage(
+        session.sessionId,
+        createAgentILSSessionMessage({
+          role: 'system',
+          kind: 'interaction_resolved',
+          content: {
+            interactionKind: 'startTask',
+            action: 'accept',
+          },
+        }),
+      )
 
-      return textResult('UI task started', startUiTask(buildTaskStartInput(parsed), uiServices))
+      const snapshot = startUiTask(buildTaskStartInput(parsed), uiServices)
+      const runId = snapshot.activeTask?.runId
+      if (runId) {
+        runtime.store.bindSessionToRun(session.sessionId, runId)
+      }
+      return textResult('UI task started', buildUiRuntimeSnapshot({ preferredRunId: runId ?? undefined }, uiServices))
     },
   )
 

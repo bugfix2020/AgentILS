@@ -217,6 +217,29 @@ test('ui_task_start_gate uses elicitation and starts the task from returned payl
   assert.equal(parsed.conversation.state, 'active_task')
 })
 
+test('ui_task_start_gate cancellation preserves the current runtime snapshot shape', async () => {
+  const runtime = createFakeGatewayRuntime(async () => ({
+    action: 'cancel',
+    content: null,
+  }))
+  const handler = runtime.tools.get('ui_task_start_gate')
+  assert.ok(handler, 'ui_task_start_gate should be registered')
+
+  const response = await handler({
+    title: 'Draft onboarding task',
+    goal: 'Initial draft',
+    controlMode: 'normal',
+  })
+
+  const parsed = parseTextResult(response)
+
+  assert.equal(runtime.elicitCalls.length, 1)
+  assert.equal(parsed.conversation.conversationId, 'conversation_default')
+  assert.equal(parsed.conversation.state, 'await_next_task')
+  assert.equal(parsed.activeTask, null)
+  assert.deepEqual(parsed.taskHistory, [])
+})
+
 test('approval_request promotes high-risk accepted approvals into direct mode', async () => {
   const runtime = createFakeGatewayRuntime(async () => ({
     action: 'accept',

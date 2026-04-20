@@ -6,6 +6,8 @@ export type TaskConsoleMessage =
   | { action: 'submitContinueTask'; note?: string }
   | { action: 'submitMarkTaskDone'; summary?: string }
   | { action: 'submitAcceptOverride'; acknowledgement?: string }
+  | { action: 'submitSessionMessage'; content?: string }
+  | { action: 'finishSession' }
   | {
       action: 'submitPendingInteraction'
       requestId: string

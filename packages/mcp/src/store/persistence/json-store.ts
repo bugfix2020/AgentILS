@@ -1,6 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import {
+  AgentILSSessionState,
+  AgentILSSessionStateSchema,
   AuditEvent,
   AuditEventSchema,
   HandoffPacket,
@@ -15,6 +17,7 @@ import {
 
 export interface PersistentStoreMeta {
   lastRunId: string | null
+  lastSessionId: string | null
   updatedAt: string
 }
 
@@ -23,6 +26,7 @@ export interface PersistentStoreData {
   runs: RunRecord[]
   taskCards: TaskCard[]
   handoffs: HandoffPacket[]
+  sessions: AgentILSSessionState[]
   auditEvents: AuditEvent[]
   runEvents: RunEvent[]
 }
@@ -33,11 +37,13 @@ function createEmptyStoreData(): PersistentStoreData {
   return {
     meta: {
       lastRunId: null,
+      lastSessionId: null,
       updatedAt: new Date().toISOString(),
     },
     runs: [],
     taskCards: [],
     handoffs: [],
+    sessions: [],
     auditEvents: [],
     runEvents: [],
   }
@@ -60,6 +66,10 @@ export function loadPersistentStore(filePath = resolveStateFilePath()): Persiste
           typeof parsed.meta === 'object' && parsed.meta && 'lastRunId' in parsed.meta
             ? (parsed.meta.lastRunId as string | null)
             : null,
+        lastSessionId:
+          typeof parsed.meta === 'object' && parsed.meta && 'lastSessionId' in parsed.meta
+            ? (parsed.meta.lastSessionId as string | null)
+            : null,
         updatedAt:
           typeof parsed.meta === 'object' &&
           parsed.meta &&
@@ -71,6 +81,7 @@ export function loadPersistentStore(filePath = resolveStateFilePath()): Persiste
       runs: RunRecordSchema.array().parse(Array.isArray(parsed.runs) ? parsed.runs : []),
       taskCards: TaskCardSchema.array().parse(Array.isArray(parsed.taskCards) ? parsed.taskCards : []),
       handoffs: HandoffPacketSchema.array().parse(parsed.handoffs ?? []),
+      sessions: AgentILSSessionStateSchema.array().parse(Array.isArray(parsed.sessions) ? parsed.sessions : []),
       auditEvents: AuditEventSchema.array().parse(parsed.auditEvents ?? []),
       runEvents: RunEventSchema.array().parse(parsed.runEvents ?? []),
     }

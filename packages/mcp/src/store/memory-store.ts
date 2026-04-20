@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import {
+  AgentILSSessionMessage,
+  AgentILSSessionPendingInteraction,
+  AgentILSSessionState,
+  AgentILSSessionStateSchema,
   AuditEvent,
   AuditEventSchema,
   type HandoffPacket,
+  createAgentILSSessionState,
   createAuditEvent,
   createHandoffPacket,
   createRunRecord,
@@ -41,6 +46,7 @@ export interface StoreSnapshot {
   runs: RunRecord[]
   taskCards: TaskCard[]
   handoffs: HandoffPacket[]
+  sessions: AgentILSSessionState[]
   auditEvents: AuditEvent[]
   runEvents: RunEvent[]
 }
@@ -49,6 +55,7 @@ export class AgentGateMemoryStore {
   private readonly runs = new Map<string, RunRecord>()
   private readonly taskCards = new Map<string, TaskCard>()
   private readonly handoffs = new Map<string, HandoffPacket>()
+  private readonly sessions = new Map<string, AgentILSSessionState>()
   private readonly auditEvents = new Map<string, AuditEvent[]>()
   private readonly runEvents = new Map<string, RunEvent[]>()
   readonly conversationStore: AgentGateConversationStore
@@ -71,6 +78,9 @@ export class AgentGateMemoryStore {
     }
     for (const handoff of snapshot.handoffs) {
       this.handoffs.set(handoff.runId, handoff)
+    }
+    for (const session of snapshot.sessions) {
+      this.sessions.set(session.sessionId, session)
     }
     for (const event of snapshot.auditEvents) {
       const current = this.auditEvents.get(event.runId) ?? []
@@ -125,6 +135,163 @@ export class AgentGateMemoryStore {
 
   getMeta(): PersistentStoreMeta {
     return { ...this.meta }
+  }
+
+  getSession(sessionId: string): AgentILSSessionState | undefined {
+    return this.sessions.get(sessionId)
+  }
+
+  requireSession(sessionId: string): AgentILSSessionState {
+    const session = this.getSession(sessionId)
+    if (!session) {
+      throw new Error(`Unknown sessionId: ${sessionId}`)
+    }
+    return session
+  }
+
+  listSessions(): AgentILSSessionState[] {
+    return [...this.sessions.values()]
+  }
+
+  resolveSessionId(preferredSessionId?: string | null, preferredRunId?: string | null): string | null {
+    if (preferredSessionId && this.sessions.has(preferredSessionId)) {
+      return preferredSessionId
+    }
+
+    if (preferredRunId) {
+      const sessionForRun = this.listSessions()
+        .filter((session) => session.runId === preferredRunId)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
+      if (sessionForRun) {
+        return sessionForRun.sessionId
+      }
+    }
+
+    // Fall back to the last session if it is still active.
+    // Finished sessions are never reused — a new one will be created instead.
+    if (this.meta.lastSessionId && this.sessions.has(this.meta.lastSessionId)) {
+      const last = this.sessions.get(this.meta.lastSessionId)!
+      if (last.status === 'active') {
+        return this.meta.lastSessionId
+      }
+    }
+
+    return null
+  }
+
+  getCurrentSession(preferredRunId?: string | null, preferredSessionId?: string | null): AgentILSSessionState | null {
+    const sessionId = this.resolveSessionId(preferredSessionId, preferredRunId)
+    return sessionId ? this.requireSession(sessionId) : null
+  }
+
+  createSession(input: {
+    conversationId: string
+    runId?: string | null
+    messages?: AgentILSSessionMessage[]
+    queuedUserMessageIds?: string[]
+    pendingInteraction?: AgentILSSessionPendingInteraction | null
+  }): AgentILSSessionState {
+    const session = createAgentILSSessionState(input)
+    this.sessions.set(session.sessionId, session)
+    this.markLastSession(session.sessionId)
+    this.persist()
+    return session
+  }
+
+  upsertSession(session: AgentILSSessionState): AgentILSSessionState {
+    const parsed = AgentILSSessionStateSchema.parse({
+      ...session,
+      updatedAt: new Date().toISOString(),
+    })
+    this.sessions.set(parsed.sessionId, parsed)
+    this.markLastSession(parsed.sessionId)
+    this.persist()
+    return parsed
+  }
+
+  patchSession(sessionId: string, updates: Partial<AgentILSSessionState>): AgentILSSessionState {
+    const current = this.requireSession(sessionId)
+    return this.upsertSession({
+      ...current,
+      ...updates,
+      sessionId,
+      createdAt: current.createdAt,
+    })
+  }
+
+  ensureSessionForRun(runId: string): AgentILSSessionState {
+    const existing = this.getCurrentSession(runId)
+    if (existing) {
+      return existing
+    }
+    const run = this.requireRun(runId)
+    return this.createSession({
+      conversationId: run.conversationId ?? 'conversation_default',
+      runId: run.runId,
+    })
+  }
+
+  bindSessionToRun(sessionId: string, runId: string): AgentILSSessionState {
+    const run = this.requireRun(runId)
+    return this.patchSession(sessionId, {
+      runId,
+      conversationId: run.conversationId ?? 'conversation_default',
+    })
+  }
+
+  appendSessionMessage(sessionId: string, message: AgentILSSessionMessage, queueUserMessage = false): AgentILSSessionState {
+    const current = this.requireSession(sessionId)
+    return this.upsertSession({
+      ...current,
+      messages: [...current.messages, message],
+      queuedUserMessageIds:
+        queueUserMessage && message.role === 'user'
+          ? [...current.queuedUserMessageIds, message.id]
+          : current.queuedUserMessageIds,
+    })
+  }
+
+  updateSessionMessage(sessionId: string, messageId: string, updates: Partial<AgentILSSessionMessage>): AgentILSSessionState {
+    const current = this.requireSession(sessionId)
+    return this.upsertSession({
+      ...current,
+      messages: current.messages.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              ...updates,
+            }
+          : message,
+      ),
+    })
+  }
+
+  consumeSessionUserMessage(sessionId: string, messageId: string): AgentILSSessionState {
+    const current = this.requireSession(sessionId)
+    return this.upsertSession({
+      ...current,
+      queuedUserMessageIds: current.queuedUserMessageIds.filter((id) => id !== messageId),
+    })
+  }
+
+  openSessionInteraction(sessionId: string, interaction: AgentILSSessionPendingInteraction): AgentILSSessionState {
+    return this.patchSession(sessionId, {
+      pendingInteraction: interaction,
+    })
+  }
+
+  clearSessionInteraction(sessionId: string): AgentILSSessionState {
+    return this.patchSession(sessionId, {
+      pendingInteraction: null,
+    })
+  }
+
+  finishSession(sessionId: string): AgentILSSessionState {
+    return this.patchSession(sessionId, {
+      status: 'finished',
+      pendingInteraction: null,
+      queuedUserMessageIds: [],
+    })
   }
 
   getConversationRecord(preferredRunId?: string | null) {
@@ -402,6 +569,7 @@ export class AgentGateMemoryStore {
       runs: this.listRuns(),
       taskCards: [...this.taskCards.values()],
       handoffs: [...this.handoffs.values()],
+      sessions: this.listSessions(),
       auditEvents: [...this.auditEvents.values()].flat(),
       runEvents: [...this.runEvents.values()].flat(),
     }
@@ -410,6 +578,15 @@ export class AgentGateMemoryStore {
   private markLastRun(runId: string): void {
     this.meta = {
       lastRunId: runId,
+      lastSessionId: this.meta.lastSessionId,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private markLastSession(sessionId: string): void {
+    this.meta = {
+      lastRunId: this.meta.lastRunId,
+      lastSessionId: sessionId,
       updatedAt: new Date().toISOString(),
     }
   }
@@ -421,6 +598,7 @@ export class AgentGateMemoryStore {
         runs: this.listRuns(),
         taskCards: [...this.taskCards.values()],
         handoffs: [...this.handoffs.values()],
+        sessions: this.listSessions(),
         auditEvents: [...this.auditEvents.values()].flat(),
         runEvents: [...this.runEvents.values()].flat(),
       },

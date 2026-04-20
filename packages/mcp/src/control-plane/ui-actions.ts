@@ -8,7 +8,15 @@ import { ConversationService } from './conversation-service.js'
 import { OverrideService } from './override-service.js'
 import { SummaryService } from './summary-service.js'
 import { TaskService } from './task-service.js'
-import { createRunEvent, type StartRunInput, type RunStatus, type RunStep } from '../types/index.js'
+import {
+  createAgentILSSessionMessage,
+  createRunEvent,
+  type AgentILSSessionPendingInteraction,
+  type AgentILSSessionState,
+  type StartRunInput,
+  type RunStatus,
+  type RunStep,
+} from '../types/index.js'
 import { renderTaskSummaryDocument, type TaskSummaryDocument } from '../store/summary-store.js'
 
 export interface UiConversationSnapshot {
@@ -61,6 +69,7 @@ export interface UiRuntimeSnapshot {
   activeTask: UiTaskSnapshot | null
   taskHistory: UiTaskSnapshot[]
   latestSummary: UiTaskSummaryDocument | null
+  session: AgentILSSessionState | null
 }
 
 export interface UiRuntimeOptions {
@@ -261,6 +270,64 @@ function buildUiTaskSnapshotFromRunId(
   )
 }
 
+function appendSessionUserMessage(
+  services: UiActionServices,
+  sessionId: string,
+  content: string,
+  queueUserMessage = true,
+) {
+  services.store.appendSessionMessage(
+    sessionId,
+    createAgentILSSessionMessage({
+      role: 'user',
+      kind: 'text',
+      content,
+      state: 'final',
+    }),
+    queueUserMessage,
+  )
+}
+
+function appendSessionSystemStatusMessage(services: UiActionServices, sessionId: string, content: unknown) {
+  services.store.appendSessionMessage(
+    sessionId,
+    createAgentILSSessionMessage({
+      role: 'system',
+      kind: 'status',
+      content,
+      state: 'final',
+    }),
+  )
+}
+
+function openSessionInteraction(
+  services: UiActionServices,
+  sessionId: string,
+  interaction: AgentILSSessionPendingInteraction,
+) {
+  services.store.openSessionInteraction(sessionId, interaction)
+  appendSessionSystemStatusMessage(services, sessionId, {
+    type: 'interaction_opened',
+    requestId: interaction.requestId,
+    interactionKind: interaction.kind,
+    title: interaction.title,
+  })
+}
+
+function resolveSessionInteraction(services: UiActionServices, sessionId: string, payload: unknown) {
+  const session = services.store.getSession(sessionId)
+  if (!session?.pendingInteraction) {
+    return
+  }
+  appendSessionSystemStatusMessage(services, sessionId, {
+    type: 'interaction_resolved',
+    requestId: session.pendingInteraction.requestId,
+    interactionKind: session.pendingInteraction.kind,
+    payload,
+  })
+  services.store.clearSessionInteraction(sessionId)
+}
+
 function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}, injectedServices?: UiActionServices): UiRuntimeSnapshot {
   const services = injectedServices ?? createServices(options.stateFilePath)
   const conversationSurface = services.conversation.buildConversationSurface(options.preferredRunId)
@@ -296,7 +363,29 @@ function buildRuntimeSnapshotInternal(options: UiRuntimeOptions = {}, injectedSe
       latestSummary,
       latestSummary ? services.summary.resolveSummaryPath(latestSummary.frontmatter.taskId) : null,
     ),
+    session: resolveOrCreateSessionForSnapshot(services, options.preferredRunId, conversationSurface.conversation.conversationId),
   }
+}
+
+/**
+ * Resolve an existing active session or create a new one so the WebView always
+ * has a usable session.  Finished / stale sessions from previous debug runs are
+ * left in the Map but not re-surfaced.
+ */
+function resolveOrCreateSessionForSnapshot(
+  services: UiActionServices,
+  preferredRunId?: string | null,
+  conversationId?: string,
+): AgentILSSessionState {
+  const existing = services.store.getCurrentSession(preferredRunId)
+  if (existing && existing.status === 'active') {
+    return existing
+  }
+  // No active session — create a fresh one bound to the conversation.
+  return services.store.createSession({
+    conversationId: conversationId ?? 'conversation_default',
+    runId: preferredRunId ?? null,
+  })
 }
 
 function resolveNextStep(currentStep: string): RunStep {
@@ -324,6 +413,20 @@ export function buildUiRuntimeSnapshot(options: UiRuntimeOptions = {}, injectedS
 export function startUiTask(input: StartRunInput & UiRuntimeOptions, injectedServices?: UiActionServices): UiRuntimeSnapshot {
   const services = injectedServices ?? createServices(input.stateFilePath)
   const run = services.task.startTask(input)
+  const session = services.store.ensureSessionForRun(run.runId)
+  const boundSession = services.store.bindSessionToRun(session.sessionId, run.runId)
+  if (input.goal.trim()) {
+    const alreadyQueued = boundSession.queuedUserMessageIds.length > 0
+    if (!alreadyQueued) {
+      appendSessionUserMessage(services, boundSession.sessionId, input.goal.trim())
+    }
+  }
+  appendSessionSystemStatusMessage(services, boundSession.sessionId, {
+    type: 'task_started',
+    runId: run.runId,
+    title: run.title,
+    goal: run.goal,
+  })
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
     preferredRunId: run.runId,
@@ -426,6 +529,21 @@ export function beginUiApproval(input: BeginUiApprovalInput, injectedServices?: 
     toolName: input.toolName,
     targets: input.targets ?? [],
   })
+  const session = services.store.ensureSessionForRun(runId)
+  openSessionInteraction(services, session.sessionId, {
+    requestId: `approval_${randomUUID()}`,
+    kind: 'approval',
+    runId,
+    title: 'Approval Required',
+    description: input.summary,
+    required: false,
+    options: [],
+    summary: input.summary,
+    riskLevel: input.riskLevel,
+    targets: input.targets ?? [],
+    risks: [],
+    controlMode: services.task.getTaskCard(runId)?.controlMode as 'normal' | 'alternate' | 'direct' | undefined,
+  })
 
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
@@ -455,6 +573,13 @@ export function recordUiApproval(input: RecordUiApprovalInput, injectedServices?
     },
     ctx,
   )
+  const session = services.store.ensureSessionForRun(runId)
+  resolveSessionInteraction(services, session.sessionId, {
+    type: 'approval',
+    action: input.action,
+    status: input.status,
+    message: input.message ?? '',
+  })
 
   return buildRuntimeSnapshotInternal({
     stateFilePath: input.stateFilePath,
@@ -507,6 +632,12 @@ export function recordUiFeedback(input: RecordUiFeedbackInput, injectedServices?
     status: input.status,
     msg: input.message ?? '',
   }, ctx)
+  const session = services.store.ensureSessionForRun(runId)
+  resolveSessionInteraction(services, session.sessionId, {
+    type: 'feedback',
+    status: input.status,
+    message: input.message ?? '',
+  })
 
   if (input.status === 'done') {
     services.orchestrator.verifyRun(runId, true, ctx)
@@ -541,6 +672,14 @@ export function finishUiConversation(
 
   if (preview.allowed) {
     services.conversation.endConversation(input.preferredRunId)
+  }
+  const session = services.store.getCurrentSession(input.preferredRunId)
+  if (preview.allowed && session) {
+    services.store.finishSession(session.sessionId)
+    appendSessionSystemStatusMessage(services, session.sessionId, {
+      type: 'session_finished',
+      conversationId: session.conversationId,
+    })
   }
 
   const snapshot = buildRuntimeSnapshotInternal({

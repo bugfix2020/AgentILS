@@ -52,13 +52,7 @@
         "name": "agentils",
         "fullName": "AgentILS",
         "description": "Start the AgentILS task console directly from chat.",
-        "isSticky": false,
-        "commands": [
-          {
-            "name": "run",
-            "description": "Start an AgentILS task and open the task console"
-          }
-        ]
+        "isSticky": false
       }
     ],
     "languageModelTools": [
@@ -310,9 +304,10 @@
     }
   },
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p . && pnpm --dir webview build",
+    "build:webview": "pnpm --dir webview build",
     "watch": "tsc -p . -w",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "tsc -p . --noEmit && pnpm --dir webview typecheck"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1"

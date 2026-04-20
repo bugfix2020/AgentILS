@@ -3,20 +3,23 @@ import type { StartTaskInput } from './model'
 import { renderTaskConsoleHtml } from './panel/task-console-renderer'
 import type { TaskConsoleComposerMode, TaskConsoleMessage } from './panel/task-console-protocol'
 import { log } from './logger'
+import { JsonlLogger } from './jsonl-logger'
 import { ConversationSessionManager } from './session/conversation-session-manager'
 
 export type { TaskConsoleComposerMode } from './panel/task-console-protocol'
 
 export class TaskConsolePanel implements vscode.Disposable {
   private static currentPanel: TaskConsolePanel | null = null
+  private static panels = new Set<TaskConsolePanel>()
 
   static createOrShow(
     extensionUri: vscode.Uri,
     sessionManager: ConversationSessionManager,
     composerMode: TaskConsoleComposerMode = 'newTask',
     onDispose?: () => void,
+    forceNewPanel = false,
   ) {
-    if (TaskConsolePanel.currentPanel) {
+    if (!forceNewPanel && TaskConsolePanel.currentPanel) {
       TaskConsolePanel.currentPanel.setComposerMode(composerMode)
       TaskConsolePanel.currentPanel.panel.reveal(vscode.ViewColumn.Active)
       return TaskConsolePanel.currentPanel
@@ -29,13 +32,21 @@ export class TaskConsolePanel implements vscode.Disposable {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [extensionUri],
+        localResourceRoots: [extensionUri, vscode.Uri.joinPath(extensionUri, 'dist')],
       },
     )
 
-    log('panel', 'TaskConsolePanel created')
-    TaskConsolePanel.currentPanel = new TaskConsolePanel(panel, sessionManager, composerMode, onDispose)
-    return TaskConsolePanel.currentPanel
+    log('panel', 'TaskConsolePanel created', { forceNewPanel })
+    const instance = new TaskConsolePanel(
+      panel,
+      sessionManager,
+      extensionUri,
+      composerMode,
+      onDispose,
+    )
+    TaskConsolePanel.currentPanel = instance
+    TaskConsolePanel.panels.add(instance)
+    return instance
   }
 
   private readonly disposables: vscode.Disposable[] = []
@@ -43,6 +54,7 @@ export class TaskConsolePanel implements vscode.Disposable {
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     private readonly sessionManager: ConversationSessionManager,
+    private readonly extensionUri: vscode.Uri,
     private composerMode: TaskConsoleComposerMode,
     private readonly onDispose?: () => void,
   ) {
@@ -54,11 +66,20 @@ export class TaskConsolePanel implements vscode.Disposable {
       this.sessionManager.onDidChange(() => this.render()),
     )
 
-    this.render()
+    this.panel.webview.html = renderTaskConsoleHtml(
+      this.panel.webview,
+      this.extensionUri,
+      this.sessionManager.snapshot(),
+      this.composerMode,
+    )
+    void this.render()
   }
 
   dispose() {
-    TaskConsolePanel.currentPanel = null
+    TaskConsolePanel.panels.delete(this)
+    if (TaskConsolePanel.currentPanel === this) {
+      TaskConsolePanel.currentPanel = null
+    }
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose()
     }
@@ -71,7 +92,17 @@ export class TaskConsolePanel implements vscode.Disposable {
   }
 
   private render() {
-    this.panel.webview.html = renderTaskConsoleHtml(this.sessionManager.snapshot(), this.composerMode)
+    const state = this.sessionManager.snapshot()
+    log('panel', 'render', {
+      hasSession: !!state.snapshot.session,
+      sessionStatus: state.snapshot.session?.status,
+      messageCount: state.snapshot.session?.messages?.length ?? 0,
+    })
+    void this.panel.webview.postMessage({
+      type: 'stateUpdate',
+      payload: state,
+      composerMode: this.composerMode,
+    })
   }
 
   private async handleMessage(message: unknown) {
@@ -80,6 +111,14 @@ export class TaskConsolePanel implements vscode.Disposable {
     }
 
     const payload = message as TaskConsoleMessage
+
+    // 处理日志消息
+    if ((payload as any).action === 'logEntry' && (payload as any).payload) {
+      const entry = (payload as any).payload
+      JsonlLogger.write(entry)
+      return
+    }
+
     log('panel', 'handleMessage', { action: (payload as { action?: string }).action })
     switch (payload.action) {
       case 'newTask':
@@ -101,6 +140,10 @@ export class TaskConsolePanel implements vscode.Disposable {
         await this.submitNewTask({
           title: payload.title ?? '',
           goal: payload.goal ?? '',
+          controlMode:
+            'controlMode' in payload && (payload.controlMode === 'alternate' || payload.controlMode === 'direct')
+              ? payload.controlMode
+              : 'normal',
         })
         return
       case 'submitContinueTask':
@@ -111,6 +154,12 @@ export class TaskConsolePanel implements vscode.Disposable {
         return
       case 'submitAcceptOverride':
         await this.submitAcceptOverride(payload.acknowledgement ?? '')
+        return
+      case 'submitSessionMessage':
+        await this.submitSessionMessage(payload.content ?? '')
+        return
+      case 'finishSession':
+        await this.finishSession()
         return
       case 'submitPendingInteraction':
         await this.submitPendingInteraction(payload)
@@ -161,7 +210,7 @@ export class TaskConsolePanel implements vscode.Disposable {
       await this.sessionManager.startTask({
         title,
         goal,
-        controlMode: 'normal',
+        controlMode: input.controlMode ?? 'normal',
       })
       this.setComposerMode('continueTask')
       vscode.window.showInformationMessage(`AgentILS started task "${title}".`)
@@ -204,6 +253,32 @@ export class TaskConsolePanel implements vscode.Disposable {
       this.setComposerMode('continueTask')
     } catch (error) {
       vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to accept override.')
+    }
+  }
+
+  private async submitSessionMessage(content: string) {
+    const message = content.trim()
+    if (!message) {
+      vscode.window.showWarningMessage('Session input is required.')
+      return
+    }
+
+    try {
+      await this.sessionManager.submitSessionMessage(message)
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to send the session message.')
+    }
+  }
+
+  private async finishSession() {
+    const snapshot = this.sessionManager.snapshot().snapshot
+    const preferredRunId = snapshot.activeTask?.runId ?? snapshot.session?.runId ?? undefined
+    const preferredSessionId = snapshot.session?.sessionId
+    try {
+      await this.sessionManager.finishSession(preferredRunId, preferredSessionId)
+      vscode.window.showInformationMessage('AgentILS session finished.')
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to finish the AgentILS session.')
     }
   }
 

@@ -9,8 +9,8 @@ export class LocalPanelInteractionChannel implements AgentILSInteractionChannel 
     private readonly sessionManager: ConversationSessionManager,
   ) {}
 
-  revealConsole(composerMode: TaskConsoleComposerMode = 'newTask') {
-    TaskConsolePanel.createOrShow(this.extensionUri, this.sessionManager, composerMode)
+  revealConsole(composerMode: TaskConsoleComposerMode = 'newTask', forceNewPanel = false) {
+    TaskConsolePanel.createOrShow(this.extensionUri, this.sessionManager, composerMode, undefined, forceNewPanel)
   }
 
   dispose() {}

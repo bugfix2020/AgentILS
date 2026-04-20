@@ -5,12 +5,14 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 type InjectionTarget = 'vscode' | 'cursor' | 'codex' | 'antigravity'
+type InjectionScope = 'workspace' | 'user' | 'both'
 
 interface CliOptions {
   command: 'inject' | 'uninstall' | 'help'
   dryRun: boolean
   workspaceRoot: string
   targets: InjectionTarget[]
+  scope: InjectionScope
 }
 
 interface ChangeRecord {
@@ -100,6 +102,7 @@ export function parseArgs(argv: string[]): CliOptions {
     dryRun: false,
     workspaceRoot: resolve(process.cwd()),
     targets: [],
+    scope: 'workspace',
   }
 
   if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -114,6 +117,7 @@ export function parseArgs(argv: string[]): CliOptions {
   const targets: InjectionTarget[] = []
   let workspaceRoot = defaults.workspaceRoot
   let dryRun = false
+  let scope: InjectionScope = 'workspace'
 
   for (let index = 0; index < rest.length; index += 1) {
     const token = rest[index]
@@ -128,6 +132,16 @@ export function parseArgs(argv: string[]): CliOptions {
         throw new Error('Missing value for --workspace')
       }
       workspaceRoot = resolve(next)
+      index += 1
+      continue
+    }
+
+    if (token === '--scope') {
+      const next = rest[index + 1]
+      if (!next || !isInjectionScope(next)) {
+        throw new Error('--scope must be one of: workspace, user, both')
+      }
+      scope = next
       index += 1
       continue
     }
@@ -151,6 +165,7 @@ export function parseArgs(argv: string[]): CliOptions {
     dryRun,
     workspaceRoot,
     targets: targets.length > 0 ? targets : [...supportedTargets],
+    scope,
   }
 }
 
@@ -158,21 +173,32 @@ function isInjectionTarget(value: string): value is InjectionTarget {
   return supportedTargets.includes(value as InjectionTarget)
 }
 
+const supportedScopes: InjectionScope[] = ['workspace', 'user', 'both']
+function isInjectionScope(value: string): value is InjectionScope {
+  return supportedScopes.includes(value as InjectionScope)
+}
+
 function printHelp() {
   console.log(`AgentILS CLI
 
 Usage:
-  agentils inject [targets...] [--workspace <path>] [--dry-run]
-  agentils uninstall [targets...] [--workspace <path>] [--dry-run]
+  agentils inject [targets...] [--workspace <path>] [--scope <scope>] [--dry-run]
+  agentils uninstall [targets...] [--workspace <path>] [--scope <scope>] [--dry-run]
 
 Targets:
-  vscode       Sync Copilot instructions, VS Code MCP config, and VS Code user agent/prompt files
+  vscode       Sync Copilot agents, prompts, and MCP config
   cursor       Sync AGENTS.md, Cursor rules, and Cursor MCP config
   codex        Sync AGENTS.md and Codex global config for MCP/doc fallbacks
   antigravity  Sync AGENTS.md plus Antigravity workspace rules and workflows
 
+Scope (--scope, default: workspace):
+  workspace    Write only to the project directory (.github/, .vscode/)
+  user         Write only to user-level directories (~/.copilot/, VS Code user data)
+  both         Write to both workspace and user directories
+
 Examples:
   agentils inject vscode
+  agentils inject vscode --scope both
   agentils uninstall vscode
   agentils inject cursor codex --workspace /path/to/repo
   agentils inject all --dry-run
@@ -180,53 +206,123 @@ Examples:
 }
 
 function injectVsCode(options: CliOptions, changes: ChangeRecord[]) {
-  syncGeneratedInstructions(options.workspaceRoot, changes, options.dryRun)
-  syncPromptFilesIntoWorkspace(options.workspaceRoot, changes, options.dryRun)
+  const templateDir = join(packageRoot, 'templates', 'vscode')
+  const toWorkspace = options.scope === 'workspace' || options.scope === 'both'
+  const toUser = options.scope === 'user' || options.scope === 'both'
 
-  const mcpServerPath = resolve(sourceRoot, 'packages', 'mcp', 'dist', 'index.js')
-  writeJsonFile(
-    join(options.workspaceRoot, '.vscode', 'mcp.json'),
-    {
-      servers: {
-        agentils: {
-          type: 'stdio',
-          command: 'node',
-          args: [mcpServerPath],
+  // 1. MCP config → workspace .vscode/mcp.json (always workspace-scoped)
+  if (toWorkspace) {
+    const mcpServerPath = fileURLToPath(import.meta.resolve('@agentils/mcp'))
+    writeJsonFile(
+      join(options.workspaceRoot, '.vscode', 'mcp.json'),
+      {
+        servers: {
+          agentils: {
+            type: 'stdio',
+            command: 'node',
+            args: [mcpServerPath],
+          },
         },
       },
-    },
-    changes,
-    options.dryRun,
-  )
+      changes,
+      options.dryRun,
+    )
+  }
 
-  const promptsDirs = resolveVsCodePromptsDirs()
-  const templateDir = join(sourceRoot, 'extensions', 'agentils-vscode', 'templates')
-  for (const promptsDir of promptsDirs) {
-    for (const fileName of vscodePromptTemplateFileNames) {
-      const sourcePath = join(templateDir, fileName)
-      writeTextFile(
-        join(promptsDir, fileName),
-        readNormalized(sourcePath),
-        changes,
-        options.dryRun,
-      )
+  // 2. Agent templates
+  const agentTemplateDir = join(templateDir, 'agents')
+  for (const fileName of listMarkdownFiles(agentTemplateDir)) {
+    const content = readNormalized(join(agentTemplateDir, fileName))
+    if (toWorkspace) {
+      writeTextFile(join(options.workspaceRoot, '.github', 'agents', fileName), content, changes, options.dryRun)
     }
+    if (toUser) {
+      writeTextFile(join(homedir(), '.copilot', 'agents', fileName), content, changes, options.dryRun)
+    }
+  }
 
-    for (const fileName of legacyVsCodePromptTemplateFileNames) {
-      removeFile(join(promptsDir, fileName), changes, options.dryRun)
+  // 3. Prompt templates
+  const promptTemplateDir = join(templateDir, 'prompts')
+  for (const fileName of listMarkdownFiles(promptTemplateDir)) {
+    const content = readNormalized(join(promptTemplateDir, fileName))
+    if (toWorkspace) {
+      writeTextFile(join(options.workspaceRoot, '.github', 'prompts', fileName), content, changes, options.dryRun)
+    }
+    if (toUser) {
+      for (const promptsDir of resolveVsCodePromptsDirs()) {
+        writeTextFile(join(promptsDir, fileName), content, changes, options.dryRun)
+      }
+    }
+  }
+
+  // 4. Workspace-level runtime prompts (always workspace-scoped)
+  if (toWorkspace) {
+    const workspacePromptDir = join(templateDir, 'workspace-prompts')
+    for (const fileName of listMarkdownFiles(workspacePromptDir)) {
+      const content = readNormalized(join(workspacePromptDir, fileName))
+      writeTextFile(join(options.workspaceRoot, '.github', 'prompts', fileName), content, changes, options.dryRun)
+    }
+  }
+
+  // 5. Clean up legacy user-level files
+  if (toUser) {
+    for (const promptsDir of resolveVsCodePromptsDirs()) {
+      for (const fileName of legacyVsCodePromptTemplateFileNames) {
+        removeFile(join(promptsDir, fileName), changes, options.dryRun)
+      }
     }
   }
 }
 
 function uninstallVsCode(options: CliOptions, changes: ChangeRecord[]) {
-  const promptsDirs = resolveVsCodePromptsDirs()
-  for (const promptsDir of promptsDirs) {
-    for (const fileName of allVsCodePromptTemplateFileNames) {
-      removeFile(join(promptsDir, fileName), changes, options.dryRun)
+  const templateDir = join(packageRoot, 'templates', 'vscode')
+  const fromWorkspace = options.scope === 'workspace' || options.scope === 'both'
+  const fromUser = options.scope === 'user' || options.scope === 'both'
+
+  // Remove agent files
+  const agentTemplateDir = join(templateDir, 'agents')
+  for (const fileName of listMarkdownFiles(agentTemplateDir)) {
+    if (fromWorkspace) {
+      removeFile(join(options.workspaceRoot, '.github', 'agents', fileName), changes, options.dryRun)
+    }
+    if (fromUser) {
+      removeFile(join(homedir(), '.copilot', 'agents', fileName), changes, options.dryRun)
     }
   }
 
-  removeJsonProperty(join(options.workspaceRoot, '.vscode', 'mcp.json'), ['servers', 'agentils'], changes, options.dryRun)
+  // Remove prompt files
+  const promptTemplateDir = join(templateDir, 'prompts')
+  for (const fileName of listMarkdownFiles(promptTemplateDir)) {
+    if (fromWorkspace) {
+      removeFile(join(options.workspaceRoot, '.github', 'prompts', fileName), changes, options.dryRun)
+    }
+    if (fromUser) {
+      for (const promptsDir of resolveVsCodePromptsDirs()) {
+        removeFile(join(promptsDir, fileName), changes, options.dryRun)
+      }
+    }
+  }
+
+  // Remove workspace runtime prompts
+  if (fromWorkspace) {
+    const workspacePromptDir = join(templateDir, 'workspace-prompts')
+    for (const fileName of listMarkdownFiles(workspacePromptDir)) {
+      removeFile(join(options.workspaceRoot, '.github', 'prompts', fileName), changes, options.dryRun)
+    }
+  }
+
+  // Remove legacy user-level files
+  if (fromUser) {
+    for (const promptsDir of resolveVsCodePromptsDirs()) {
+      for (const fileName of legacyVsCodePromptTemplateFileNames) {
+        removeFile(join(promptsDir, fileName), changes, options.dryRun)
+      }
+    }
+  }
+
+  if (fromWorkspace) {
+    removeJsonProperty(join(options.workspaceRoot, '.vscode', 'mcp.json'), ['servers', 'agentils'], changes, options.dryRun)
+  }
 }
 
 function injectCursor(options: CliOptions, changes: ChangeRecord[]) {

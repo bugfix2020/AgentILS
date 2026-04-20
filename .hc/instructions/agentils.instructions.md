@@ -1,13 +1,105 @@
-# AgentILS Module Rules
+# AgentILS 通用开发规则
 
-- Read `AGENTS.md` first, then `.hc/codex-modular-debug.md` before broad repository reads.
-- Do not start with full-repo scanning; work from the active call chain outward.
-- Keep conversation/task workflow state explicit and serializable.
-- Follow one-way data flow: derive core state in one truth-source module, then project it outward.
-- Prefer MCP resources for state visibility over hidden prompt state.
-- Use the task summary document as authoritative inherited state for the next task.
-- Never use natural-language summaries as a substitute for `taskSummaryDocument` or `handoffPacket`.
-- Budget, policy, approval, feedback, and override checks must be treated as product logic, not prompt prose.
-- Distinguish task completion from conversation completion.
-- New task entry must be explicit; do not infer task boundaries from casual chat alone.
-- Prefer test-first changes and align upstream outputs with downstream input contracts before editing code.
+> **⚠️ 本文件是开发指引**，面向 AgentILS 项目本身的开发者。
+> 本文件通过 `sync-manifest.json` 同步到 `.github/instructions/agentils.instructions.md`，供 Copilot/Codex 在开发 AgentILS 时读取。
+> **本文件不应被 `packages/cli` 读取或注入到外部用户项目。** CLI 有自己独立的模板体系（`packages/cli/templates/`），内容是面向用户的行为约束，不是开发指引。
+
+## 仓库结构
+
+AgentILS 是一个 `pnpm + turbo` monorepo，由三个独立部分组成：
+
+| 包 | 路径 | 定位 |
+|----|------|------|
+| **MCP 控制平面** | `packages/mcp` | 唯一状态机真值源，完全独立于 IDE |
+| **VS Code 扩展** | `extensions/agentils-vscode` | VS Code 交互层，可选增强（不承载业务逻辑） |
+| **CLI 配置工具** | `packages/cli` | 跨 IDE 配置注入工具（不承载业务逻辑） |
+
+## 核心原则
+
+### 三层职责边界
+
+- **packages/mcp** 管理所有状态和业务逻辑（task、run、approval、feedback、verify 的完整状态机和规则）
+- **extensions/agentils-vscode** 只做 UI 渲染和 MCP 桥接，不实现业务逻辑
+- **packages/cli** 只做配置注入，不包含运行时逻辑
+
+修改代码前，确认变更属于哪个包的职责。跨越职责边界的修改应当被阻止。
+
+### 单向数据流
+
+命令可以从多个入口（Gateway tools、LM tools、WebView events）进入，但派生状态必须只有一个真值源，并从该真值源向外投影。禁止在多个模块中重复计算核心状态。
+
+```
+Gateway (输入) → Orchestrator (逻辑) → Store (真值源) → 投影 (Resources / WebView)
+```
+
+### 状态真值源
+
+| 状态类型 | 真值源 |
+|----------|--------|
+| Run / TaskCard / Handoff / Session | `packages/mcp/src/store/memory-store.ts` |
+| Conversation state | `packages/mcp/src/store/conversation-store.ts` |
+| Task summary | `packages/mcp/src/store/summary-store.ts` |
+| Request-scoped interaction | `packages/mcp/src/gateway/context.ts` |
+
+### 交互协议
+
+- MCP 通过 `ctx.elicitUser()` 发起用户交互（基于 MCP elicitation 协议）
+- MCP 不关心 client 使用什么 UI 形态
+- 当前只有 VS Code Extension 是已实现的交互承接者
+- 无 Extension 时，elicitation 请求无处可发（失败或挂起），不是"UI 简化"
+
+## 降级形态
+
+### 有 VS Code Extension（完整形态）
+
+MCP Server → `ctx.elicitUser()` → ElicitationBridge → VS Code WebView → 用户操作 → 结果回传 MCP
+
+### 无 VS Code Extension（当前降级状态）
+
+- MCP Server 的 `ctx.elicitUser()` 无处可发 → error 或 pending
+- **这不是 "UI 简化"**，而是"交互链路断裂"
+- 协议层面支持任何声明了 elicitation capability 的 MCP client 承接
+- 但当前产品实现仅以 VS Code Extension 为唯一已实现的交互宿主
+
+## 开发规范
+
+- AgentILS 是 TypeScript runtime 控制平面，不是自由聊天 shell
+- 先阅读 `AGENTS.md`，再阅读 `.hc/codex-modular-debug.md`，然后根据问题分类查阅对应模块
+- 不要一开始就全仓扫描；从当前调用链和模块边界出发
+- 先分类问题属于哪条主链路：`task start`、`approval`、`feedback`、`verify`、`conversation state`、`summary`
+- 优先采用测试先行的开发方式
+- 先定义结构和 I/O 合同，再开始实现
+- 修改前对齐上游输出与下游输入合同
+- 优先相信类型合同，不猜测运行行为
+- 保持 conversation/task 工作流状态显式且可序列化
+- 使用 MCP resources 暴露状态可见性，而非隐藏在 prompt state 中
+- 使用 task summary document 作为跨任务的唯一权威继承状态
+- 禁止用自然语言摘要替代 `taskSummaryDocument` 或 `handoffPacket`
+- 区分 task completion（任务完成）和 conversation completion（对话结束）
+- 新任务入口必须显式；不从闲聊中隐式推断任务边界
+- Budget、policy、approval、feedback、override 检查是产品逻辑，不是 prompt 文本
+
+## Gateway 边界规则
+
+- Gateway 只负责：解析输入、创建 request context、调用 `ctx.elicitUser()`、委托给 orchestrator
+- Gateway 禁止直接执行域写入（如 run transitions、decision appends、override updates、control-mode transitions）
+
+## 执行法则（Control Modes）
+
+AgentILS 的三个执行法则受航空 Instrument Landing System (ILS) 启发：
+
+| 法则 | 值 | 特征 |
+|------|-----|------|
+| 正常法则 | `'normal'` | 标准收敛链路，AgentILS 按预定义流程推进 |
+| 备用法则 | `'alternate'` | 发现问题后用户确认执行，提高控制权 |
+| 直接法则 | `'direct'` | 最少干预，用户掌控方向（审计可见性不减少） |
+
+## 任务执行阶段
+
+在任务执行模式下，按以下阶段推进：
+
+`collect` → `confirm_elements` → `plan` → `approval` → `execute` → `handoff_prepare` → `verify` → `done`
+
+- 不得在 result verification、handoff verification、summary state 未对齐前标记任务完成
+- 高风险操作需要显式审批或用户 override 确认
+- 持久化：task state → `taskCard`，handoff state → `handoffPacket`，继承 state → summary document
