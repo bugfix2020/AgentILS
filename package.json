@@ -27,15 +27,6 @@
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },
-    "lint-staged": {
-        "*.{ts,tsx,js,mjs,cjs}": [
-            "eslint --fix",
-            "prettier --write"
-        ],
-        "*.{json,md,yaml,yml}": [
-            "prettier --write"
-        ]
-    },
     "devDependencies": {
         "@commitlint/cli": "^19.8.0",
         "@commitlint/config-conventional": "^19.8.0",
