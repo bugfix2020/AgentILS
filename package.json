@@ -1,26 +1,52 @@
 {
-  "name": "agentils-workspace",
-  "private": true,
-  "packageManager": "pnpm@10.14.0",
-  "scripts": {
-    "agentils:inject:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js inject vscode --workspace apps/vscode-debug",
-    "agentils:uninstall:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js uninstall vscode --workspace apps/vscode-debug",
-    "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
-    "dev:http": "pnpm --filter @agentils/mcp dev:http",
-    "generate:flowcharts": "node scripts/flowcharts/generate-all.mjs",
-    "sync:instructions": "node scripts/sync-agent-instructions.mjs",
-    "sync:instructions:check": "node scripts/sync-agent-instructions.mjs --check",
-    "smoke": "pnpm --filter @agentils/mcp smoke",
-    "start": "pnpm --filter @agentils/mcp start",
-    "start:http": "pnpm --filter @agentils/mcp start:http",
-    "test": "turbo run test",
-    "test:unit": "pnpm --filter @agentils/mcp test",
-    "typecheck": "turbo run typecheck",
-    "typecheck:vscode-host": "pnpm --filter agentils-vscode typecheck",
-    "verify:surfaces": "pnpm --filter agentils-vscode typecheck"
-  },
-  "devDependencies": {
-    "turbo": "^2.9.6"
-  }
+    "name": "agentils-workspace",
+    "private": true,
+    "packageManager": "pnpm@10.14.0",
+    "scripts": {
+        "agentils:install:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js install vscode --workspace apps/vscode-debug",
+        "agentils:uninstall:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js uninstall vscode --workspace apps/vscode-debug",
+        "build": "turbo run build",
+        "dev": "turbo run dev --parallel",
+        "dev:http": "pnpm --filter @agentils/mcp dev:http",
+        "generate:flowcharts": "node scripts/flowcharts/generate-all.mjs",
+        "sync:instructions": "node scripts/dev/sync-agent-instructions.mjs",
+        "sync:instructions:check": "node scripts/dev/sync-agent-instructions.mjs --check",
+        "smoke": "pnpm --filter @agentils/mcp smoke",
+        "start": "pnpm --filter @agentils/mcp start",
+        "start:http": "pnpm --filter @agentils/mcp start:http",
+        "start:webview": "pnpm --filter agentils-vscode-webview start",
+        "test": "turbo run test",
+        "test:unit": "pnpm --filter @agentils/mcp test",
+        "typecheck": "turbo run typecheck",
+        "typecheck:vscode-host": "pnpm --filter agentils-vscode typecheck",
+        "verify:surfaces": "pnpm --filter agentils-vscode typecheck",
+        "prepare": "husky",
+        "commit": "git-cz",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "lint-staged": {
+        "*.{ts,tsx,js,mjs,cjs}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,md,yaml,yml}": [
+            "prettier --write"
+        ]
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^19.8.0",
+        "@commitlint/config-conventional": "^19.8.0",
+        "@eslint/js": "^9.25.0",
+        "commitizen": "^4.3.1",
+        "cz-conventional-changelog": "^3.3.0",
+        "eslint": "^9.25.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.4.0",
+        "prettier": "^3.5.3",
+        "turbo": "^2.9.6",
+        "typescript-eslint": "^8.31.0"
+    }
 }

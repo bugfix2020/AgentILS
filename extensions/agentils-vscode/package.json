@@ -1,320 +1,119 @@
 {
-  "name": "agentils-vscode",
-  "displayName": "AgentILS",
-  "description": "VS Code task console scaffold for AgentILS conversation/task workflows",
-  "version": "0.1.0",
-  "publisher": "bugfix2020",
-  "engines": {
-    "vscode": "^1.90.0"
-  },
-  "categories": [
-    "Other",
-    "AI"
-  ],
-  "activationEvents": [
-    "onStartupFinished"
-  ],
-  "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "agentils.openTaskConsole",
-        "title": "AgentILS: Open Task Console"
-      },
-      {
-        "command": "agentils.newTask",
-        "title": "AgentILS: New Task"
-      },
-      {
-        "command": "agentils.continueTask",
-        "title": "AgentILS: Continue Task"
-      },
-      {
-        "command": "agentils.markTaskDone",
-        "title": "AgentILS: Mark Task Done"
-      },
-      {
-        "command": "agentils.acceptOverride",
-        "title": "AgentILS: Accept Override"
-      },
-      {
-        "command": "agentils.openSummary",
-        "title": "AgentILS: Open Summary"
-      },
-      {
-        "command": "agentils.installPromptPack",
-        "title": "AgentILS: Run Installer"
-      }
+    "name": "agentils-vscode",
+    "displayName": "AgentILS",
+    "description": "AgentILS V1 persistent WebView loop for VS Code",
+    "version": "1.0.0",
+    "publisher": "bugfix2020",
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "categories": [
+        "Other",
+        "AI"
     ],
-    "chatParticipants": [
-      {
-        "id": "agentils.agentils",
-        "name": "agentils",
-        "fullName": "AgentILS",
-        "description": "Start the AgentILS task console directly from chat.",
-        "isSticky": false
-      }
+    "activationEvents": [
+        "onStartupFinished"
     ],
-    "languageModelTools": [
-      {
-        "name": "agentils_start_conversation",
-        "displayName": "Start Conversation",
-        "modelDescription": "MANDATORY first tool for AgentILS custom prompts such as /agentils.run-code, /agentils.run-task, and #startnewtask when the request is concrete. Do not answer with plain text before calling this tool inside an AgentILS flow.",
-        "userDescription": "Start a new AgentILS task conversation.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "startConversation",
-        "icon": "$(play)",
-        "description": "Start a new AgentILS task conversation and return the latest runtime snapshot.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "title": {
-              "type": "string",
-              "description": "Task title"
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "agentils.installPromptPack",
+                "title": "AgentILS: Install Prompt Pack"
             },
-            "goal": {
-              "type": "string",
-              "description": "Desired outcome and constraints"
-            },
-            "controlMode": {
-              "type": "string",
-              "enum": [
-                "normal",
-                "alternate",
-                "direct"
-              ]
+            {
+                "command": "agentils.openPanel",
+                "title": "AgentILS: Open Panel"
             }
-          },
-          "required": [
-            "title",
-            "goal"
-          ]
-        },
-        "tags": [
-          "agentils",
-          "task",
-          "conversation",
-          "required",
-          "entry-point",
-          "always-use"
-        ]
-      },
-      {
-        "name": "agentils_continue_task",
-        "displayName": "Continue Task",
-        "modelDescription": "Use after an AgentILS task has started to advance the active task and record progress notes.",
-        "userDescription": "Continue the active AgentILS task.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "continueTask",
-        "icon": "$(debug-continue)",
-        "description": "Advance the active AgentILS task with an optional continuation note.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "note": {
-              "type": "string"
-            },
-            "preferredRunId": {
-              "type": "string"
-            }
-          }
-        },
-        "tags": [
-          "agentils",
-          "task"
-        ]
-      },
-      {
-        "name": "agentils_request_clarification",
-        "displayName": "Request Clarification",
-        "modelDescription": "MANDATORY first tool when an AgentILS custom prompt is missing blocking detail. Use this instead of asking a plain-text follow-up.",
-        "userDescription": "Ask the user for missing detail through AgentILS.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "requestClarification",
-        "icon": "$(comment-discussion)",
-        "description": "Request blocking clarification from the user through the AgentILS interaction panel.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "question": {
-              "type": "string"
-            },
-            "context": {
-              "type": "string"
-            },
-            "placeholder": {
-              "type": "string"
-            },
-            "required": {
-              "type": "boolean"
-            },
-            "preferredRunId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "question"
-          ]
-        },
-        "tags": [
-          "agentils",
-          "clarification",
-          "user-input"
-        ]
-      },
-      {
-        "name": "agentils_request_feedback",
-        "displayName": "Request Feedback",
-        "modelDescription": "Use at AgentILS decision points to collect continue/done/revise feedback through the AgentILS interaction panel.",
-        "userDescription": "Ask the user for feedback through AgentILS.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "requestFeedback",
-        "icon": "$(feedback)",
-        "description": "Request user feedback for the current AgentILS task state and persist the response.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "question": {
-              "type": "string"
-            },
-            "summary": {
-              "type": "string"
-            },
-            "allowedActions": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "continue",
-                  "done",
-                  "revise"
+        ],
+        "languageModelTools": [
+            {
+                "name": "agentils_run_task_loop",
+                "displayName": "Run Task Loop",
+                "modelDescription": "The only AgentILS V1 loop entry. Read state first, then drive the persistent WebView-backed MCP task loop.",
+                "userDescription": "Start or resume the AgentILS V1 task loop.",
+                "toolReferenceName": "runTaskLoop",
+                "description": "The only AgentILS V1 loop entry. Opens the persistent WebView and drives the MCP loop.",
+                "canBeReferencedInPrompt": true,
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "userIntent": {
+                            "type": "string",
+                            "description": "The current user request"
+                        },
+                        "taskId": {
+                            "type": "string"
+                        },
+                        "sessionId": {
+                            "type": "string"
+                        },
+                        "directive": {
+                            "type": "string",
+                            "enum": [
+                                "noop",
+                                "draft_plan",
+                                "request_clarification",
+                                "execute",
+                                "execution_succeeded",
+                                "execution_failed",
+                                "tests_passed",
+                                "tests_failed",
+                                "finish"
+                            ]
+                        }
+                    }
+                },
+                "tags": [
+                    "agentils",
+                    "loop",
+                    "entry-point"
                 ]
-              }
             },
-            "preferredRunId": {
-              "type": "string"
+            {
+                "name": "agentils_state_get",
+                "displayName": "State Get",
+                "modelDescription": "Read the current AgentILS V1 state before calling the loop tool.",
+                "userDescription": "Read the current AgentILS V1 task and session state.",
+                "toolReferenceName": "stateGet",
+                "description": "Read the current AgentILS V1 state before calling the loop tool.",
+                "canBeReferencedInPrompt": true,
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "taskId": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "tags": [
+                    "agentils",
+                    "state"
+                ]
             }
-          },
-          "required": [
-            "question"
-          ]
-        },
-        "tags": [
-          "agentils",
-          "feedback",
-          "user-input"
-        ]
-      },
-      {
-        "name": "agentils_request_approval",
-        "displayName": "Request Approval",
-        "modelDescription": "Use before risky AgentILS actions to collect explicit approval through the AgentILS interaction panel. Do not proceed without approval.",
-        "userDescription": "Ask the user to approve a risky AgentILS action.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "requestApproval",
-        "icon": "$(shield)",
-        "description": "Request approval for a risky AgentILS action and persist the approval decision.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "summary": {
-              "type": "string"
-            },
-            "riskLevel": {
-              "type": "string",
-              "enum": [
-                "low",
-                "medium",
-                "high"
-              ]
-            },
-            "targets": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "preferredRunId": {
-              "type": "string"
+        ],
+        "configuration": {
+            "title": "AgentILS",
+            "properties": {
+                "agentils.runtime.serverModulePath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional absolute path to the built AgentILS MCP server entrypoint."
+                }
             }
-          },
-          "required": [
-            "summary"
-          ]
-        },
-        "tags": [
-          "agentils",
-          "approval",
-          "risk"
-        ]
-      },
-      {
-        "name": "agentils_finish_conversation",
-        "displayName": "Finish Conversation",
-        "modelDescription": "Call this to finish the AgentILS conversation after the active tasks and gates are complete.",
-        "userDescription": "Attempt to finish the current AgentILS conversation.",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "finishConversation",
-        "icon": "$(check)",
-        "description": "Ask the AgentILS runtime to finish the current conversation if gates are satisfied.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "preferredRunId": {
-              "type": "string"
-            }
-          }
-        },
-        "tags": [
-          "agentils",
-          "conversation",
-          "finish"
-        ]
-      }
-    ],
-    "configuration": {
-      "title": "AgentILS",
-      "properties": {
-        "agentils.runtime.httpBaseUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Optional base URL for a running AgentILS HTTP debug server. Leave empty to use the local built MCP server."
-        },
-        "agentils.runtime.serverModulePath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional absolute path to the built AgentILS MCP server entrypoint. Defaults to the extension's sibling repo build output when available, otherwise <workspace>/packages/mcp/dist/index.js."
-        },
-        "agentils.runtime.controlPlaneModulePath": {
-          "type": "string",
-          "default": "",
-          "description": "Deprecated legacy setting for the old local control-plane path. Prefer agentils.runtime.serverModulePath."
-        },
-        "agentils.runtime.stateFilePath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional absolute path to the AgentILS state file. Defaults to <workspace>/.data/agentils-state.json."
-        },
-        "agentils.taskConsole.showStatusBar": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show the AgentILS status bar item."
         }
-      }
+    },
+    "scripts": {
+        "build": "npm --prefix ./webview run build && tsc -p .",
+        "watch": "tsc -p . -w",
+        "typecheck": "npm --prefix ./webview run typecheck && tsc -p . --noEmit"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.27.1"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.3",
+        "@types/vscode": "^1.90.0",
+        "typescript": "^5.8.3"
     }
-  },
-  "scripts": {
-    "build": "tsc -p . && pnpm --dir webview build",
-    "build:webview": "pnpm --dir webview build",
-    "watch": "tsc -p . -w",
-    "typecheck": "tsc -p . --noEmit && pnpm --dir webview typecheck"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1"
-  },
-  "devDependencies": {
-    "@types/node": "^22.15.3",
-    "@types/vscode": "^1.90.0",
-    "typescript": "^5.8.3"
-  }
 }
