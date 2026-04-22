@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>AgentILS C Logo Light</title>
+  <desc>Light-theme abstract tech-brand logo for AgentILS, focused on convergence, correction, and stable landing.</desc>
+  <defs>
+    <linearGradient id="bg" x1="84" y1="84" x2="428" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBFDFF"/>
+      <stop offset="1" stop-color="#F2F7FF"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="145" y1="145" x2="242" y2="242" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="366" y1="145" x2="269" y2="242" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C084FC"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="190" y1="251" x2="322" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <filter id="shadow" x="36" y="36" width="440" height="440" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#93A8C9" flood-opacity="0.20"/>
+    </filter>
+    <filter id="blur" x="120" y="120" width="272" height="272" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="72" width="368" height="368" rx="100" fill="url(#bg)"/>
+    <rect x="72.75" y="72.75" width="366.5" height="366.5" rx="99.25" stroke="#D7E3F3" stroke-width="1.5"/>
+  </g>
+
+  <circle cx="256" cy="256" r="78" fill="#A78BFA" fill-opacity="0.10" filter="url(#blur)"/>
+
+  <circle cx="256" cy="256" r="118" stroke="#64748B" stroke-opacity="0.10" stroke-width="2"/>
+  <circle cx="256" cy="256" r="86" stroke="#64748B" stroke-opacity="0.12" stroke-width="2"/>
+
+  <path d="M151 152C151 141.507 159.507 133 170 133H178.02C183.059 133 187.892 135.002 191.455 138.565L245.597 192.707C250.282 197.393 250.282 204.991 245.597 209.676L226.676 228.597C221.991 233.282 214.393 233.282 209.707 228.597L155.565 174.455C152.002 170.892 150 166.059 150 161.02V153C150 152.448 150.448 152 151 152Z" fill="url(#cyan)"/>
+
+  <path d="M361 152C361 141.507 352.493 133 342 133H333.98C328.941 133 324.108 135.002 320.545 138.565L266.403 192.707C261.718 197.393 261.718 204.991 266.403 209.676L285.324 228.597C290.009 233.282 297.607 233.282 302.293 228.597L356.435 174.455C359.998 170.892 362 166.059 362 161.02V153C362 152.448 361.552 152 361 152Z" fill="url(#violet)"/>
+
+  <circle cx="256" cy="202" r="18" fill="#FFFFFF"/>
+  <circle cx="256" cy="202" r="8" fill="#0F172A"/>
+
+  <path d="M201.101 249.101C206.96 243.243 216.456 243.243 222.314 249.101L256 282.787L289.686 249.101C295.544 243.243 305.04 243.243 310.899 249.101L330.899 269.101C336.757 274.96 336.757 284.456 330.899 290.314L266.607 354.607C260.748 360.466 251.252 360.466 245.393 354.607L181.101 290.314C175.243 284.456 175.243 274.96 181.101 269.101L201.101 249.101Z" fill="url(#mint)"/>
+
+  <path d="M245 208C245 201.373 250.373 196 257 196H255C261.627 196 267 201.373 267 208V320C267 326.922 263.233 333.295 257.167 336.629L256 337.271L254.833 336.629C248.767 333.295 245 326.922 245 320V208Z" fill="#0F172A"/>
+
+  <rect x="250.5" y="228" width="11" height="20" rx="5.5" fill="#FFFFFF"/>
+  <rect x="250.5" y="258" width="11" height="16" rx="5.5" fill="#FFFFFF" opacity="0.82"/>
+  <rect x="250.5" y="284" width="11" height="12" rx="5.5" fill="#FFFFFF" opacity="0.62"/>
+
+  <rect x="214" y="362" width="84" height="22" rx="11" fill="#0F172A"/>
+  <rect x="227" y="367" width="13" height="12" rx="6" fill="#F8FAFC"/>
+  <rect x="249.5" y="367" width="13" height="12" rx="6" fill="#F8FAFC"/>
+  <rect x="272" y="367" width="13" height="12" rx="6" fill="#F8FAFC"/>
+</svg>

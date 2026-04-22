@@ -1,14 +1,7 @@
-import type { TaskConsoleMessage } from './types'
-
-declare global {
-  interface Window {
-    __AGENTILS_BOOTSTRAP__?: unknown
-    acquireVsCodeApi?: () => { postMessage: (message: TaskConsoleMessage) => void }
-  }
-}
+import type { WebviewToHostMessage } from './protocol'
 
 const vscode = window.acquireVsCodeApi?.()
 
-export function postMessage(message: TaskConsoleMessage) {
+export function postMessage(message: WebviewToHostMessage) {
   vscode?.postMessage(message)
 }

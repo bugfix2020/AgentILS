@@ -1,10 +1,20 @@
 import {
-  BulbOutlined,
+  AppstoreAddOutlined,
   CloudUploadOutlined,
+  CommentOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  EllipsisOutlined,
+  FileSearchOutlined,
   GlobalOutlined,
+  HeartOutlined,
   PaperClipOutlined,
+  ProductOutlined,
   QuestionCircleOutlined,
-  WarningOutlined,
+  ScheduleOutlined,
+  ShareAltOutlined,
+  SmileOutlined,
+  SyncOutlined,
 } from '@ant-design/icons'
 import type { ActionsFeedbackProps, BubbleListProps, ThoughtChainItemProps } from '@ant-design/x'
 import {
@@ -14,6 +24,7 @@ import {
   Conversations,
   Prompts,
   Sender,
+  Suggestion,
   Think,
   ThoughtChain,
   Welcome,
@@ -32,13 +43,14 @@ import {
   XModelResponse,
   XRequest,
 } from '@ant-design/x-sdk'
-import { Avatar, Button, Card, Flex, type GetProp, message, Modal, Space, Tag } from 'antd'
+import { Avatar, Button, Flex, type GetProp, message, Pagination, Space } from 'antd'
 import { createStyles } from 'antd-style'
+import dayjs from 'dayjs'
 import React, { useRef, useState } from 'react'
 import '@ant-design/x-markdown/themes/light.css'
 import { BubbleListRef } from '@ant-design/x/es/bubble'
-import logoUrl from './assets/AgentILS_logo_C_light.svg'
 
+// ==================== Local Locale Mock ====================
 const locale = {
   howToQuicklyInstallAndImportComponents: '如何快速执行重构？',
   curConversation: '当前',
@@ -88,6 +100,7 @@ const locale = {
   askOrInputUseSkills: '输入任意需求，或使用 / 获取快速指令',
 }
 
+// ==================== Style ====================
 const useStyle = createStyles(({ token, css }) => {
   return {
     layout: css`
@@ -150,6 +163,18 @@ const useStyle = createStyles(({ token, css }) => {
         background-position: bottom;
       }
     `,
+    chatPrompt: css`
+      .ant-prompts-label {
+        color: #000000e0 !important;
+      }
+      .ant-prompts-desc {
+        color: #000000a6 !important;
+        width: 100%;
+      }
+      .ant-prompts-icon {
+        color: #000000a6 !important;
+      }
+    `,
     chatList: css`
       flex: 1;
       overflow-y: auto;
@@ -164,104 +189,63 @@ const useStyle = createStyles(({ token, css }) => {
       padding: ${token.paddingLG}px;
       box-sizing: border-box;
     `,
-    welcomeMarquee: css`
-      position: relative;
-      width: 100%;
-      overflow: hidden;
-      border-radius: 24px;
-      background: ${token.colorBgContainer};
-      box-shadow: 0 16px 40px rgba(16, 24, 40, 0.08);
-
-      &::before {
-        content: '';
-        position: absolute;
-        width: 160%;
-        height: 320%;
-        left: -30%;
-        top: -110%;
-        background: conic-gradient(from 0deg, #7c8cff, #57c7ff, #ff965d, #ff5da8, #7c8cff);
-        animation: borderSpin 4s linear infinite;
-        pointer-events: none;
-      }
-
-      &::after {
-        content: '';
-        position: absolute;
-        inset: 1px;
-        border-radius: 23px;
-        background: ${token.colorBgContainer};
-        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
-      }
-
-      > * {
-        position: relative;
-        z-index: 1;
-      }
-
-      @keyframes borderSpin {
-        to {
-          transform: rotate(1turn);
-        }
-      }
-    `,
     sender: css`
       width: 100%;
       max-width: 840px;
-    `,
-    suggestionWrapper: css`
-      width: 100%;
-      padding: 8px 20px 16px;
-      box-sizing: border-box;
     `,
     senderPrompt: css`
       width: 100%;
       max-width: 840px;
       margin: 0 auto;
       color: ${token.colorText};
-
-      .ant-prompts-title {
-        color: rgba(0, 0, 0, 0.45);
-      }
-
-      .ant-prompts-label {
-        color: rgba(0, 0, 0, 0.88) !important;
-      }
-
-      .ant-prompts-desc {
-        color: rgba(0, 0, 0, 0.55) !important;
-      }
     `,
   }
 })
 
-const HISTORY_MESSAGES: { [key: string]: DefaultMessageInfo<ChatMessage>[] } = {}
+// ==================== Static Config ====================
+const HISTORY_MESSAGES: { [key: string]: DefaultMessageInfo<ChatMessage>[] } = {
+  'default-1': [
+    { message: { role: 'user', content: '重构一下这部分 Auth 逻辑' }, status: 'success' },
+    {
+      message: {
+        role: 'assistant',
+        content: '<think>\n检测到需要重构 Auth 逻辑，由于目前使用旧版方案，应当升级为 JWT。\n</think>\n已提取 3 处需重构项。\n\n根据计划，我们需要修改 `auth.ts`。由于修改影响面较广，这里需要您先确认计划是否符合预期：',
+        extraInfo: { requiresConfirm: true },
+      },
+      status: 'success',
+    },
+  ],
+  'default-2': [
+    { message: { role: 'user', content: locale.newAgiHybridInterface }, status: 'success' },
+    { message: { role: 'assistant', content: locale.aiMessage_1 }, status: 'success' },
+  ],
+}
 
 const DEFAULT_CONVERSATIONS_ITEMS = [
-  { key: 'default-1', label: '什么是 AgentILS?', group: locale.today, status: '进行中' },
-  { key: 'default-2', label: '如何快速安装组件?', group: locale.today, status: '已完成' },
-  { key: 'default-3', label: '全新的 AGI 混合界面', group: locale.yesterday, status: '已失败' },
-  { key: 'default-4', label: '有哪些组件?', group: locale.yesterday, status: '已取消' },
+  { key: 'default-1', label: '重构 Auth 服务', group: locale.today },
+  { key: 'default-2', label: '集成 Stripe 支付', group: locale.yesterday },
 ]
 
-const promptItems: GetProp<typeof Prompts, 'items'> = [
-  {
-    key: 'newtask',
-    label: '/newtask',
-    description: 'Create a new task or project session',
-    icon: <BulbOutlined style={{ color: '#f5c84c' }} />,
-  },
-  {
-    key: 'exitConversation',
-    label: '/exitConversation',
-    description: 'Clean up to exit current conversation context',
-    icon: <GlobalOutlined style={{ color: '#7b61ff' }} />,
-  },
-  {
-    key: 'direct',
-    label: '/direct',
-    description: 'Switch to direct conversation mode',
-    icon: <WarningOutlined style={{ color: '#f06a5f' }} />,
-  },
+const HOT_TOPICS = {
+  key: '1',
+  label: locale.hotTopics,
+  children: [
+    {
+      key: '1-1',
+      description: '继续执行当前推荐的操作',
+      icon: <span style={{ color: '#5b7cfa', fontWeight: 700 }}>1</span>,
+    },
+    {
+      key: '1-2',
+      description: '放弃当前任务，重新规划',
+      icon: <span style={{ color: '#ff6565', fontWeight: 700 }}>2</span>,
+    },
+  ],
+}
+
+const SENDER_PROMPTS: GetProp<typeof Prompts, 'items'> = [
+  { key: '1', description: locale.components, icon: <ProductOutlined /> },
+  { key: '2', description: locale.richGuide, icon: <FileSearchOutlined /> },
 ]
 
 const THOUGHT_CHAIN_CONFIG = {
@@ -272,6 +256,7 @@ const THOUGHT_CHAIN_CONFIG = {
   abort: { title: locale.aborted, status: 'abort' },
 }
 
+// ==================== Type ====================
 interface ChatMessage extends XModelMessage {
   extraInfo?: {
     feedback?: ActionsFeedbackProps['value']
@@ -279,11 +264,13 @@ interface ChatMessage extends XModelMessage {
   }
 }
 
+// ==================== Context ====================
 const ChatContext = React.createContext<{
   onReload?: ReturnType<typeof useXChat>['onReload']
   setMessage?: ReturnType<typeof useXChat<ChatMessage>>['setMessage']
 }>({})
 
+// ==================== Sub Component ====================
 const ThinkComponent = React.memo((props: ComponentProps) => {
   const [title, setTitle] = React.useState(`${locale.deepThinking}...`)
   const [loading, setLoading] = React.useState(true)
@@ -293,7 +280,11 @@ const ThinkComponent = React.memo((props: ComponentProps) => {
       setLoading(false)
     }
   }, [props.streamStatus])
-  return <Think title={title} loading={loading}>{props.children}</Think>
+  return (
+    <Think title={title} loading={loading}>
+      {props.children}
+    </Think>
+  )
 })
 
 const Footer: React.FC<{
@@ -303,9 +294,10 @@ const Footer: React.FC<{
   extraInfo?: ChatMessage['extraInfo']
 }> = ({ id, content, extraInfo, status }) => {
   const context = React.useContext(ChatContext)
-
+  
   if (status === 'updating' || status === 'loading') return null
 
+  // 渲染确认交互按钮，满足“最后在需要用户确认的时候是在聊天窗口中渲染确认按钮”的要求
   if (extraInfo?.requiresConfirm) {
     return (
       <Space style={{ marginTop: 12 }}>
@@ -325,7 +317,7 @@ const Footer: React.FC<{
     )
   }
 
-  const items = [
+  const Items = [
     { key: 'copy', actionRender: <Actions.Copy text={content} /> },
     {
       key: 'feedback',
@@ -334,7 +326,7 @@ const Footer: React.FC<{
           styles={{ liked: { color: '#5b7cfa' } }}
           value={extraInfo?.feedback || 'default'}
           key="feedback"
-          onChange={(val: ActionsFeedbackProps['value']) => {
+          onChange={(val) => {
             if (id) {
               context?.setMessage?.(id, () => ({ extraInfo: { ...extraInfo, feedback: val } }))
               message.success(`${id}: ${val}`)
@@ -344,9 +336,11 @@ const Footer: React.FC<{
       ),
     },
   ]
-  return <div style={{ display: 'flex', marginTop: 12 }}>{id && <Actions items={items} />}</div>
+  return <div style={{ display: 'flex', marginTop: 12 }}>{id && <Actions items={Items} />}</div>
 }
 
+// ==================== Chat Provider ====================
+// 使用虚拟的 provider 阻断对外部的真实 HTTP 请求以免报错，只为了 UI 展示
 const providerCaches = new Map<string, DeepSeekChatProvider>()
 const providerFactory = (conversationKey: string) => {
   if (!providerCaches.get(conversationKey)) {
@@ -357,14 +351,15 @@ const providerFactory = (conversationKey: string) => {
           'https://api.x.ant.design/api/big_model_glm-4.5-flash',
           { manual: true, params: { stream: true, model: 'glm-4.5-flash' } },
         ),
-      }),
+      })
     )
   }
   return providerCaches.get(conversationKey)
 }
 
-const historyMessageFactory = (conversationKey: string): DefaultMessageInfo<ChatMessage>[] =>
-  HISTORY_MESSAGES[conversationKey] || []
+const historyMessageFactory = (conversationKey: string): DefaultMessageInfo<ChatMessage>[] => {
+  return HISTORY_MESSAGES[conversationKey] || []
+}
 
 const getRole = (): BubbleListProps['role'] => ({
   assistant: {
@@ -384,7 +379,7 @@ const getRole = (): BubbleListProps['role'] => ({
     footer: (content, { status, key, extraInfo }) => (
       <Footer content={content} status={status} extraInfo={extraInfo as ChatMessage['extraInfo']} id={key as string} />
     ),
-    contentRender: (content: string, { status }) => {
+    contentRender: (content: any, { status }) => {
       const newContent = content.replace(/\n\n/g, '<br/><br/>')
       return (
         <XMarkdown
@@ -404,32 +399,22 @@ const getRole = (): BubbleListProps['role'] => ({
   user: { placement: 'end' },
 })
 
-function renderStatusTag(status?: string) {
-  if (!status) return null
-
-  const colorMap: Record<string, string> = {
-    '进行中': 'processing',
-    '已完成': 'success',
-    '已失败': 'error',
-    '已取消': 'default',
-  }
-
-  return <Tag color={colorMap[status] ?? 'default'}>{status}</Tag>
-}
-
 export function App() {
   const { styles } = useStyle()
-  const { conversations, activeConversationKey, setActiveConversationKey } =
+  
+  // ==================== State ====================
+  const { conversations, activeConversationKey, setActiveConversationKey, addConversation, setConversations } =
     useXConversations({
       defaultConversations: DEFAULT_CONVERSATIONS_ITEMS,
       defaultActiveConversationKey: DEFAULT_CONVERSATIONS_ITEMS[0].key,
     })
-  const [, contextHolder] = message.useMessage()
+  const [messageApi, contextHolder] = message.useMessage()
   const [attachmentsOpen, setAttachmentsOpen] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState<GetProp<typeof Attachments, 'items'>>([])
   const [inputValue, setInputValue] = useState('')
   const listRef = useRef<BubbleListRef>(null)
 
+  // ==================== Runtime ====================
   const { onRequest, messages, isRequesting, abort, onReload, setMessage } = useXChat<ChatMessage>({
     provider: providerFactory(activeConversationKey),
     conversationKey: activeConversationKey,
@@ -440,43 +425,61 @@ export function App() {
     },
   })
 
+  // ==================== Event ====================
   const onSubmit = (val: string) => {
     if (!val) return
+    // 对于 Mock，直接注入假响应
     onRequest({ messages: [{ role: 'user', content: val }] })
     listRef.current?.scrollTo({ top: 'bottom' })
     setActiveConversationKey(activeConversationKey)
   }
 
+  // ==================== Nodes ====================
   const chatSide = (
     <div className={styles.side}>
       <div className={styles.logo}>
-        <img src={logoUrl} draggable={false} alt="AgentILS logo" width={32} height={32} />
+        <div style={{
+          width: 24, height: 24, background: 'linear-gradient(135deg, #8eb0ff 0%, #5b7cfa 100%)',
+          borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+        }}>
+          ILS
+        </div>
         <span>AgentILS</span>
       </div>
       <Conversations
-        items={conversations.map((item) => {
-          const { key, label, status, ...other } = item as unknown as (typeof DEFAULT_CONVERSATIONS_ITEMS)[number]
-          return {
-            key,
-            label: (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: 8, minWidth: 0 }}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {label}
-                </span>
-                <div style={{ flexShrink: 0 }}>{renderStatusTag(status)}</div>
-              </div>
-            ),
-            ...other,
-          }
-        })}
+        creation={{
+          onClick: () => {
+            const now = dayjs().valueOf().toString()
+            addConversation({ key: now, label: `${locale.newConversation} ${conversations.length + 1}`, group: locale.today })
+            setActiveConversationKey(now)
+          },
+        }}
+        items={conversations.map(({ key, label, ...other }) => ({
+          key,
+          label: key === activeConversationKey ? `[${locale.curConversation}] ${label}` : label,
+          ...other,
+        }))}
         className={styles.conversations}
         activeKey={activeConversationKey}
         onActiveChange={setActiveConversationKey}
         groupable
         styles={{ item: { padding: '0 8px' } }}
+        menu={(conversation) => ({
+          items: [
+            { label: locale.rename, key: 'rename', icon: <EditOutlined /> },
+            {
+              label: locale.delete, key: 'delete', icon: <DeleteOutlined />, danger: true,
+              onClick: () => {
+                const newList = conversations.filter((item) => item.key !== conversation.key)
+                setConversations(newList)
+                if (conversation.key === activeConversationKey) setActiveConversationKey(newList?.[0]?.key || '')
+              },
+            },
+          ],
+        })}
       />
       <div className={styles.sideFooter}>
-        <Avatar size={24} />
+        <Avatar size={24} style={{ background: '#5b7cfa' }}>U</Avatar>
         <Button type="text" icon={<QuestionCircleOutlined />} />
       </div>
     </div>
@@ -487,27 +490,38 @@ export function App() {
       {messages?.length ? (
         <Bubble.List
           ref={listRef}
-          items={messages?.map((item) => ({
-            ...item.message,
-            key: item.id,
-            status: item.status,
-            loading: item.status === 'loading',
-            extraInfo: item.extraInfo,
+          items={messages?.map((i) => ({
+            ...i.message,
+            key: i.id,
+            status: i.status,
+            loading: i.status === 'loading',
+            extraInfo: i.extraInfo,
           }))}
           styles={{ root: { maxWidth: 940 } }}
           role={getRole()}
         />
       ) : (
-        <Flex vertical gap={16} align="center" className={styles.placeholder} style={{ maxWidth: 840, margin: 'auto' }}>
-          <Card className={styles.welcomeMarquee} bordered={false}>
-            <Welcome
-              style={{ width: '100%', position: 'relative', zIndex: 1 }}
-              variant="borderless"
-              icon={<img src={logoUrl} draggable={false} alt="AgentILS logo" width={48} height={48} />}
-              title="嘿，你好，我是 AgentILS"
-              description="Dear pilot, welcome onboarding. you can ask me anything or input / to get started!"
+        <Flex vertical style={{ maxWidth: 840 }} gap={16} align="center" className={styles.placeholder}>
+          <Welcome
+            style={{ width: '100%' }}
+            variant="borderless"
+            icon="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*s5sNRo5LjfQAAAAAAAAAAAAADgCCAQ/fmt.webp"
+            title={locale.welcome}
+            description={locale.welcomeDescription}
+            extra={<Space><Button icon={<ShareAltOutlined />} /><Button icon={<EllipsisOutlined />} /></Space>}
+          />
+          <Flex gap={16} justify="center" style={{ width: '100%' }}>
+            <Prompts
+              items={[HOT_TOPICS]}
+              styles={{
+                list: { height: '100%' },
+                item: { flex: 1, backgroundImage: 'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)', borderRadius: 12, border: 'none' },
+                subItem: { padding: 0, background: 'transparent' },
+              }}
+              onItemClick={(info) => onSubmit(info.data.description as string)}
+              className={styles.chatPrompt}
             />
-          </Card>
+          </Flex>
         </Flex>
       )}
     </div>
@@ -524,66 +538,66 @@ export function App() {
         beforeUpload={() => false}
         items={attachedFiles}
         onChange={(info) => setAttachedFiles(info.fileList)}
-        placeholder={(type) =>
-          type === 'drop'
-            ? { title: locale.dropFileHere }
-            : {
-                icon: <CloudUploadOutlined />,
-                title: locale.uploadFiles,
-                description: locale.clickOrDragFilesToUpload,
-              }
-        }
+        placeholder={(type) => type === 'drop' ? { title: locale.dropFileHere } : { icon: <CloudUploadOutlined />, title: locale.uploadFiles, description: locale.clickOrDragFilesToUpload }}
       />
     </Sender.Header>
   )
 
   const chatSender = (
-    <Flex vertical gap={12} align="center" className={styles.suggestionWrapper} style={{ margin: '0 auto', padding: '8px 0' }}>
-      {(!messages || messages.length === 0) && !attachmentsOpen && (
+    <Flex vertical gap={12} align="center" style={{ margin: 8 }}>
+      {!attachmentsOpen && (
         <Prompts
-          fadeInLeft={true}
-          title="✨ Inspirational Sparks and Marvelous Tips"
-          items={promptItems}
-          onItemClick={(info) => {
-            Modal.confirm({
-              title: '确认触发指令',
-              content: `您确定要执行指令 ${info.data.label} 吗？`,
-              onOk() {
-                onSubmit(info.data.label as string)
-                setInputValue('')
-              },
-            })
-          }}
+          items={SENDER_PROMPTS}
+          onItemClick={(info) => onSubmit(info.data.description as string)}
+          styles={{ item: { padding: '6px 12px' } }}
           className={styles.senderPrompt}
         />
       )}
-
-      <Sender
-        value={inputValue}
-        header={senderHeader}
-        onSubmit={() => {
-          onSubmit(inputValue)
-          setInputValue('')
+      
+      {/* 使用 Suggestion 提供 /newtask 等快速提示 */}
+      <Suggestion
+        items={[
+          { label: '/newtask 开启新任务', value: '/newtask' },
+          { label: '/exitConversation 结束本次会话', value: '/exitConversation' },
+          { label: '/direct 进入直接交流模式', value: '/direct' }
+        ]}
+        onSelect={(value) => {
+          setInputValue(value)
         }}
-        onChange={setInputValue}
-        onCancel={abort}
-        prefix={
-          <Button
-            type="text"
-            icon={<PaperClipOutlined style={{ fontSize: 18 }} />}
-            onClick={() => setAttachmentsOpen(!attachmentsOpen)}
+      >
+        {({ onTrigger, onKeyDown }) => (
+          <Sender
+            value={inputValue}
+            header={senderHeader}
+            onSubmit={() => {
+              onSubmit(inputValue)
+              setInputValue('')
+            }}
+            onChange={(val) => {
+              setInputValue(val)
+              onTrigger(val)
+            }}
+            onKeyDown={onKeyDown}
+            onCancel={abort}
+            prefix={
+              <Button
+                type="text"
+                icon={<PaperClipOutlined style={{ fontSize: 18 }} />}
+                onClick={() => setAttachmentsOpen(!attachmentsOpen)}
+              />
+            }
+            loading={isRequesting}
+            className={styles.sender}
+            allowSpeech
+            placeholder={locale.askOrInputUseSkills}
           />
-        }
-        loading={isRequesting}
-        className={styles.sender}
-        allowSpeech
-        placeholder={locale.askOrInputUseSkills}
-      />
+        )}
+      </Suggestion>
     </Flex>
   )
 
   return (
-    <XProvider>
+    <XProvider locale={{}}>
       <ChatContext.Provider value={{ onReload, setMessage }}>
         {contextHolder}
         <div className={styles.layout}>
