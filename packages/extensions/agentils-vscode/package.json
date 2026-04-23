@@ -1,0 +1,144 @@
+{
+    "name": "agentils-vscode",
+    "displayName": "AgentILS",
+    "description": "AgentILS (Intelligent Logical System) — single-billing multi-turn human-in-the-loop for Copilot Chat",
+    "version": "0.1.0",
+    "private": true,
+    "publisher": "agentils",
+    "engines": {
+        "vscode": "^1.95.0"
+    },
+    "main": "./dist/extension.js",
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "categories": [
+        "Other"
+    ],
+    "contributes": {
+        "languageModelTools": [
+            {
+                "name": "request_user_clarification",
+                "displayName": "Request User Clarification",
+                "modelDescription": "Ask the user a clarifying question. Blocks until the user submits a response in the AgentILS panel.",
+                "toolReferenceName": "requestUserClarification",
+                "canBeReferencedInPrompt": true,
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string"
+                        },
+                        "context": {
+                            "type": "string"
+                        },
+                        "placeholder": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "question"
+                    ]
+                }
+            },
+            {
+                "name": "request_contact_user",
+                "displayName": "Contact User",
+                "modelDescription": "Proactively contact the user with a message.",
+                "toolReferenceName": "requestContactUser",
+                "canBeReferencedInPrompt": true,
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string"
+                        },
+                        "context": {
+                            "type": "string"
+                        },
+                        "placeholder": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "question"
+                    ]
+                }
+            },
+            {
+                "name": "request_user_feedback",
+                "displayName": "Request User Feedback",
+                "modelDescription": "Collect feedback from the user after a task.",
+                "toolReferenceName": "requestUserFeedback",
+                "canBeReferencedInPrompt": true,
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string"
+                        },
+                        "context": {
+                            "type": "string"
+                        },
+                        "placeholder": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "question"
+                    ]
+                }
+            },
+            {
+                "name": "request_dynamic_action",
+                "displayName": "Dynamic Action",
+                "modelDescription": "Generic AgentILS action dispatch (action + params).",
+                "toolReferenceName": "requestDynamicAction",
+                "canBeReferencedInPrompt": true,
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string"
+                        },
+                        "params": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "action"
+                    ]
+                }
+            }
+        ],
+        "configuration": {
+            "title": "AgentILS",
+            "properties": {
+                "agentils.mcp.httpUrl": {
+                    "type": "string",
+                    "default": "http://127.0.0.1:8788",
+                    "description": "AgentILS MCP HTTP bridge URL."
+                },
+                "agentils.mcp.autoStart": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Auto-start a local MCP server on extension activation."
+                }
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@agentils/mcp": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.3",
+        "@types/vscode": "^1.95.0",
+        "tsup": "^8.5.1",
+        "typescript": "^5.8.3"
+    }
+}

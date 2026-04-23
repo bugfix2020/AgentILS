@@ -3,20 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'interaction/index': 'src/interaction/interaction-loop.ts',
-    'interaction/sampling': 'src/interaction/sampling-client.ts',
-    'interaction/channel-mcp': 'src/interaction/channel-mcp.ts',
-    'interaction/channel-hc': 'src/interaction/channel-hc.ts',
-    'gateway/index': 'src/gateway/gateway.ts',
-    'orchestrator/index': 'src/orchestrator/index.ts',
-    'control-plane/index': 'src/control-plane/index.ts',
-    'store/index': 'src/store/index.ts',
-    'summary/index': 'src/summary/index.ts',
-    'control/index': 'src/control/index.ts',
-    'audit/index': 'src/audit/audit-logger.ts',
-    'budget/index': 'src/budget/budget-checker.ts',
-    'policy/index': 'src/policy/tool-policy-checker.ts',
-    'config/index': 'src/config/defaults.ts',
+    'client/index': 'src/client/index.ts',
     'types/index': 'src/types/index.ts',
   },
   format: ['esm'],
@@ -28,9 +15,8 @@ export default defineConfig({
   dts: true,
   splitting: true,
   treeshake: true,
-  minify: true,
+  minify: false,
   banner: {
     js: '#!/usr/bin/env node\n// AgentILS MCP Server',
   },
-  onSuccess: 'echo "[tsup] Build complete"',
 })

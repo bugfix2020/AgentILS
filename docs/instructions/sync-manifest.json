@@ -1,0 +1,28 @@
+{
+    "sources": [
+        {
+            "file": "agentils.instructions.md",
+            "summary": "AgentILS 通用开发规则（架构/数据流/test-first）"
+        },
+        {
+            "file": "mcp.instructions.md",
+            "summary": "packages/mcp 控制平面边界"
+        },
+        {
+            "file": "vscode-ext.instructions.md",
+            "summary": "extensions/agentils-vscode thin bridge 边界"
+        },
+        {
+            "file": "cli.instructions.md",
+            "summary": "packages/cli VS Code 配置注入器边界"
+        },
+        {
+            "file": "impl-debug.instructions.md",
+            "summary": "V1 实现层调试指引（按调用链定位问题）"
+        },
+        {
+            "file": "webview-source-of-truth.instructions.md",
+            "summary": "Webview 是产品真值源；protocol/host/mcp/cli 倒推改造规则"
+        }
+    ]
+}

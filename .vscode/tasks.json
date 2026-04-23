@@ -2,27 +2,37 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build:root",
-      "type": "npm",
-      "script": "build",
-      "path": "",
-      "group": "build",
+      "label": "build:mcp",
+      "type": "shell",
+      "command": "pnpm --filter @agentils/mcp build",
+      "problemMatcher": []
+    },
+    {
+      "label": "build:webview",
+      "type": "shell",
+      "command": "pnpm --filter agentils-vscode-webview build",
       "problemMatcher": []
     },
     {
       "label": "build:agentils-vscode",
-      "type": "npm",
-      "script": "build",
-      "path": "extensions/agentils-vscode",
-      "group": "build",
+      "type": "shell",
+      "command": "pnpm --filter agentils-vscode build",
       "problemMatcher": "$tsc"
+    },
+    {
+      "label": "ensure:debug-workspace",
+      "type": "shell",
+      "command": "mkdir -p apps/vscode-debug/.vscode && node -e \"const fs=require('fs');const p='apps/vscode-debug/.vscode/mcp.json';if(!fs.existsSync(p))fs.writeFileSync(p,JSON.stringify({servers:{agentils:{type:'stdio',command:'node',args:['../../packages/mcp/dist/index.js','--stdio']}}},null,2));\"",
+      "problemMatcher": []
     },
     {
       "label": "prepare:agentils-extensions",
       "dependsOrder": "sequence",
       "dependsOn": [
-        "build:root",
-        "build:agentils-vscode"
+        "build:mcp",
+        "build:webview",
+        "build:agentils-vscode",
+        "ensure:debug-workspace"
       ],
       "problemMatcher": []
     }

@@ -4,3 +4,4 @@ dist/
 .turbo/
 .DS_Store
 .env
+.agentils-logs/

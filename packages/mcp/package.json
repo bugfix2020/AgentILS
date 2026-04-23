@@ -1,109 +1,50 @@
 {
-  "name": "@agentils/mcp",
-  "version": "0.1.0",
-  "description": "AgentILS MCP control plane skeleton for disciplined agent workflows",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/bugfix2020/AgentILS.git"
-  },
-  "homepage": "https://github.com/bugfix2020/AgentILS",
-  "bugs": {
-    "url": "https://github.com/bugfix2020/AgentILS/issues"
-  },
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist",
-    "src",
-    "README.md"
-  ],
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+    "name": "@agentils/mcp",
+    "version": "0.1.0",
+    "description": "AgentILS core MCP server (stdio + HTTP dual transport, persisted state machine)",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "agentils-mcp": "./dist/index.js"
     },
-    "./interaction": {
-      "import": "./dist/interaction/index.js",
-      "types": "./dist/interaction/index.d.ts"
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./client": {
+            "types": "./dist/client/index.d.ts",
+            "import": "./dist/client/index.js"
+        },
+        "./types": {
+            "types": "./dist/types/index.d.ts",
+            "import": "./dist/types/index.js"
+        }
     },
-    "./interaction/sampling": {
-      "import": "./dist/interaction/sampling.js",
-      "types": "./dist/interaction/sampling.d.ts"
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "start": "node dist/index.js",
+        "start:http": "node dist/index.js --http",
+        "start:stdio": "node dist/index.js --stdio",
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/**/*.test.ts"
     },
-    "./interaction/channel-mcp": {
-      "import": "./dist/interaction/channel-mcp.js",
-      "types": "./dist/interaction/channel-mcp.d.ts"
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.27.1",
+        "express": "^5.1.0",
+        "zod": "^3.25.76"
     },
-    "./interaction/channel-hc": {
-      "import": "./dist/interaction/channel-hc.js",
-      "types": "./dist/interaction/channel-hc.d.ts"
-    },
-    "./gateway": {
-      "import": "./dist/gateway/index.js",
-      "types": "./dist/gateway/index.d.ts"
-    },
-    "./orchestrator": {
-      "import": "./dist/orchestrator/index.js",
-      "types": "./dist/orchestrator/index.d.ts"
-    },
-    "./control-plane": {
-      "import": "./dist/control-plane/index.js",
-      "types": "./dist/control-plane/index.d.ts"
-    },
-    "./store": {
-      "import": "./dist/store/index.js",
-      "types": "./dist/store/index.d.ts"
-    },
-    "./summary": {
-      "import": "./dist/summary/index.js",
-      "types": "./dist/summary/index.d.ts"
-    },
-    "./control": {
-      "import": "./dist/control/index.js",
-      "types": "./dist/control/index.d.ts"
-    },
-    "./audit": {
-      "import": "./dist/audit/index.js",
-      "types": "./dist/audit/index.d.ts"
-    },
-    "./budget": {
-      "import": "./dist/budget/index.js",
-      "types": "./dist/budget/index.d.ts"
-    },
-    "./policy": {
-      "import": "./dist/policy/index.js",
-      "types": "./dist/policy/index.d.ts"
-    },
-    "./config": {
-      "import": "./dist/config/index.js",
-      "types": "./dist/config/index.d.ts"
-    },
-    "./types": {
-      "import": "./dist/types/index.js",
-      "types": "./dist/types/index.d.ts"
+    "devDependencies": {
+        "@types/express": "^5.0.6",
+        "@types/node": "^22.15.3",
+        "tsup": "^8.5.1",
+        "tsx": "^4.19.4",
+        "typescript": "^5.8.3"
     }
-  },
-  "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "dev:http": "tsx src/index.ts --http",
-    "smoke": "node -e \"import('./dist/index.js').then((m) => { const runtime = m.createAgentGateServer(); console.log(JSON.stringify({ ok: !!runtime.server, name: runtime.config.serverName })); }).catch((error) => { console.error(error); process.exit(1); })\"",
-    "start": "node dist/index.js",
-    "start:http": "node dist/index.js --http",
-    "test": "tsx --test test/**/*.test.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "express": "^5.1.0",
-    "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^22.15.3",
-    "tsx": "^4.19.4",
-    "tsup": "^8.5.1",
-    "typescript": "^5.8.3"
-  }
 }

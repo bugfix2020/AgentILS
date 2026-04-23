@@ -1,0 +1,74 @@
+{
+  "agentils.templates.contact": [
+    {
+      "name": "clarify",
+      "template": "{{INPUT_CONTENT}}\n\n---\n\nPlease utilize the `search_subagent` tool to gather as much relevant information as possible. Do not yield control back to the user; instead, autonomously chain necessary tools.\n\nIf critical information is still missing after the search, use the `request_user_clarification` tool.\n\nOnce all requirements are clear, draft a complete plan. You MUST use the `request_user_feedback` tool to present this plan and request confirmation.\n\nDo not proceed to execute the plan until you receive explicit approval via the feedback tool."
+    },
+    {
+      "name": "feedback",
+      "template": "{{INPUT_CONTENT}}\n\n---\n\nAnalyze the user's request above.\n\n**Decision Logic:**\n\n1.  **IF the request is unclear, ambiguous, or risky:**\n    * Strictly use the `request_user_clarification` tool to resolve the issues.\n\n2.  **IF the request is clear and actionable:**\n    * Execute the task immediately.\n    * Upon completion, you **MUST** use the `request_user_feedback` tool to present the result.\n\n**Constraint:**\nDo not yield control back to the user via standard text output. You must terminate this turn by calling one of the above tools."
+    },
+    {
+      "name": "clear",
+      "template": "Clear your context information; previous content is outdated and should not be referenced going forward. Then prepare to accept a new task. Reminder: no matter what happens, never forget your principles. Please review your principles repository. Then use `request_contact_user` to contact the user; do not yield control back to the user.\n"
+    }
+  ],
+  "agentils.templates.feedback": [
+    {
+      "name": "feedback",
+      "template": "{{INPUT_CONTENT}}\n\n---\n\nAnalyze the user's request above.\n\n**Decision Logic:**\n\n1.  **IF the request is unclear, ambiguous, or risky:**\n    * Strictly use the `request_user_clarification` tool to resolve the issues.\n\n2.  **IF the request is clear and actionable:**\n    * Execute the task immediately.\n    * Upon completion, you **MUST** use the `request_user_feedback` tool to present the result.\n\n**Constraint:**\nDo not yield control back to the user via standard text output. You must terminate this turn by calling one of the above tools."
+    },
+    {
+      "name": "clarify",
+      "template": "{{INPUT_CONTENT}}\n\n---\n\nPlease utilize the `search_subagent` tool to gather as much relevant information as possible. Do not yield control back to the user; instead, autonomously chain necessary tools.\n\nIf critical information is still missing after the search, use the `request_user_clarification` tool.\n\nOnce all requirements are clear, draft a complete plan. You MUST use the `request_user_feedback` tool to present this plan and request confirmation.\n\nDo not proceed to execute the plan until you receive explicit approval via the feedback tool."
+    },
+    {
+      "name": "clear",
+      "template": "Clear your context information; previous content is outdated and should not be referenced going forward. Then prepare to accept a new task. Reminder: no matter what happens, never forget your principles. Please review your principles repository. Then use `request_contact_user` to contact the user; do not yield control back to the user.\n"
+    }
+  ],
+  "agentils.templates.clarification": [
+    {
+      "name": "clarify",
+      "template": "{{INPUT_CONTENT}}\n\n---\n\nPlease utilize the `search_subagent` tool to gather as much relevant information as possible. Do not yield control back to the user; instead, autonomously chain necessary tools.\n\nIf critical information is still missing after the search, use the `request_user_clarification` tool.\n\nOnce all requirements are clear, draft a complete plan. You MUST use the `request_user_feedback` tool to present this plan and request confirmation.\n\nDo not proceed to execute the plan until you receive explicit approval via the feedback tool."
+    },
+    {
+      "name": "feedback",
+      "template": "{{INPUT_CONTENT}}\n\n---\n\nAnalyze the user's request above.\n\n**Decision Logic:**\n\n1.  **IF the request is unclear, ambiguous, or risky:**\n    * Strictly use the `request_user_clarification` tool to resolve the issues.\n\n2.  **IF the request is clear and actionable:**\n    * Execute the task immediately.\n    * Upon completion, you **MUST** use the `request_user_feedback` tool to present the result.\n\n**Constraint:**\nDo not yield control back to the user via standard text output. You must terminate this turn by calling one of the above tools."
+    }
+  ],
+  "agentils.templates.global": [
+    {
+      "name": "subagent:plan",
+      "template": "Please start a **PLANNING AGENT** subagent based on the context information and the user-provided content in <user_plan_content>.\n\nUse the `runSubagent` tool to start a \"programming assistant\" subagent with `subagentType` set to `agentils.plan`.\n\nWhen the subagent completes the task, you must return the subagent's analysis results to the user intact via the `request_contact_user` tool and await the user's subsequent instructions. Do not yield control back to the user.\n\n<user_plan_content>\n{{INPUT_CONTENT}}\n</user_plan_content>"
+    },
+    {
+      "name": "subagent:gpt",
+      "template": "<requestDynamicAction>{\"action\":\"spawnWorker\",\"params\": {\"subagent\":\"agentils.subagent.gpt\",\"prompt\":\"询问用户需要帮忙完成什么任务。\"}}</requestDynamicAction>\n\n请重新调用 #tool:agentils.agentils-vscode/requestDynamicAction 工具，将 <requestDynamicAction/> 作为参数，来协助完成编码任务。"
+    },
+    {
+      "name": "subagent:codex",
+      "template": "<requestDynamicAction>{\"action\":\"spawnWorker\",\"params\": {\"subagent\":\"agentils.subagent.codex\",\"prompt\":\"询问用户需要帮忙完成什么任务。\"}}</requestDynamicAction>\n\n请重新调用 #tool:agentils.agentils-vscode/requestDynamicAction 工具，将 <requestDynamicAction/> 作为参数，来协助完成编码任务。"
+    },
+    {
+      "name": "subagent:gemini",
+      "template": "<requestDynamicAction>{\"action\":\"spawnWorker\",\"params\": {\"subagent\":\"agentils.subagent.gemini\",\"prompt\":\"询问用户需要帮忙完成什么任务。\"}}</requestDynamicAction>\n\n请重新调用 #tool:agentils.agentils-vscode/requestDynamicAction 工具，将 <requestDynamicAction/> 作为参数，来协助完成编码任务。"
+    },
+    {
+      "name": "subagent:haiku",
+      "template": "<requestDynamicAction>{\"action\":\"spawnWorker\",\"params\": {\"subagent\":\"agentils.subagent.haiku\",\"prompt\":\"询问用户需要帮忙完成什么任务。\"}}</requestDynamicAction>\n\n请重新调用 #tool:agentils.agentils-vscode/requestDynamicAction 工具，将 <requestDynamicAction/> 作为参数，来协助完成编码任务。"
+    },
+    {
+      "name": "subagent:sonnet",
+      "template": "<requestDynamicAction>{\"action\":\"spawnWorker\",\"params\": {\"subagent\":\"agentils.subagent.sonnet\",\"prompt\":\"询问用户需要帮忙完成什么任务。\"}}</requestDynamicAction>\n\n请重新调用 #tool:agentils.agentils-vscode/requestDynamicAction 工具，将 <requestDynamicAction/> 作为参数，来协助完成编码任务。"
+    },
+    {
+      "name": "subagent:opus",
+      "template": "<requestDynamicAction>{\"action\":\"spawnWorker\",\"params\": {\"subagent\":\"agentils.subagent.opus\",\"prompt\":\"询问用户需要帮忙完成什么任务。\"}}</requestDynamicAction>\n\n请重新调用 #tool:agentils.agentils-vscode/requestDynamicAction 工具，将 <requestDynamicAction/> 作为参数，来协助完成编码任务。"
+    },
+    {
+      "name": "finished",
+      "template": "[[SESSION_STOP]]"
+    }
+  ]
+}

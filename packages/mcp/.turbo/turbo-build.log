@@ -3,95 +3,25 @@
 > @agentils/mcp@0.1.0 build /Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/mcp
 > tsup
 
-[34mCLI[39m Building entry: {"index":"src/index.ts","interaction/index":"src/interaction/interaction-loop.ts","interaction/sampling":"src/interaction/sampling-client.ts","interaction/channel-mcp":"src/interaction/channel-mcp.ts","interaction/channel-hc":"src/interaction/channel-hc.ts","gateway/index":"src/gateway/gateway.ts","orchestrator/index":"src/orchestrator/index.ts","control-plane/index":"src/control-plane/index.ts","store/index":"src/store/index.ts","summary/index":"src/summary/index.ts","control/index":"src/control/index.ts","audit/index":"src/audit/audit-logger.ts","budget/index":"src/budget/budget-checker.ts","policy/index":"src/policy/tool-policy-checker.ts","config/index":"src/config/defaults.ts","types/index":"src/types/index.ts"}
+[34mCLI[39m Building entry: {"index":"src/index.ts","client/index":"src/client/index.ts","types/index":"src/types/index.ts"}
 [34mCLI[39m Using tsconfig: tsconfig.json
 [34mCLI[39m tsup v8.5.1
 [34mCLI[39m Using tsup config: /Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/mcp/tsup.config.ts
 [34mCLI[39m Target: node20
 [34mCLI[39m Cleaning output folder
 [34mESM[39m Build start
+Generated an empty chunk: "index".
+[32mESM[39m [1mdist/types/index.js        [22m[32m87.00 B[39m
+[32mESM[39m [1mdist/chunk-AOL5MAND.js     [22m[32m1.60 KB[39m
+[32mESM[39m [1mdist/client/index.js       [22m[32m142.00 B[39m
+[32mESM[39m [1mdist/index.js              [22m[32m10.67 KB[39m
+[32mESM[39m [1mdist/types/index.js.map    [22m[32m69.00 B[39m
+[32mESM[39m [1mdist/chunk-AOL5MAND.js.map [22m[32m3.98 KB[39m
+[32mESM[39m [1mdist/client/index.js.map   [22m[32m69.00 B[39m
+[32mESM[39m [1mdist/index.js.map          [22m[32m27.47 KB[39m
+[32mESM[39m ⚡️ Build success in 62ms
 DTS Build start
-[32mESM[39m [1mdist/budget/index.js                [22m[32m252.00 B[39m
-[32mESM[39m [1mdist/policy/index.js                [22m[32m232.00 B[39m
-[32mESM[39m [1mdist/config/index.js                [22m[32m140.00 B[39m
-[32mESM[39m [1mdist/summary/index.js               [22m[32m467.00 B[39m
-[32mESM[39m [1mdist/control/index.js               [22m[32m656.00 B[39m
-[32mESM[39m [1mdist/store/index.js                 [22m[32m531.00 B[39m
-[32mESM[39m [1mdist/interaction/channel-mcp.js     [22m[32m191.00 B[39m
-[32mESM[39m [1mdist/interaction/index.js           [22m[32m269.00 B[39m
-[32mESM[39m [1mdist/gateway/index.js               [22m[32m636.00 B[39m
-[32mESM[39m [1mdist/types/index.js                 [22m[32m1.89 KB[39m
-[32mESM[39m [1mdist/interaction/sampling.js        [22m[32m284.00 B[39m
-[32mESM[39m [1mdist/chunk-UM6RVRLT.js              [22m[32m299.00 B[39m
-[32mESM[39m [1mdist/chunk-JKSIBTOQ.js              [22m[32m37.22 KB[39m
-[32mESM[39m [1mdist/audit/index.js                 [22m[32m147.00 B[39m
-[32mESM[39m [1mdist/chunk-TND7SQYL.js              [22m[32m395.00 B[39m
-[32mESM[39m [1mdist/chunk-R4R7JR64.js              [22m[32m1.36 KB[39m
-[32mESM[39m [1mdist/chunk-3HNKNAX4.js              [22m[32m13.81 KB[39m
-[32mESM[39m [1mdist/chunk-XW5BTOQU.js              [22m[32m2.33 KB[39m
-[32mESM[39m [1mdist/chunk-WO74JCFR.js              [22m[32m460.00 B[39m
-[32mESM[39m [1mdist/chunk-U2O26MMX.js              [22m[32m859.00 B[39m
-[32mESM[39m [1mdist/chunk-TQ46V3LX.js              [22m[32m930.00 B[39m
-[32mESM[39m [1mdist/chunk-FZAT5Y4G.js              [22m[32m1.01 KB[39m
-[32mESM[39m [1mdist/chunk-R2APCG5W.js              [22m[32m15.46 KB[39m
-[32mESM[39m [1mdist/index.js                       [22m[32m2.55 KB[39m
-[32mESM[39m [1mdist/interaction/channel-hc.js      [22m[32m193.00 B[39m
-[32mESM[39m [1mdist/chunk-CFIDP46H.js              [22m[32m10.06 KB[39m
-[32mESM[39m [1mdist/orchestrator/index.js          [22m[32m527.00 B[39m
-[32mESM[39m [1mdist/control-plane/index.js         [22m[32m1004.00 B[39m
-[32mESM[39m [1mdist/chunk-GDIJLANJ.js              [22m[32m1.20 KB[39m
-[32mESM[39m [1mdist/chunk-FKQ6XJBS.js              [22m[32m16.31 KB[39m
-[32mESM[39m [1mdist/summary/index.js.map           [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/store/index.js.map             [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/interaction/channel-mcp.js.map [22m[32m480.00 B[39m
-[32mESM[39m [1mdist/control/index.js.map           [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/gateway/index.js.map           [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/types/index.js.map             [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/policy/index.js.map            [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/config/index.js.map            [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/budget/index.js.map            [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/audit/index.js.map             [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/chunk-UM6RVRLT.js.map          [22m[32m691.00 B[39m
-[32mESM[39m [1mdist/chunk-TND7SQYL.js.map          [22m[32m1.67 KB[39m
-[32mESM[39m [1mdist/interaction/index.js.map       [22m[32m867.00 B[39m
-[32mESM[39m [1mdist/chunk-JKSIBTOQ.js.map          [22m[32m122.50 KB[39m
-[32mESM[39m [1mdist/interaction/sampling.js.map    [22m[32m844.00 B[39m
-[32mESM[39m [1mdist/chunk-3HNKNAX4.js.map          [22m[32m55.39 KB[39m
-[32mESM[39m [1mdist/chunk-XW5BTOQU.js.map          [22m[32m9.64 KB[39m
-[32mESM[39m [1mdist/chunk-R2APCG5W.js.map          [22m[32m57.11 KB[39m
-[32mESM[39m [1mdist/chunk-U2O26MMX.js.map          [22m[32m3.18 KB[39m
-[32mESM[39m [1mdist/index.js.map                   [22m[32m805.00 B[39m
-[32mESM[39m [1mdist/chunk-CFIDP46H.js.map          [22m[32m35.78 KB[39m
-[32mESM[39m [1mdist/interaction/channel-hc.js.map  [22m[32m498.00 B[39m
-[32mESM[39m [1mdist/orchestrator/index.js.map      [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/control-plane/index.js.map     [22m[32m1.53 KB[39m
-[32mESM[39m [1mdist/chunk-GDIJLANJ.js.map          [22m[32m3.86 KB[39m
-[32mESM[39m [1mdist/chunk-FKQ6XJBS.js.map          [22m[32m72.06 KB[39m
-[32mESM[39m [1mdist/chunk-R4R7JR64.js.map          [22m[32m6.42 KB[39m
-[32mESM[39m [1mdist/chunk-TQ46V3LX.js.map          [22m[32m3.45 KB[39m
-[32mESM[39m [1mdist/chunk-FZAT5Y4G.js.map          [22m[32m3.20 KB[39m
-[32mESM[39m [1mdist/chunk-WO74JCFR.js.map          [22m[32m2.16 KB[39m
-[32mESM[39m ⚡️ Build success in 275ms
-[tsup] Build complete
-DTS ⚡️ Build success in 6342ms
-DTS dist/index.d.ts                     3.60 KB
-DTS dist/interaction/index.d.ts         648.00 B
-DTS dist/interaction/sampling.d.ts      374.00 B
-DTS dist/interaction/channel-mcp.d.ts   266.00 B
-DTS dist/interaction/channel-hc.d.ts    294.00 B
-DTS dist/control/index.d.ts             1.20 KB
-DTS dist/audit/index.d.ts               744.00 B
-DTS dist/budget/index.d.ts              363.00 B
-DTS dist/policy/index.d.ts              344.00 B
-DTS dist/config/index.d.ts              269.00 B
-DTS dist/summary/index.d.ts             987.00 B
-DTS dist/control-plane/index.d.ts       14.64 KB
-DTS dist/gateway/index.d.ts             2.62 KB
-DTS dist/orchestrator/index.d.ts        17.47 KB
-DTS dist/store/index.d.ts               10.92 KB
-DTS dist/types/index.d.ts               6.42 KB
-DTS dist/mode-transitions-C8H8j_S7.d.ts 722.00 B
-DTS dist/summary-schema-C_nJn4KP.d.ts   6.46 KB
-DTS dist/gate-evaluators-BbYPOo6u.d.ts  2.12 KB
-DTS dist/session-BT2CYtB1.d.ts          21.21 KB
-DTS dist/task-Dff0uR2y.d.ts             49.40 KB
+DTS ⚡️ Build success in 1091ms
+DTS dist/index.d.ts        2.72 KB
+DTS dist/client/index.d.ts 1.17 KB
+DTS dist/types/index.d.ts  1.44 KB

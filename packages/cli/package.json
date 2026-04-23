@@ -1,28 +1,30 @@
 {
-  "name": "@agentils/cli",
-  "version": "0.1.0",
-  "description": "AgentILS CLI for IDE prompt and instruction injection",
-  "type": "module",
-  "bin": {
-    "agentils": "./dist/index.js"
-  },
-  "files": [
-    "dist",
-    "templates"
-  ],
-  "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "test": "tsx --test test/**/*.test.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@agentils/mcp": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^22.15.3",
-    "tsx": "^4.19.4",
-    "tsup": "^8.5.1",
-    "typescript": "^5.8.3"
-  }
+    "name": "@agentils/cli",
+    "version": "0.1.0",
+    "description": "AgentILS CLI — replaces the VS Code extension installer (npx agentils init --vscode)",
+    "type": "module",
+    "bin": {
+        "agentils": "./dist/index.js",
+        "agentils-cli": "./dist/index.js"
+    },
+    "files": [
+        "dist",
+        "templates",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/**/*.test.ts"
+    },
+    "dependencies": {
+        "@agentils/mcp": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.3",
+        "tsup": "^8.5.1",
+        "tsx": "^4.19.4",
+        "typescript": "^5.8.3"
+    }
 }

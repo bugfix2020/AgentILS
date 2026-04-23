@@ -1,136 +1,132 @@
-import { AgentGateAuditLogger } from '../audit/audit-logger.js'
-import { evaluateBudget } from '../budget/budget-checker.js'
-import { evaluateToolPolicy, type PolicyContext } from '../policy/tool-policy-checker.js'
-import { AgentGateMemoryStore } from '../store/memory-store.js'
-import {
-  type ApprovalResult,
-  type FeedbackDecision,
-  type HandoffPacket,
-  type RunBudgetUsageDelta,
-  type StartRunInput,
-  type TaskCard,
-  type ConversationRecord,
+/**
+ * Core orchestration: parked-promise pool for pending interactions.
+ * Implements the "single billing, multi-turn" pattern: one tool call blocks
+ * here while the webview/UI submits a response via the HTTP bridge.
+ */
+import { randomUUID } from 'node:crypto'
+import type { JsonStore } from '../store/json-store.js'
+import type {
+  InteractionRequest,
+  InteractionResponse,
+  ToolName,
 } from '../types/index.js'
-import { AgentGateConversationOrchestrator } from './conversation-orchestrator.js'
-import {
-  AgentGateControlModeOrchestrator,
-  type ApprovalRequestContext,
-  type BeginApprovalRequestInput,
-} from './control-mode-orchestrator.js'
-import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
-import {
-  type VerifyRunResult,
-  type VerificationRequestContext,
-  AgentGateVerificationOrchestrator,
-} from './verification-orchestrator.js'
 
-export interface AgentGateOrchestratorRuntime {
-  conversation: AgentGateConversationOrchestrator
-  controlMode: AgentGateControlModeOrchestrator
-  task: AgentGateTaskOrchestrator
-  verification: AgentGateVerificationOrchestrator
+interface ParkedCall {
+  resolve: (res: InteractionResponse) => void
+  reject: (err: Error) => void
 }
 
-export class AgentGateOrchestrator {
-  readonly audit: AgentGateAuditLogger
-  readonly conversation: AgentGateConversationOrchestrator
-  readonly controlMode: AgentGateControlModeOrchestrator
-  readonly task: AgentGateTaskOrchestrator
-  readonly verification: AgentGateVerificationOrchestrator
+export class Orchestrator {
+  private readonly parked = new Map<string, ParkedCall>()
+  private readonly subscribers = new Set<(evt: SseEvent) => void>()
 
-  constructor(readonly store: AgentGateMemoryStore) {
-    this.audit = new AgentGateAuditLogger(store)
-    this.task = new AgentGateTaskOrchestrator(store, this.audit)
-    this.conversation = new AgentGateConversationOrchestrator(store, this.audit, this.task)
-    this.controlMode = new AgentGateControlModeOrchestrator(store, this.audit, this.task)
-    this.verification = new AgentGateVerificationOrchestrator(
-      store,
-      this.audit,
-      this.task,
-      this.conversation,
-    )
+  constructor(
+    private readonly store: JsonStore,
+    private readonly heartbeatTimeoutMs: number,
+  ) {}
+
+  /** Returns the live pending requests (used by webview boot to recover state). */
+  pending(): InteractionRequest[] {
+    return this.store.listPending()
   }
 
-  startRun(input: StartRunInput) {
-    return this.conversation.startRun(input)
+  /** Subscribe to SSE-style events (used by HTTP bridge). */
+  subscribe(fn: (evt: SseEvent) => void): () => void {
+    this.subscribers.add(fn)
+    return () => this.subscribers.delete(fn)
   }
 
-  checkBudget(runId: string, delta: RunBudgetUsageDelta = {}, apply = false) {
-    const run = this.store.requireRun(runId)
-    const result = evaluateBudget(run.budget, delta)
-
-    if (apply) {
-      this.store.applyBudgetUsage(runId, delta)
+  /**
+   * Park a new interaction. The returned promise resolves once the user
+   * submits via the HTTP bridge or rejects on cancel/expire.
+   */
+  async park(input: {
+    toolName: ToolName
+    question: string
+    context?: string
+    placeholder?: string
+    action?: string
+    params?: Record<string, unknown>
+  }): Promise<InteractionResponse> {
+    const id = randomUUID()
+    const now = Date.now()
+    const req: InteractionRequest = {
+      id,
+      toolName: input.toolName,
+      question: input.question,
+      context: input.context,
+      placeholder: input.placeholder,
+      action: input.action,
+      params: input.params,
+      createdAt: now,
+      lastHeartbeatAt: now,
+      status: 'pending',
     }
+    await this.store.upsertRequest(req)
+    this.broadcast({ type: 'request.created', request: req })
 
-    if (!result.allowed) {
-      this.store.transitionRun(runId, run.currentStep, 'budget_exceeded')
-      this.audit.warn(runId, 'budget.exceeded', 'Run budget exceeded.', { reasons: result.reasons })
-    }
-
-    return result
-  }
-
-  evaluatePolicy(runId: string, toolName: string, targets: string[] = [], context: PolicyContext = {}) {
-    const decision = evaluateToolPolicy(toolName, targets, context)
-    this.audit.info(runId, 'policy.check', `Policy checked for tool ${toolName}.`, {
-      toolName,
-      targets,
-      decision,
+    return new Promise<InteractionResponse>((resolve, reject) => {
+      this.parked.set(id, { resolve, reject })
     })
-    return decision
   }
 
-  upsertTaskCard(taskCard: TaskCard) {
-    return this.task.upsertTaskCard(taskCard)
+  /** Called by the HTTP bridge when the webview submits. */
+  async submit(id: string, res: InteractionResponse): Promise<void> {
+    await this.store.putResponse(id, res)
+    const parked = this.parked.get(id)
+    if (parked) {
+      this.parked.delete(id)
+      parked.resolve(res)
+    }
+    this.broadcast({ type: 'request.submitted', id, response: res })
   }
 
-  upsertHandoff(handoff: HandoffPacket) {
-    return this.task.upsertHandoff(handoff)
+  async cancel(id: string): Promise<void> {
+    const res: InteractionResponse = {
+      text: '',
+      cancelled: true,
+      timestamp: Date.now(),
+    }
+    await this.store.putResponse(id, res)
+    const parked = this.parked.get(id)
+    if (parked) {
+      this.parked.delete(id)
+      parked.reject(new Error('cancelled'))
+    }
+    this.broadcast({ type: 'request.cancelled', id })
   }
 
-  beginApprovalRequest(ctx: ApprovalRequestContext, input: BeginApprovalRequestInput) {
-    return this.controlMode.beginApprovalRequest(ctx, input)
+  async heartbeat(id: string): Promise<void> {
+    await this.store.heartbeat(id, Date.now())
   }
 
-  recordApproval(
-    runId: string,
-    summary: string,
-    result: ApprovalResult,
-    ctx?: Pick<ApprovalRequestContext, 'now' | 'traceId'>,
-  ) {
-    return this.controlMode.recordApproval(runId, summary, result, ctx)
+  /** Periodic sweep — invoked by a timer in the HTTP server. */
+  async sweepExpired(): Promise<void> {
+    const expired = await this.store.expirePending(Date.now(), this.heartbeatTimeoutMs)
+    for (const id of expired) {
+      const parked = this.parked.get(id)
+      if (parked) {
+        this.parked.delete(id)
+        parked.reject(new Error('heartbeat-timeout'))
+      }
+      this.broadcast({ type: 'request.expired', id })
+    }
   }
 
-  recordFeedback(runId: string, decision: FeedbackDecision, ctx?: Pick<ApprovalRequestContext, 'traceId'>) {
-    return this.controlMode.recordFeedback(runId, decision, ctx)
-  }
-
-  verifyRun(runId: string, userConfirmedDone = false, ctx?: VerificationRequestContext): VerifyRunResult {
-    return this.verification.verifyRun(runId, userConfirmedDone, ctx)
-  }
-
-  getConversationRecord(preferredRunId?: string | null): ConversationRecord {
-    return this.conversation.getConversationRecord(preferredRunId)
-  }
-
-  endConversation(preferredRunId?: string | null) {
-    return this.conversation.endConversation(preferredRunId)
-  }
-
-  getConversationContext(preferredRunId?: string | null) {
-    return this.conversation.getConversationContext(preferredRunId)
-  }
-
-  getLatestSummaryDocument(preferredRunId?: string | null) {
-    return this.conversation.getLatestSummaryDocument(preferredRunId)
-  }
-
-  getTaskRecord(runId: string, summaryDocumentPath: string | null = null) {
-    return this.store.getTaskRecord(runId, summaryDocumentPath)
-  }
-
-  getTaskSummary(runId: string) {
-    return this.store.getTaskSummary(runId)
+  private broadcast(evt: SseEvent): void {
+    for (const fn of this.subscribers) {
+      try {
+        fn(evt)
+      } catch {
+        // ignore subscriber errors
+      }
+    }
   }
 }
+
+export type SseEvent =
+  | { type: 'request.created'; request: InteractionRequest }
+  | { type: 'request.submitted'; id: string; response: InteractionResponse }
+  | { type: 'request.cancelled'; id: string }
+  | { type: 'request.expired'; id: string }
+  | { type: 'heartbeat'; now: number }

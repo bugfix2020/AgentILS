@@ -1,1165 +1,668 @@
 # human-clarification vsix 完整调用链路分析
 
-版本：v2.0  
-来源：`justwe9517.human-clarification-1.3.3.vsix` 实际拆包逐文件分析  
-日期：2026-04-16（v2.0 更新）  
-原始日期：2026-04-15（v1.0）  
-用途：为 AgentILS 插件层实现提供参考，理解"一次计费完成多轮澄清"的插件架构
+版本：v3.0（重写）
+来源：`justwe9517.human-clarification-1.3.3.vsix` 的工作区缓存源码
+日期：2026-04-23
+v2.0 → v3.0 变更：v2.0 存在多处与实际源码不符的描述（详见 §16），v3.0 完全重写并以源码为准。
 
-> **v2.0 变更说明**：逐文件比对实际代码后，补充了 v1.0 遗漏的 8 个工具 handler、2 个服务层模块、RichInput 子系统 6 个组件、Abilities 系统 16 个 action handler、以及若干差异修正。详见第 15-22 节。
+> **文档边界**：本文只描述 vsix 的实际行为，不包含 AgentILS 复刻方案（另起 `agentils-human-clarification-impl-plan.md`）。
 
 ---
 
 ## 0. 阅读前提示
 
-本文档按**函数调用级别**描述整个插件的执行链路。  
-目的是让实现者清楚知道：调用了什么方法、数据如何流动、WebView 如何承载用户交互、以及如何在不消耗多次高级请求次数的前提下完成多轮澄清。
+本文按**模块 → 函数调用**两层组织。每个模块只描述真实存在并被运行时引用的代码；存在于源码树但未被任何代码引用的"孤儿模块"在 §15 单独列出，避免与运行链路混淆。
 
 ---
 
-## 1. 插件整体架构图
+## 1. 整体架构
 
 ```
 用户在 Copilot Chat 输入提示词
         ↓
-LLM 决策：需要调用工具
+LLM 决策：调用 4 个 LM tool 之一
         ↓
-VS Code 执行 vscode.lm.registerTool 注册的工具 → ToolRegistry.registerTool()
+vscode.lm.registerTool(...).invoke(options, token)
+        ↓
+ToolRegistry.registerAll() 中绑定的 toolHandler
         ↓
     ┌──────────────────────────────────────────┐
-    │           LM Tool 触发层                 │
-    │  prepareInvocation → 确认弹窗（可选）    │
-    │  invoke → 对应 toolHandler()             │
+    │       prepareInvocation 前置确认          │
+    │  delegate 模式（已连接） → 跳过确认弹窗   │
+    │  local 模式             → "授权申请"弹窗 │
     └──────────────────────────────────────────┘
         ↓
     ┌──────────────────────────────────────────┐
-    │           DelegateClient 分流            │
-    │  shouldDelegate() → WebSocket 委托模式   │
-    │  !shouldDelegate → 本地 WebView 模式     │
+    │  DelegateClient.shouldDelegate() 分流    │
+    │  true  → delegateClient.invokeTool()     │
+    │  false → webviewManager.requestClarification() │
     └──────────────────────────────────────────┘
-        ↓ （本地模式）
-    ┌──────────────────────────────────────────┐
-    │     ClarificationWebviewManager          │
-    │  requestClarification() → 创建 WebView   │
-    │  await Promise → 等待用户回复            │
-    └──────────────────────────────────────────┘
+        ↓ （local）                       ↓ （delegate）
+   创建 WebView + 挂起 Promise        WebSocket 转发到远端 + 挂起 Promise
+        ↓                               ↓
+   用户在 WebView 提交               远端服务器返回 tool.result
+        ↓                               ↓
+   handleSubmit → resolve            ws.onmessage → resolve
         ↓
-    用户在 WebView 中填写回复并提交
+   buildToolResultFromResponse(result)
+        → vscode.LanguageModelToolResult([LanguageModelTextPart, LanguageModelDataPart...])
         ↓
-    handleWebviewMessage({ type: 'submit' })
-        ↓
-    request.resolve(response)
-        ↓
-    buildToolResultFromResponse(result)
-        → vscode.LanguageModelToolResult([LanguageModelTextPart, ...])
-        ↓
-    返回给 LLM → LLM 继续下一轮推理
+   返回给 LLM → 同一会话继续推理（不消耗额外计费）
 ```
+
+**关键设计**：整个挂起-提交闭环在单次 LLM 工具调用内完成，因此可以在一次"高级请求"内完成多轮人机交互。
 
 ---
 
-## 2. 插件激活入口：`activate(context)`
+## 2. 激活入口：`activate(context)`
 
-**文件**：`out/extension.js`
+**文件**：[`extension.js`](#file-extension-js)
+**激活时机**：`onStartupFinished`
 
 ```
 activate(context)
-  ├── vscode.window.createOutputChannel('Human Clarification')
-  ├── new ClarificationWebviewManager(context)           // WebView 管理器
-  ├── new DelegateClient(context, outputChannel)         // WebSocket 委托客户端
-  ├── new ToolRegistry(context, { webviewManager, outputChannel, delegateClient })
-  │     └── toolRegistry.registerAll()                   // 注册 4 个 LM tools
-  ├── vscode.commands.registerCommand('humanClarification.delegate.toggle', ...)
-  ├── vscode.commands.registerCommand('humanClarification.delegate.statusBarMenu', ...)
-  ├── vscode.commands.registerCommand('humanClarification.delegate.testConnection', ...)
-  ├── registerFeedbackTestCommand(context, webviewManager)
+  ├── outputChannel = vscode.window.createOutputChannel('Human Clarification')
+  ├── webviewManager = new ClarificationWebviewManager(context)
+  ├── delegateClient = new DelegateClient(context, outputChannel)
+  │     └── context.subscriptions.push(delegateClient)   ← 由 VS Code 自动 dispose
+  ├── toolRegistry = new ToolRegistry(context, { webviewManager, outputChannel, delegateClient })
+  │     └── toolRegistry.registerAll()                   ← 注册 4 个 LM tools
+  ├── 注册 3 个 delegate 命令：
+  │     • humanClarification.delegate.toggle
+  │     • humanClarification.delegate.statusBarMenu
+  │     • humanClarification.delegate.testConnection
+  ├── registerFeedbackTestCommand(context, webviewManager)   ← 开发调试命令
   ├── vscode.chat.createChatParticipant('human-clarification.hc', handler)
-  │     └── 响应 @hc /install 指令 → 调用 loadHcInstallTemplate() + installFromTemplate
-  ├── new CopilotHttpServer(outputChannel)               // HTTP API 服务器（可选）
+  │     └── 处理 "@hc /install"：调用 loadHcInstallTemplate() + executeCommand('humanClarification.hcInstall.installFromTemplate', template)
+  ├── httpServer = new CopilotHttpServer(outputChannel)
+  ├── 注册 3 个 server 命令：start / stop / toggle
   ├── httpServer.autoStartIfConfigured()
-  ├── delegateClient.autoConnectIfConfigured()           // 自动连接 WebSocket 服务器
-  └── registerLocalPrompts(context)                      // 本地 Prompt 文件命令
-```
+  ├── delegateClient.autoConnectIfConfigured()
+  └── registerLocalPrompts(context)                      ← UI-side 本地 prompt 命令
 
-**关键设计**：激活时 `onStartupFinished`，常驻内存，不重复激活。
+deactivate()
+  └── if (httpServer) { httpServer.dispose(); httpServer = null }
+       // delegateClient 已通过 context.subscriptions 自动 dispose
+```
 
 ---
 
-## 3. LM Tool 注册层：`ToolRegistry`
+## 3. LM Tool 注册：`ToolRegistry`
 
 **文件**：`out/tools/toolRegistry.js`
 
-### 3.1 注册的 4 个工具
+### 3.1 注册的工具（共 **4 个**，与 `package.json#contributes.languageModelTools` 一一对应）
 
-| 工具名 | Handler | 用途 |
-|---|---|---|
-| `request_user_clarification` | `clarificationToolHandler` | 向用户澄清问题 |
-| `request_contact_user` | `contactToolHandler` | 主动联系用户传达信息 |
-| `request_user_feedback` | `feedbackToolHandler` | 收集用户反馈（continue/done/revise） |
-| `request_dynamic_action` | `dynamicActionToolHandler` | 统一入口，支持自定义 action 类型 |
+| 工具名 | Handler | toolReferenceName | 用途 |
+|---|---|---|---|
+| `request_user_clarification` | `clarificationToolHandler` | `requestUserClarification` | 向用户提问澄清 |
+| `request_contact_user` | `contactToolHandler` | `requestContactUser` | 主动联系用户 |
+| `request_user_feedback` | `feedbackToolHandler` | `requestUserFeedback` | 任务后收集反馈 |
+| `request_dynamic_action` | `dynamicActionToolHandler` | `requestDynamicAction` | 统一入口（`action` + `params`） |
 
-### 3.2 注册方式
+> **重要**：源码树 `out/tools/` 下还存在 `manageTodoListTool.js` / `writeReportTool.js` / `readReportTool.js` / `openTaskManageWebviewTool.js` / `testImageApiTool.js` 五个文件，但 `toolRegistry.js` 的 `TOOL_DEFINITIONS` 数组**未导入**它们，全仓 grep 也无任何引用。它们是孤儿/未启用代码，详见 §15。
+
+### 3.2 `prepareInvocation` 行为
 
 ```js
-// ToolRegistry.registerTool(toolDef)
-const tool = vscode.lm.registerTool(toolDef.name, {
-    invoke: async (options, token) => {
-        return await toolDef.handler(options, handlerContext, token);
-    },
-    prepareInvocation: async (options, _token) => {
-        // 委托模式下不弹确认框
-        if (delegateClient.getMode() !== 'local' && delegateClient.isConnected()) {
-            return undefined;  // 跳过确认
-        }
-        // 本地模式弹出 VS Code 原生确认弹窗
-        return {
-            confirmationMessages: {
-                title: '授权申请',
-                message: `是否允许${toolDisplayName}？`
-            }
-        };
+prepareInvocation: needsConfirmation ? async (options, _token) => {
+  const mode = delegateClient.getMode();
+  if (mode !== 'local' && delegateClient.isConnected()) {
+    return undefined;            // delegate 已连接 → 不弹确认（远端服务器负责审批）
+  }
+  return {
+    confirmationMessages: {
+      title: '授权申请',
+      message: `是否允许${toolDisplayName}？`   // 中文文案硬编码
     }
-});
+  };
+} : undefined
 ```
 
-**关键设计**：
-- `prepareInvocation` 是 VS Code LM Tool 的前置钩子，在 `invoke` 之前调用
-- 委托模式下跳过确认弹窗，由远端服务器处理用户交互
-- 本地模式下弹出 VS Code 原生确认框（一次确认，不消耗计费）
+`needsConfirmation` 对全部 4 个工具都为 `true`，即任何工具调用在本地模式下都会先弹一次"授权申请"。一次确认后才执行 `invoke`，且不消耗额外 LLM 计费。
 
 ---
 
-## 4. 工具 Handler 调用链（本地模式）
+## 4. Tool Handlers
 
-### 4.1 `clarificationToolHandler`（request_user_clarification）
+### 4.1 `clarificationToolHandler` / `contactToolHandler`
 
-**文件**：`out/tools/clarificationTool.js`
+两者结构一致：
 
 ```
-clarificationToolHandler(options, context, token)
-  ├── 提取 options.input: { question, context, placeholder }
-  ├── 验证 question 非空
-  ├── delegateClient.shouldDelegate()
-  │     ├── true → delegateClient.invokeTool({ toolName, input })  [委托模式路径]
-  │     └── false → 本地模式路径 ↓
-  ├── webviewManager.requestClarification({
-  │       question,
-  │       context: inputContext,
-  │       placeholder,
-  │       toolName: 'request_user_clarification'
+handler(options, { webviewManager, outputChannel, delegateClient }, token)
+  ├── { question, context, placeholder } = options.input
+  ├── 校验 question 非空
+  ├── if (await delegateClient.shouldDelegate())
+  │     ├── result = await delegateClient.invokeTool({ toolName, input: { question, context, placeholder } })
+  │     └── return buildToolResultFromResponse(result, outputChannel)
+  ├── result = await webviewManager.requestClarification({
+  │       question, context, placeholder,
+  │       toolName: 'request_user_clarification' | 'request_contact_user'
   │   })
-  └── buildToolResultFromResponse(result, outputChannel)
-        → vscode.LanguageModelToolResult([LanguageModelTextPart(result.text)])
+  └── return buildToolResultFromResponse(result, outputChannel)
 ```
 
-### 4.2 `contactToolHandler`（request_contact_user）
+`contactToolHandler` 与 `clarificationToolHandler` 唯一差异是 `toolName`，没有传 `type`。
 
-**文件**：`out/tools/contactTool.js`
+### 4.2 `feedbackToolHandler`
 
-与 `clarificationToolHandler` 逻辑完全相同，只是 `toolName` 传入不同值。
+与上面相同，但传入 `type: 'feedback'`。`webviewManager` 据此可以挑选不同的 UI 模板（实际目前 chat.html 通用，feedback 主要影响 `tool-type-badge` 文案与 `templateLoader` 选择哪份 `*-templates.json`）。
 
-```
-contactToolHandler(options, context, token)
-  └── webviewManager.requestClarification({
-          question, context, placeholder,
-          toolName: 'request_contact_user'
-      })
-  └── buildToolResultFromResponse(result)
-```
-
-### 4.3 `feedbackToolHandler`（request_user_feedback）
-
-**文件**：`out/tools/feedbackTool.js`
+### 4.3 `dynamicActionToolHandler`
 
 ```
-feedbackToolHandler(options, context, token)
-  └── webviewManager.requestClarification({
-          question, context, placeholder,
-          type: 'feedback',          // 区别：传了 type
-          toolName: 'request_user_feedback'
-      })
-  └── buildToolResultFromResponse(result)
+handler(options, { webviewManager, outputChannel, delegateClient }, token)
+  ├── { action, params } = options.input
+  ├── 校验 action 非空
+  ├── 1) 优先走 abilities：
+  │     abilityResult = tryHandleWithAbilities(action, params || {}, outputChannel)
+  │     if (abilityResult) return abilityResult       // ability 直接返回 LM 结果，不走 WebView
+  ├── 2) 走 ACTION_CONFIG（仅 clarification / contact / feedback 三个 action 命中）：
+  │     actionConfig = ACTION_CONFIG[action] || { toolName: `request_${action}`, ... }
+  ├── 3) 校验 params.question 非空
+  ├── 4) 同样走 delegate / webview 分流
+  └── 5) buildToolResultFromResponse(result)
 ```
 
-### 4.4 `dynamicActionToolHandler`（request_dynamic_action）
+`ACTION_CONFIG` 只声明了 3 个内置 action：
 
-**文件**：`out/tools/dynamicActionTool.js`
-
-```
-dynamicActionToolHandler(options, context, token)
-  ├── 提取 options.input: { action, params }
-  ├── tryHandleWithAbilities(action, params, outputChannel)
-  │     └── abilityRegistry.findAction(action) → 如果找到 ability 的 action，直接执行
-  │           abilities 注册了：spawn-worker, ability-manage, proposal-helper
-  ├── ACTION_CONFIG 映射:
-  │     { clarification, contact, feedback } → 分别映射回对应 toolName
-  │     未知 action → toolName = 'request_${action}'
-  └── webviewManager.requestClarification({
-          question: params.question,
-          context: params.context,
-          placeholder: params.placeholder,
-          type: actionConfig.type,
-          toolName: actionConfig.toolName
-      })
+```js
+const ACTION_CONFIG = {
+  clarification: { toolName: 'request_user_clarification', logPrefix: 'Clarification' },
+  contact:       { toolName: 'request_contact_user',       logPrefix: 'Contact' },
+  feedback:      { toolName: 'request_user_feedback', type: 'feedback', logPrefix: 'Feedback' }
+};
 ```
 
-**关键设计**：`dynamicActionTool` 是统一入口，LLM 可以通过 `action` 参数指定行为，而不需要知道底层工具名称。Ability 系统允许注册自定义能力扩展点（如 `spawn-worker`、`proposal-helper`）。
+未知 action 名会**默认 fallback** 为 `toolName = 'request_${action}'` 并继续走 webview 流程，意味着任何字符串都会触发一次澄清弹窗。
 
 ---
 
-## 5. WebView 管理层：`ClarificationWebviewManager`
+## 5. WebView 管理：`ClarificationWebviewManager`
 
 **文件**：`out/webviewManager.js`
 
-### 5.1 核心方法：`requestClarification(request)`
+### 5.1 `requestClarification(request)`（核心挂起方法）
 
 ```
-requestClarification(request: {
-    question: string,
-    context?: string,
-    placeholder?: string,
-    type?: string,
-    toolName: string
-}): Promise<UserResponse>
-  ├── requestId = generateRequestId()       // 'clarification-${Date.now()}-${random}'
-  ├── panel = createWebviewPanel(request.type)
-  │     └── vscode.window.createWebviewPanel(
-  │               'humanClarification',
-  │               '需要您的帮助',
-  │               ViewColumn.Active or Beside,   // 由配置决定
-  │               { enableScripts: true, retainContextWhenHidden: true }
-  │           )
+requestClarification(request: { question, context?, placeholder?, type?, toolName }): Promise<UserResponse>
+  ├── requestId = `clarification-${Date.now()}-${random}`
+  ├── panel = vscode.window.createWebviewPanel(
+  │       'humanClarification', '需要您的帮助',
+  │       ViewColumn.Active | ViewColumn.Beside,    // 由 humanClarification.webview.viewColumn 配置决定
+  │       { enableScripts: true, retainContextWhenHidden: true }
+  │   )
   ├── activeRequests.set(requestId, { panel, resolve, reject, request })
   ├── templates = templateLoader.loadTemplates(request.toolName)
-  │     └── 根据 toolName 加载 configs/ 下对应模板 JSON
-  │           clarification-templates.json | contact-templates.json | feedback-templates.json
+  │     └── 读取 configs/{clarification|contact|feedback}-templates.json
+  │     └── 合并用户配置 humanClarification.templates.{global|clarification|contact|feedback}
   ├── panel.webview.html = viewLoader.loadViewContent(request, requestId, templates, panel)
   │     └── 读取 out/resources/views/chat/chat.html
-  │     └── 注入 CONFIG_JSON（内含 question、context、requestId、templates 等）
-  │     └── 替换 {{RESOURCES_PATH}} 模板变量 → webview URI
-  ├── setupWebviewHandlers(panel, requestId)
-  │     ├── panel.webview.onDidReceiveMessage(message => handleWebviewMessage(...))
-  │     └── panel.onDidDispose(() => handlePanelDispose(requestId))
-  └── return new Promise((resolve, reject) => ...)  // 挂起，等待 WebView 消息
+  │     └── 注入 CONFIG_JSON（question / context / requestId / templates / serverInfo / replyTemplates / appendAttachmentContent）
+  │     └── 把 {{RESOURCES_PATH}} 替换为 webview.asWebviewUri(...)
+  ├── panel.webview.onDidReceiveMessage(msg => handleWebviewMessage(msg, request, requestId, panel))
+  ├── panel.onDidDispose(() => handlePanelDispose(requestId))     // 用户关闭面板视为取消
+  └── return new Promise((resolve, reject) => ...)                 // ← 挂起，由 handleSubmit/handleCancel 解除
 ```
 
-**关键设计**：整个 `requestClarification` 调用会挂起（await Promise），直到用户在 WebView 中提交或取消。LLM 工具调用也会挂起等待。这就是"一次计费内完成多轮交互"的机制核心。
+### 5.2 WebView ↔ Extension 消息协议
 
-### 5.2 WebView 消息处理：`handleWebviewMessage`
+WebView → Extension：
 
-WebView 可以向 extension host 发送多种消息类型：
-
-| 消息类型 | 方向 | 说明 |
+| `type` | 说明 | 必带字段 |
 |---|---|---|
-| `submit` | WebView → Extension | 用户提交回复，携带 `requestId` + `text` + `images` |
-| `cancel` | WebView → Extension | 用户取消，携带 `requestId` |
-| `getPromptFiles` | WebView → Extension | 请求本地 prompt 文件列表（`@` 触发） |
-| `getTools` | WebView → Extension | 请求可用工具列表（`#` 触发） |
-| `getWorkspaceFiles` | WebView → Extension | 请求工作区文件列表（文件选择器） |
-| `getReplyTemplates` | WebView → Extension | 请求回复模板列表 |
-| `readFileContent` | WebView → Extension | 请求读取文件内容（附件预览） |
-| `openFile` | WebView → Extension | 请求在编辑器中打开文件 |
+| `submit` | 用户提交回复 | `requestId`, `text`, `images?`, `reportContent?` |
+| `cancel` | 用户取消 | `requestId` |
+| `getPromptFiles` | 请求本地 `*.prompt.md` 列表（`@` 触发） | `requestId` |
+| `getTools` | 请求可用工具列表（`#` 触发） | `requestId` |
+| `getWorkspaceFiles` | 请求工作区文件列表 | `requestId` |
+| `getReplyTemplates` | 请求回复模板列表 | `requestId` |
+| `readFileContent` | 读取文件内容（附件预览） | `requestId`, `filePath` |
+| `openFile` | 在编辑器中打开文件 | `filePath`, `selection?` |
 
-**extension 回应消息格式**（`panel.webview.postMessage`）：
+Extension → WebView：
 
-```js
-// 回应 getPromptFiles
-{ type: 'promptFilesResponse', requestId, files: [...] }
+| `type` | 字段 |
+|---|---|
+| `promptFilesResponse` | `requestId`, `files: [{ name, path, ... }]` |
+| `toolsResponse` | `requestId`, `tools: [{ name, ... }]` |
+| `workspaceFilesResponse` | `requestId`, `files: [...]` |
+| `replyTemplatesResponse` | `requestId`, `templates: [...]` |
+| `fileContentResponse` | `requestId`, `filePath`, `content` |
 
-// 回应 getTools
-{ type: 'toolsResponse', requestId, tools: [...] }
-
-// 回应 getWorkspaceFiles
-{ type: 'workspaceFilesResponse', requestId, files: [...] }
-
-// 回应 getReplyTemplates
-{ type: 'replyTemplatesResponse', requestId, templates: [...] }
-
-// 回应 readFileContent
-{ type: 'fileContentResponse', requestId, filePath, content }
-```
-
-### 5.3 提交处理：`handleSubmit`
+### 5.3 `handleSubmit` / `handleCancel`
 
 ```
 handleSubmit(message, request, requestId, panel)
-  ├── response = {
-  │       text: message.text || '',
-  │       images: message.images || [],
-  │       timestamp: Date.now(),
-  │       reportContent: message.reportContent
-  │   }
-  ├── request.resolve(response)      // 解除 requestClarification 的 Promise 挂起
+  ├── response = { text: msg.text || '', images: msg.images || [], reportContent: msg.reportContent, timestamp: Date.now() }
+  ├── activeRequests.get(requestId).resolve(response)     ← 解除 §5.1 的 Promise
   ├── activeRequests.delete(requestId)
-  └── panel.dispose()               // 关闭 WebView 面板
-```
+  └── panel.dispose()
 
-### 5.4 取消处理：`handleCancel`
-
-```
 handleCancel(request, requestId, panel)
-  ├── request.reject(new Error('cancelled'))
+  ├── activeRequests.get(requestId).reject(new Error('cancelled'))
   ├── activeRequests.delete(requestId)
   └── panel.dispose()
 ```
 
+`'cancelled'` 错误会在 handler 中被识别并转换为 `buildCancelledToolResult()`，避免错误冒泡到 LLM 端。
+
 ---
 
-## 6. ToolResultBuilder：将 WebView 回复转为 LM 工具结果
+## 6. 工具结果构造：`toolResultBuilder`
 
 **文件**：`out/tools/toolResultBuilder.js`
 
 ```
 buildToolResultFromResponse(result, outputChannel)
-  ├── if result.cancelled → buildCancelledToolResult()
+  ├── if (result.cancelled) return buildCancelledToolResult()
   │     → new vscode.LanguageModelToolResult([
-  │           new vscode.LanguageModelTextPart('{"cancelled": true, ...}')
+  │           new vscode.LanguageModelTextPart('{"cancelled": true, "message":"User cancelled the operation"}')
   │       ])
   ├── parts = [new vscode.LanguageModelTextPart(result.text ?? '')]
-  ├── for each image in result.images:
-  │     ├── 解析 base64 data URL
-  │     ├── 写入临时文件（os.tmpdir()）
+  ├── for image in result.images:
+  │     ├── 解析 data URL → buffer
+  │     ├── 写入 os.tmpdir() 临时文件（用于必要时本地预览）
   │     ├── parts.push(new vscode.LanguageModelDataPart(buffer, mimeType))
-  │     └── setTimeout 60s 后清理临时文件
+  │     └── setTimeout(60_000, () => unlinkSync(tmpFile))   // 60s 后清理临时文件
   └── return new vscode.LanguageModelToolResult(parts)
 ```
 
-**关键设计**：返回 `vscode.LanguageModelToolResult` 后，VS Code 会将其传回 LLM，LLM 看到工具调用结果并继续推理。整个过程在单次用户输入的 LLM session 内完成，不消耗额外计费次数。
+**已知风险**：
+
+- 如果进程在 60s 内崩溃，临时文件不会被清理。
+- 大量图片会占内存（buffer + DataPart 同时持有）。
 
 ---
 
-## 7. WebView 前端：`chat.html` + `chat.js`
+## 7. 委托模式：`DelegateClient`（WebSocket）
 
-**文件**：`out/resources/views/chat/chat.html`
+**文件**：`out/delegate/delegateClient.js`
 
-### 7.1 HTML 结构
+### 7.1 配置项（前缀 `humanClarification.delegate.*`）
 
-```html
-<div class="container">
-  <div class="question-section">     <!-- AI 提问区域 -->
-    <div class="question-text" id="questionText"></div>
-    <div class="context-text" id="contextText"></div>
-  </div>
-  <div class="input-section-sticky">
-    <div class="tool-type-badge" id="toolTypeBadge"></div>  <!-- 工具类型标签 -->
-    <div id="richInputContainer"></div>   <!-- 富文本输入框 -->
-    <button id="cancelBtn">取消</button>
-    <button id="submitBtn">提交</button>
-  </div>
-</div>
-```
+| key | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `mode` | `'local' | 'delegate'` | `'local'` | 切换运行模式 |
+| `serverAddress` | `string` | `''` | `host:port`，例 `127.0.0.1:8787` |
+| `useTls` | `boolean` | `false` | `false` → `ws://`，`true` → `wss://` |
+| `tenantId` | `string` | `''` | 租户标识 |
+| `clientName` | `string` | `''` | 客户端显示名 |
+| `timeoutMs` | `number` | `30000` | tool.ack 超时；超时后提示并重试，**不回退本地** |
 
-### 7.2 WebView JS 初始化流程
+### 7.2 `invokeTool({ toolName, input })`
 
 ```
-chat.js 加载
-  ├── 读取 window.CONFIG（由 extension 注入的配置对象）
-  │     CONFIG = {
-  │         requestId,
-  │         question,
-  │         context,
-  │         placeholder,
-  │         toolName,
-  │         serverInfo,
-  │         replyTemplates,
-  │         appendAttachmentContent
-  │     }
-  ├── 渲染 question 到 #questionText（支持 Markdown）
-  ├── 渲染 context 到 #contextText（若有）
-  ├── 初始化 RichInput 组件
-  │     ├── 支持 @ 触发 prompt 文件搜索 → postMessage({ type: 'getPromptFiles' })
-  │     ├── 支持 # 触发工具搜索 → postMessage({ type: 'getTools' })
-  │     ├── 支持文件拖拽 → 读取文件内容 → postMessage({ type: 'readFileContent' })
-  │     └── 支持图片粘贴 → base64 编码存储
-  ├── submitBtn.click → 收集文本 + 图片
-  │     └── vscode.postMessage({
-  │               type: 'submit',
-  │               requestId,
-  │               text: input.getValue(),
-  │               images: attachmentManager.getImages()
-  │           })
-  └── cancelBtn.click
-        └── vscode.postMessage({ type: 'cancel', requestId })
+invokeTool({ toolName, input })
+  ├── await ensureConnected('invokeTool')
+  ├── requestId = `delegate-${Date.now()}-${random}`
+  ├── send({ type: 'tool.invoke', requestId, toolName, payload: input })
+  ├── pendingToolRequests.set(requestId, { resolve, reject, timer, acked: false })
+  ├── timer = setTimeout(() => retryToolInvoke(requestId), timeoutMs)
+  └── return new Promise((resolve, reject) => ...)
 ```
 
----
+### 7.3 WebSocket 消息协议
 
-## 8. 委托模式（Delegate Mode）：WebSocket 架构
-
-**文件**：`out/delegate/delegateClient.js`  
-**用途**：在 remote 开发环境中，将工具请求转发到本地 WebSocket 服务器，由本地服务器弹出 UI。
-
-### 8.1 DelegateClient 架构
-
-```
-DelegateClient
-  ├── 状态：ws（WebSocket 实例）、mode（local/delegate）、isConnecting、pendingToolRequests
-  ├── autoConnectIfConfigured() → 启动时自动连接（mode !== 'local'）
-  ├── shouldDelegate() → mode !== 'local' && isConnected()
-  ├── invokeTool({ toolName, input })
-  │     ├── ensureConnected('invokeTool')    // 确保 WebSocket 连接
-  │     ├── requestId = 'delegate-${Date.now()}-${random}'
-  │     ├── send({ type: 'tool.invoke', requestId, toolName, payload: {...} })
-  │     ├── pendingToolRequests.set(requestId, { resolve, reject, timer, acked })
-  │     ├── timer = setTimeout(() => retryToolInvoke(requestId), timeoutMs)
-  │     └── return Promise  // 等待 tool.result 消息
-  ├── 接收 WebSocket 消息:
-  │     ├── { type: 'tool.ack' }    → pending.acked = true，重置 timer
-  │     ├── { type: 'tool.result' } → pending.resolve(result)，clear timer
-  │     └── { type: 'ping' }        → send({ type: 'pong' })
-  └── retryToolInvoke(requestId) → 重发 tool.invoke（处理连接中断重连场景）
-```
-
-### 8.2 WebSocket 消息协议
-
-**client → server**：
+Client → Server：
 ```json
 { "type": "tool.invoke", "requestId": "...", "toolName": "...", "payload": { "question": "...", "context": "...", "placeholder": "..." } }
 { "type": "tool.cancel", "requestId": "..." }
 { "type": "pong" }
 ```
 
-**server → client**：
+Server → Client：
 ```json
-{ "type": "tool.ack", "requestId": "..." }
-{ "type": "tool.result", "requestId": "...", "result": { "text": "...", "images": [] } }
+{ "type": "tool.ack",    "requestId": "..." }
+{ "type": "tool.result", "requestId": "...", "result": { "text": "...", "images": [...] } }
 { "type": "ping" }
 ```
 
+`tool.ack` 收到后将 `acked = true` 并刷新 timer；超时未收到 `tool.ack` 则触发 `retryToolInvoke`（重发 `tool.invoke`）。
+
+### 7.4 关键不变量
+
+- `shouldDelegate()` ≡ `mode !== 'local' && isConnected()`。
+- delegate 已连接时，`prepareInvocation` 不弹本地确认弹窗。
+- 一旦 `mode === 'delegate'` 但连接断开，工具调用会**走 await ensureConnected → 重连**，不会回退到本地 WebView。
+
 ---
 
-## 9. HTTP API 服务器：`CopilotHttpServer`
+## 8. HTTP API 服务器：`CopilotHttpServer`
 
-**文件**：`out/server/httpServer.js`  
-**用途**：将 VS Code LM API 暴露为 OpenAI 兼容的 HTTP API，供外部工具调用。
+**文件**：`out/server/httpServer.js`
+**用途**：把 VS Code Language Model API 包装为 OpenAI 兼容 HTTP，供外部程序复用 Copilot 配额。
 
-### 9.1 路由
+### 8.1 路由
 
-| 方法 | 路径 | 说明 |
+| Method | Path | 说明 |
 |---|---|---|
 | GET | `/` | 服务器状态 |
-| GET | `/v1/models` | 列出可用 LM 模型（调用 `vscode.lm.selectChatModels()`） |
-| POST | `/v1/chat/completions` | 调用 LM（调用 `vscode.lm.sendChatRequest()`） |
+| GET | `/v1/models` | `vscode.lm.selectChatModels()` 列出模型 |
+| POST | `/v1/chat/completions` | 调 `vscode.lm.sendChatRequest()`，转换为 OpenAI 风格 SSE/JSON |
 
-### 9.2 认证
+### 8.2 鉴权
 
-```
-Authorization: Bearer ${bearerToken}
-```
-
-若 `bearerToken` 为空则跳过认证。
+`Authorization: Bearer ${humanClarification.server.bearerToken}`，未配置则跳过鉴权（仅监听本机时一般可接受）。
 
 ---
 
-## 10. 能力扩展系统：Abilities
+## 9. Abilities 系统
 
 **文件**：`out/abilities/index.js`
 
-### 10.1 注册的 Abilities
+### 9.1 注册方式
 
-| Ability | 用途 |
+```js
+abilityRegistry.register(spawnWorkerAbility);
+abilityRegistry.register(abilityManageAbility);
+abilityRegistry.register(proposalHelperAbility);
+
+function tryHandleWithAbilities(action, params, outputChannel) {
+  const found = abilityRegistry.findAction(action);
+  if (found) return found.handler(params, outputChannel);   // 直接返回 LanguageModelToolResult
+  return undefined;
+}
+```
+
+`dynamicActionToolHandler` 在走 webview 之前先调 `tryHandleWithAbilities`，命中则直接返回 LM 结果，绕过 WebView。
+
+### 9.2 各 ability 的 actions
+
+| Ability | 实际 actions（来自 index.js） |
 |---|---|
-| `spawn-worker` | 在工作区中生成子 agent |
-| `ability-manage` | 管理能力列表（读取 README 等） |
-| `proposal-helper` | 任务提案管理（创建/列出/完成提案任务） |
+| `spawn-worker` | `spawnWorker` |
+| `ability-manage` | `readAbility` |
+| `proposal-helper` | `addProposalTask`, `createProposal`, `completeProposalTask`, `getNextTask`, `getPendingTasks`, `getTask`, `updateTask`, `deleteTask`, `listStagedTasks`, `clearStagedTasks`, `listProposals`, `deleteProposal`, `updateProposal`, `archiveProposal`, `listArchivedProposals`, `unarchiveProposal` |
 
-### 10.2 调用链
+`proposal-helper` 共 16 个 actions，每个 handler 是 `handlers/{actionName}.js` 的导出函数；写入位置约定为 `.hc/proposals/`。
+
+---
+
+## 10. WebView 前端
+
+### 10.1 实际存在的视图（`out/resources/views/`）
+
+只有 **`chat/`** 一个子目录。源码树**不存在** `feedback/` 或 `taskManage/` 子目录（v2.0 文档曾错误声称存在）。
+
+### 10.2 `chat/` 目录结构
 
 ```
-dynamicActionTool 收到 action 参数
-  → tryHandleWithAbilities(action, params, outputChannel)
-      → abilityRegistry.findAction(action)
-          → ability.actions[action](params, outputChannel)
-              → 直接返回 vscode.LanguageModelToolResult（不经过 WebView）
+out/resources/views/chat/
+  chat.html              # WebView HTML 模板
+  chat.js                # 入口脚本（消费 window.CONFIG）
+  chat.css               # 样式
+  htmlToMarkdown.js      # 粘贴时 HTML → Markdown 转换
+  attachmentManager.js   # 附件管理（顶层旧版入口）
+  chipManager.js         # 标签芯片（旧版入口）
+  pasteHandler.js        # 粘贴处理（旧版入口）
+  suggestionManager.js   # 建议弹窗（旧版入口）
+  undoManager.js         # 撤销栈（旧版入口）
+  richInput.js           # 富文本输入（旧版）
+  richInput.old.js       # 富文本输入（更老版本，已废弃但仍打包）
+  richInput.css          # 富文本样式
+  richInput/             # 重构后的模块化子系统（运行时实际加载）
+    richInput.js
+    chipManager.js
+    suggestionManager.js
+    undoManager.js
+    pasteHandler.js
+    attachmentManager.js
+    richInput.css
+```
+
+### 10.3 chat.js 初始化流程
+
+```
+chat.js 加载
+  ├── 读取 window.CONFIG（由 viewLoader 注入）
+  │     CONFIG = { requestId, question, context, placeholder, toolName, serverInfo, replyTemplates, appendAttachmentContent }
+  ├── 渲染 question / context（支持 markdown + path#L10 链接化）
+  ├── 初始化 RichInput
+  │     ├── @ 触发 → postMessage({ type: 'getPromptFiles' })
+  │     ├── # 触发 → postMessage({ type: 'getTools' })
+  │     ├── 拖拽文件 → postMessage({ type: 'readFileContent' })
+  │     └── 粘贴图片 → base64 编码缓存
+  ├── submitBtn.click → postMessage({ type: 'submit', requestId, text, images })
+  └── cancelBtn.click → postMessage({ type: 'cancel', requestId })
 ```
 
 ---
 
-## 11. 完整时序图：一次用户输入到多轮澄清
+## 11. 共享资源
 
-```
-用户输入 → LLM 推理 → 调用 request_user_clarification
-                          ↓
-                   ToolRegistry.invoke()
-                          ↓
-                  clarificationToolHandler()
-                          ↓
-               shouldDelegate() = false（本地模式）
-                          ↓
-          webviewManager.requestClarification(request)
-           ├── createWebviewPanel()
-           ├── panel.webview.html = loadViewContent()
-           └── return new Promise(...)  ← 挂起
+`out/resources/shared/` 提供：
 
-用户在 WebView 中看到 AI 提问
-用户填写回复 → submitBtn.click
-         ↓
-postMessage({ type: 'submit', requestId, text })
-         ↓
-handleWebviewMessage → handleSubmit
-         ↓
-request.resolve({ text, images })  ← 解除挂起
-         ↓
-buildToolResultFromResponse(result)
-         ↓
-返回 LanguageModelToolResult 给 LLM
-         ↓
-LLM 继续推理 → 可能再次调用工具
-         ↓
-webviewManager.requestClarification()  ← 再次挂起（第二轮澄清）
-...（循环，整个过程在同一个 LLM session 内）
-         ↓
-LLM 最终输出结构化执行意图
-```
-
-**关键结论**：整个多轮澄清过程在 **单次用户高级请求** 内完成，不消耗额外次数。每次 WebView 提交只是工具调用结果，不触发新的 LLM 请求计费。
+- `styles/`：`common.css`、`katex.min.css`、`highlight-github-dark.min.css`
+- `scripts/`：`webview-base.js`（基础脚本）、`markdown-it.min.js`、`markdown-it-katex.min.js`、`katex.min.js`、`highlight.min.js`
 
 ---
 
-## 12. Remote/Local 双环境处理
-
-### 12.1 判断远端环境
+## 12. Remote 环境处理
 
 ```js
 const isRemote = typeof vscode.env.remoteName === 'string' && vscode.env.remoteName.length > 0;
 ```
 
-### 12.2 文件操作的 remote 处理
-
-```
-handleOpenFile(message)
-  ├── isRemote && isWindowsAbsolutePath
-  │     → vscode.commands.executeCommand('humanClarification.openLocalFile', filePath, selection)
-  │       （委托给 UI Helper 扩展处理本地文件）
-  └── 其他情况
-        → vscode.workspace.openTextDocument(uri) + showTextDocument(doc)
-```
-
-### 12.3 UI Helper 的职责
-
-`justwe9517.human-clarification-ui-helper` 扩展只在 remote window 的 **UI 侧** 运行：
-
-```
-ui-helper activate()
-  ├── if (!isRemote) → 跳过所有注册（避免与主扩展冲突）
-  └── 注册命令：
-        ├── humanClarification.getLocalPrompts  → 读取本地 ~/prompts/*.prompt.md
-        ├── humanClarification.readLocalFile    → 读取本地文件内容
-        ├── humanClarification.openLocalFile    → 在本地编辑器中打开文件
-        └── humanClarification.hcInstall.installFromTemplate → 写入模板文件
-```
+- **打开本地文件**：远端 + Windows 绝对路径时，转发到 `humanClarification.openLocalFile`（由 UI Helper 扩展提供）；其他情况走 `vscode.workspace.openTextDocument`。
+- **`@hc /install`**：远端会调用 `humanClarification.hcInstall.installFromTemplate` 命令，该命令同样由 UI Helper 在远端 UI host 注册。
+- **UI Helper**（`justwe9517.human-clarification-ui-helper`）：仅在 remote window 的 UI 侧激活；本地直接跳过。
 
 ---
 
-## 13. 对 AgentILS 的启示
+## 13. `package.json` 贡献点速查
 
-### 13.1 核心复用价值
-
-1. **`vscode.lm.registerTool` + `prepareInvocation`**  
-   是实现"工具触发前确认"的官方机制，不消耗计费。AgentILS 插件应按此模式注册 `new_task_request`、`approval_request`、`feedback_gate` 等工具。
-
-2. **`requestClarification` 挂起 Promise 模式**  
-   是"一次计费完成多轮 WebView 交互"的核心机制。AgentILS 插件的 WebView 面板应完全按此模式实现：工具 invoke 挂起 → WebView submit 解除挂起 → 返回给 LLM。
-
-3. **WebView 双向消息协议**  
-   `{ type: 'submit' | 'cancel' | 'getPromptFiles' | ... }` 的消息分发机制清晰，AgentILS 可以扩展消息类型到任务状态展示、风险确认、控制模式切换等。
-
-4. **Delegate 架构（WebSocket）**  
-   为将来 AgentILS 支持 remote workspace + 本机 UI 提供了完整参考。
-
-### 13.2 AgentILS 与 human-clarification 的关键区别
-
-| 维度 | human-clarification | AgentILS |
+| 贡献点 | 数量 | 备注 |
 |---|---|---|
-| 澄清状态机 | 插件内部（无状态，每次独立） | **AgentILS MCP Server**（有状态，task/phase 驱动） |
-| 工具语义 | 通用问答 | task-scoped 状态推进 |
-| WebView 内容 | 固定问题 + 文本输入 | 当前 taskCard + 风险 + 控制模式 + 结构化选项 |
-| 多轮逻辑 | by LLM 自由决定调用次数 | by MCP 状态机决定推进步骤 |
-| 完成判定 | LLM 自行判断 | verify + handoff + user confirmed 对齐 |
-
-### 13.3 推荐的 AgentILS 插件实现方向
-
-1. 保留 `vscode.lm.registerTool` 注册方式
-2. Handler 内部：向 AgentILS MCP Server 发起状态查询 → 拿到当前 task 状态 → WebView 展示结构化状态
-3. WebView 消息协议扩展：`{ type: 'task_approve' | 'task_feedback' | 'task_override' | ... }`
-4. WebView 提交时不直接 resolve → 先通过 MCP tool 推进状态机 → 成功后再 resolve
-5. Delegate 模式保留，指向 AgentILS 的 HTTP/WS 端点
+| `commands` | 7 | feedback test、delegate(toggle/menu/test)、server(start/stop/toggle) |
+| `chatParticipants` | 1 | `human-clarification.hc`，含 `/install` 子命令 |
+| `languageModelTools` | **4** | 与 `ToolRegistry` 一一对应 |
+| `configuration` | 多组 | `humanClarification.templates.*`、`humanClarification.delegate.*`、`humanClarification.webview.viewColumn`、`humanClarification.server.*` 等 |
+| `extensionKind` | `["workspace"]` | 主扩展跑在 workspace 端 |
+| `activationEvents` | `["onStartupFinished"]` | 启动后激活 |
 
 ---
 
-## 14. 附录：文件结构速查
+## 14. 端到端时序：一次澄清
+
+```
+用户输入 → LLM 推理 → 选择 request_user_clarification
+                   ↓
+        VS Code 触发 prepareInvocation
+                   ↓
+   delegate 已连接？  ── yes ─→ 跳过确认
+                   │
+                  no
+                   ↓
+            弹出"授权申请"
+                   ↓
+         用户确认 → invoke()
+                   ↓
+       clarificationToolHandler
+                   ↓
+   shouldDelegate? ─ no → webviewManager.requestClarification(...)
+                          ├── createWebviewPanel
+                          ├── 注入 CONFIG → loadViewContent
+                          └── return Promise   ←─── 挂起
+
+              ┄┄┄ 用户填写并提交 ┄┄┄
+
+       postMessage({ type:'submit', requestId, text, images })
+                   ↓
+        handleWebviewMessage → handleSubmit
+                   ↓
+        request.resolve({ text, images, ... })
+                   ↓
+        buildToolResultFromResponse
+                   ↓
+        return LanguageModelToolResult
+                   ↓
+        LLM 拿到 toolResult → 继续推理（同一计费）
+                   ↓
+        LLM 可再次调用任意工具，循环 §14
+```
+
+**结论**：从 LLM 角度看是一次"工具调用"，对话计费不变。
+
+---
+
+## 15. 孤儿 / 未启用模块清单
+
+下列文件存在于源码树，但**未被任何运行时代码引用**（grep 全仓零匹配）：
+
+### 15.1 `out/tools/` 下的孤儿
+
+| 文件 | 说明 |
+|---|---|
+| `manageTodoListTool.js` + `todoWriter.js` | 提供 `.hc/todos/` 写入能力，但未被 `ToolRegistry` 注册 |
+| `writeReportTool.js` + `reportWriter.js` | 提供 `.hc/reports/{Y/M/D}/...md` 写入能力，未注册 |
+| `readReportTool.js` | 读取报告内容，未注册 |
+| `openTaskManageWebviewTool.js` | 配套 taskManage WebView，但 WebView 模板文件本身也不存在 |
+| `testImageApiTool.js` | 内部测试用 |
+| `writeReportTestCommand.js` | 调试命令，仅 `feedbackTestCommand` 被 `extension.js` 调用 |
+
+### 15.2 `out/services/` 下的孤儿
+
+| 文件 | 说明 |
+|---|---|
+| `taskManageService.js` | 列出/读取 `.hc/workflow/` 任务，未被引用 |
+| `historyService.js` | 90 天历史记录策略，未被引用 |
+| `promptFileService.js` / `toolService.js` / `workspaceFileService.js` | 由 `webviewManager` 在 `getPromptFiles` / `getTools` / `getWorkspaceFiles` 消息分支中调用，**这三个不是孤儿** |
+
+### 15.3 资源孤儿
+
+| 路径 | 说明 |
+|---|---|
+| `out/resources/views/chat/richInput.old.js` | 旧版富文本输入，运行时加载的是 `richInput/` 子目录 |
+| `out/resources/views/chat/richInput.js` 等顶层旧版 | 同上 |
+
+> **结论**：vsix 内仍打包了大量未启用的"半成品"代码。它们曾被 v2.0 文档误描述为已注册的 LM 工具或独立 WebView，但实际不是。
+
+---
+
+## 16. v2.0 → v3.0 修订项（历史归档）
+
+| # | v2.0 错误 | v3.0 修正 |
+|---|---|---|
+| 1 | "至少 12 个 LM 工具" | 实际 **4 个**；其余文件是 §15 的孤儿 |
+| 2 | proposal-helper 列 11 actions（含 `stagingQueries` / `taskQueries`） | 实际 **16 actions**，且名称不同（见 §9.2） |
+| 3 | ability-manage actions 为 `listAbilities` / `getAbilityInfo` | 实际只有 `readAbility` |
+| 4 | 存在 `taskManage/` / `feedback/` WebView 子目录 | 不存在；`out/resources/views/` 下只有 `chat/` |
+| 5 | 存在独立 `feedback.js` / `taskManage.js` 视图脚本 | 不存在 |
+| 6 | "deactivate 不完整，未关闭 delegateClient" | `delegateClient` 通过 `context.subscriptions` 自动 dispose；`deactivate()` 只需关 `httpServer` |
+| 7 | TaskManage WebView 章节 | 全部删除 |
+| 8 | ChipManager / SuggestionManager 等被描述为运行时新组件 | 它们位于 `richInput/`，但 chat/ 顶层旧版同名文件仍在打包，需明确区分 |
+
+---
+
+## 17. 已确认的设计风险（对接 AgentILS 时需注意）
+
+| # | 风险 | 影响 | 建议（仅供 AgentILS 复刻参考） |
+|---|---|---|---|
+| 1 | `requestClarification` 的 Promise 永不超时 | 用户长时间不操作 → tool invoke 无限挂起 | AgentILS 复刻时加 `timeoutMs` 与心跳 |
+| 2 | 临时图片文件在 60s `setTimeout` 内清理；进程崩溃残留 | 磁盘泄漏 | 改用 `fs.promises.unlink` + 启动清理目录 |
+| 3 | "授权申请"等中文文案硬编码 | 国际化困难 | 用 `vscode.l10n` |
+| 4 | DelegateClient 重连仅一次，无指数退避 | 弱网下抖动 | 实现指数退避 + 最大重试 |
+| 5 | `dynamicActionTool` 未知 action 默认走 webview，不报错 | 易拼写错误造成"幻调" | AgentILS 复刻时改为 `throw` |
+| 6 | 大量孤儿代码留在 vsix 包内 | 体积、安全审计、误读源码 | 复刻时严格按"已注册"清单实现 |
+
+---
+
+## 18. 文件结构速查（仅列**实际被引用**的部分）
 
 ```
 extension/out/
-  extension.js                      # 插件激活入口
-  webviewManager.js                 # WebView 生命周期管理
+  extension.js                 # 激活入口
+  webviewManager.js            # WebView 生命周期 + 消息分发
+
   tools/
-    toolRegistry.js                 # LM tools 注册
-    clarificationTool.js            # request_user_clarification handler
-    contactTool.js                  # request_contact_user handler
-    feedbackTool.js                 # request_user_feedback handler
-    dynamicActionTool.js            # request_dynamic_action handler（统一入口）
-    toolResultBuilder.js            # 构造 LanguageModelToolResult
-    types.js                        # 工具类型定义
+    toolRegistry.js            # 注册 4 个 LM tools
+    clarificationTool.js       # request_user_clarification
+    contactTool.js             # request_contact_user
+    feedbackTool.js            # request_user_feedback
+    dynamicActionTool.js       # request_dynamic_action（统一入口 + ability 路由）
+    toolResultBuilder.js       # 构造 LanguageModelToolResult
+    feedbackTestCommand.js     # registerFeedbackTestCommand（开发调试）
+    types.js
+
   delegate/
-    delegateClient.js               # WebSocket 委托客户端
-    types.js                        # 委托协议类型
+    delegateClient.js          # WebSocket 委托客户端
+    types.js
+
   server/
-    httpServer.js                   # OpenAI 兼容 HTTP API 服务器
+    httpServer.js              # OpenAI 兼容 HTTP API
+
   services/
-    promptFileService.js            # 本地 prompt 文件搜索
-    toolService.js                  # 可用工具列表
-    workspaceFileService.js         # 工作区文件搜索
-    taskManageService.js            # 任务文件管理（.hc/workflow/ 目录）
-    historyService.js               # 历史记录（history.json）
+    promptFileService.js       # @ 触发的 prompt 列表
+    toolService.js             # # 触发的工具列表
+    workspaceFileService.js    # 工作区文件搜索
+
   abilities/
-    index.js                        # AbilityRegistry + tryHandleWithAbilities
-    types.js                        # Ability 类型定义
-    spawn-worker/                   # 生成子 agent ability
-    ability-manage/                 # 能力管理 ability
-    proposal-helper/                # 提案任务管理 ability
-  webview/
-    templateLoader.js               # 加载 configs/*.json 模板
-    viewLoader.js                   # 加载并注入 HTML 模板
-    types.js                        # WebView 类型定义
-  hcInstall/
-    templateLoader.js               # 安装模板加载器
-  ui/
-    localPrompts.js                 # 本地 Prompt 命令注册
-  utils/
-    openFile.js                     # 文件打开工具
-  resources/
-    views/chat/chat.html            # WebView 主 HTML 模板
-    views/chat/chat.js              # WebView 前端逻辑
-    views/chat/richInput/           # 富文本输入组件
-    shared/                         # 共享 CSS/JS（markdown、katex、highlight）
-  configs/
-    clarification-templates.json    # 澄清回复模板
-    contact-templates.json          # 联系用户回复模板
-    feedback-templates.json         # 反馈回复模板
-```
-
----
-
-## 15. 【v2.0 新增】文档差异清单与修正
-
-以下是 v1.0 文档与实际代码对比后发现的差异和遗漏：
-
-### 15.1 工具注册数量差异
-
-**v1.0 声称**：4 个 LM 工具（clarification、contact、feedback、dynamicAction）  
-**实际代码**：**至少 12 个 LM 工具**（ToolRegistry.registerAll 中注册的全部工具）
-
-| 工具名 | v1.0 已覆盖 | 实际存在 | Handler 文件 |
-|---|---|---|---|
-| `request_user_clarification` | ✅ | ✅ | `clarificationTool.js` |
-| `request_contact_user` | ✅ | ✅ | `contactTool.js` |
-| `request_user_feedback` | ✅ | ✅ | `feedbackTool.js` |
-| `request_dynamic_action` | ✅ | ✅ | `dynamicActionTool.js` |
-| `manage_todo_list` | ❌ 遗漏 | ✅ | `manageTodoListTool.js` |
-| `write_report` | ❌ 遗漏 | ✅ | `writeReportTool.js` |
-| `read_report` | ❌ 遗漏 | ✅ | `readReportTool.js` |
-| `open_task_manage_webview` | ❌ 遗漏 | ✅ | `openTaskManageWebviewTool.js` |
-| `test_image_api` | ❌ 遗漏 | ✅ | `testImageApiTool.js` |
-
-### 15.2 服务层遗漏
-
-v1.0 完全没有提及以下两个服务模块：
-
-| 服务 | 职责 | 文件 |
-|---|---|---|
-| `TaskManageService` | 管理 `.hc/workflow/` 下的任务目录结构，列出/读取/归档任务文件 | `services/taskManageService.js` |
-| `HistoryService` | 管理 `history.json` 交互历史（90 天保留策略，分页查询） | `services/historyService.js` |
-
-### 15.3 WebView 子系统遗漏
-
-v1.0 仅提到 `chat.js` 和 `richInput.js`，实际 RichInput 已被重构为独立子系统，包含 6 个模块化组件：
-
-| 组件 | 文件 | 职责 |
-|---|---|---|
-| `RichInput` | `richInput/richInput.js` | 富文本输入核心（重构版） |
-| `ChipManager` | `richInput/chipManager.js` | 标签管理（@ 触发 prompt 引用、# 触发工具引用） |
-| `SuggestionManager` | `richInput/suggestionManager.js` | 自动补全建议弹窗 |
-| `UndoManager` | `richInput/undoManager.js` | 撤销/重做栈 |
-| `PasteHandler` | `richInput/pasteHandler.js` | 粘贴处理（图片 base64、富文本清理） |
-| `AttachmentManager` | `richInput/attachmentManager.js` | 文件附件管理（添加/删除/渲染） |
-
-### 15.4 Abilities 系统细节遗漏
-
-v1.0 仅列出 3 个 ability 名称，实际 `proposal-helper` ability 包含 **10 个 action handler**：
-
-| Action | Handler 文件 | 职责 |
-|---|---|---|
-| `createProposal` | `handlers/createProposal.js` | 创建新提案 |
-| `listProposals` | `handlers/listProposals.js` | 列出所有提案 |
-| `updateProposal` | `handlers/updateProposal.js` | 更新提案内容 |
-| `deleteProposal` | `handlers/deleteProposal.js` | 删除提案 |
-| `archiveProposal` | `handlers/archiveProposal.js` | 归档提案 |
-| `addProposalTask` | `handlers/addProposalTask.js` | 为提案添加子任务 |
-| `completeProposalTask` | `handlers/completeProposalTask.js` | 标记子任务完成 |
-| `deleteTask` | `handlers/deleteTask.js` | 删除子任务 |
-| `updateTask` | `handlers/updateTask.js` | 更新子任务 |
-| `stagingQueries` | `handlers/stagingQueries.js` | 暂存区查询 |
-| `taskQueries` | `handlers/taskQueries.js` | 任务查询 |
-
-### 15.5 其他差异
-
-1. **`webview-base.js`**：v1.0 未提及 `resources/shared/scripts/webview-base.js`，这是所有 WebView 的基础脚本（含 markdown-it、KaTeX 初始化）
-2. **`feedbackTestCommand.js` / `writeReportTestCommand.js`**：开发调试用的测试命令，v1.0 未提及
-3. **TaskManage WebView**：除了 `chat.html` 外，还有独立的 `taskManage/taskManage.html` + `taskManage.js` + `taskManage.css`，用于任务管理面板
-4. **Feedback WebView**：`feedback/feedback.js` 提供独立的反馈视图
-
----
-
-## 16. 【v2.0 新增】新增工具 Handler 详细分析
-
-### 16.1 `manageTodoListToolHandler`（manage_todo_list）
-
-**文件**：`out/tools/manageTodoListTool.js`  
-**依赖**：`todoWriter.js`
-
-```
-manageTodoListToolHandler(options, context, token)
-  ├── 提取 options.input: { operation, todoList, path }
-  ├── 验证 operation ∈ { 'read', 'write' }
-  ├── workspaceRoot = workspaceFolders[0].uri.fsPath
-  ├── todoWriter = new TodoWriter()
-  │
-  ├── if operation == 'write':
-  │     ├── 验证 todoList 是数组
-  │     ├── 逐项验证：id（number）、title（string）、status（string）
-  │     ├── todoWriter.writeTodos(workspaceRoot, todoList, path)
-  │     │     └── 写入 .hc/todos/{filename}.json
-  │     └── 返回 { success: true, path, todoId, items: count }
-  │
-  └── if operation == 'read':
-        ├── todoWriter.readTodos(workspaceRoot, path)
-        │     └── 读取 .hc/todos/{path}
-        └── 返回 { success: true, todoList, count }
-```
-
-**关键设计**：
-- TodoWriter 使用 `.hc/todos/` 目录存储，自动创建 `.gitignore`
-- 支持自定义文件名或自动生成 `todos-{id}.json`
-- JSON 格式持久化，结构为 `[{ id, title, status, ... }]`
-
-### 16.2 `writeReportToolHandler`（write_report）
-
-**文件**：`out/tools/writeReportTool.js`  
-**依赖**：`reportWriter.js`
-
-```
-writeReportToolHandler(options, context, token)
-  ├── 提取 options.input: { content, title }
-  ├── 验证 content 非空
-  ├── ReportWriter.writeReport(workspaceRoot, content, title)
-  │     ├── 创建 .hc/reports/{year}/{month}/{day}/ 目录结构
-  │     ├── 生成报告 ID：report-{timestamp}-{random}
-  │     ├── 文件名：{sanitized-title}-{id}.md 或 report-{id}.md
-  │     └── writeFileSync → 写入 Markdown 报告
-  └── 返回 { write: true, path, reportId, fullPath }
-```
-
-**关键设计**：
-- 按日期分层目录结构（年/月/日）
-- 自动添加 `.gitignore` 到 `.hc/reports/`
-- 无工作区时降级到系统临时目录
-
-### 16.3 `readReportToolHandler`（read_report）
-
-**文件**：`out/tools/readReportTool.js`
-
-```
-readReportToolHandler(options, context, token)
-  ├── 提取 options.input: { path }
-  ├── 解析路径（绝对路径直接用，相对路径基于 workspaceRoot 解析）
-  ├── 检查文件存在性
-  ├── readFileSync → 读取文件内容
-  └── 直接返回文件内容（纯文本 LanguageModelTextPart）
-```
-
-**注意**：此工具直接返回文件原始内容，不包装为 JSON。
-
-### 16.4 `openTaskManageWebviewToolHandler`（open_task_manage_webview）
-
-**文件**：`out/tools/openTaskManageWebviewTool.js`
-
-```
-openTaskManageWebviewToolHandler(options, context, token)
-  ├── 复用 webviewManager.requestClarification() 但传入 type: 'taskManage'
-  │     └── WebView 加载 taskManage.html 而非 chat.html
-  ├── 等待用户在 TaskManage WebView 中操作
-  └── 返回用户操作结果
-```
-
-**关键设计**：
-- 通过 `type: 'taskManage'` 切换 WebView 模板
-- 复用了 WebviewManager 的 Promise 挂起机制
-- TaskManage 视图展示 `.hc/workflow/` 目录下的任务列表
-
----
-
-## 17. 【v2.0 新增】服务层详细分析
-
-### 17.1 `TaskManageService`
-
-**文件**：`out/services/taskManageService.js`
-
-```
-class TaskManageService {
-  static listWorkspaceRoots()
-    └── 返回 [{ name, path }] 列表
-  
-  static getWorkflowRoot(workspaceRoot)
-    └── 返回 path.join(workspaceRoot, '.hc', 'workflow')
-  
-  static async listTasks(workspaceRoot)
-    ├── 遍历 .hc/workflow/ 下的目录
-    ├── 匹配模式 /^(\d{3})-(.+)$/（如 001-setup-auth）
-    └── 返回 [{ id, slug, dirName, fullPath, mtimeMs }]
-  
-  static async getTaskArtifacts(workspaceRoot, taskDir)
-    ├── 路径安全校验（isPathWithin）
-    └── 返回任务目录下的文件列表
-}
-```
-
-**关键设计**：
-- 任务目录命名约定：`{3位序号}-{slug}`（如 `001-refactor-auth`、`002-add-tests`）
-- 包含路径遍历防护（`isPathWithin` 校验）
-
-### 17.2 `HistoryService`
-
-**文件**：`out/services/historyService.js`
-
-```
-class HistoryService {
-  static RETENTION_DAYS = 90
-  static DEFAULT_PAGE_SIZE = 20
-  
-  static async getHistoryFileUri(context)
-    └── 返回 storageUri/history.json 的 URI
-  
-  static async addEntry(context, entry: { toolName, question, response, timestamp })
-    ├── readHistoryFile()
-    ├── pruneEntries() → 清除超过 90 天的条目
-    ├── entries.push(newEntry)
-    └── writeHistoryFile()
-  
-  static async getEntries(context, page?, pageSize?)
-    ├── readHistoryFile()
-    ├── pruneEntries()
-    └── 返回分页结果 { entries, total, page, pageSize }
-}
-```
-
-**关键设计**：
-- 使用 VS Code 的 `context.storageUri`（工作区级别）或 `context.globalStorageUri`（全局级别）
-- 90 天自动清理策略
-- 支持分页查询
-
----
-
-## 18. 【v2.0 新增】RichInput 子系统详解
-
-### 18.1 架构
-
-RichInput 已从单文件重构为模块化子系统，位于 `resources/views/chat/richInput/` 目录：
-
-```
-richInput/
-  richInput.js          # 核心输入组件（contenteditable div）
-  chipManager.js        # 标签芯片管理（@prompt、#tool 引用）
-  suggestionManager.js  # 自动补全建议弹窗
-  undoManager.js        # 撤销/重做操作栈
-  pasteHandler.js       # 粘贴事件处理
-  attachmentManager.js  # 文件附件管理
-```
-
-### 18.2 ChipManager
-
-```
-class ChipManager {
-  addChip(type, label, data)
-    ├── 创建 <span class="chip" data-type="{type}"> 元素
-    ├── 插入到 contenteditable 中
-    └── 触发 onChange 回调
-  
-  removeChip(chipElement)
-    └── 从 DOM 移除并更新内部状态
-  
-  getChips()
-    └── 返回所有 [{ type, label, data }]
-}
-```
-
-**Chip 类型**：
-- `@` 前缀触发 → Prompt 文件引用 → `{ type: 'prompt', label: '@xxx.prompt.md', data: { path } }`
-- `#` 前缀触发 → 工具引用 → `{ type: 'tool', label: '#toolName', data: { toolName } }`
-
-### 18.3 SuggestionManager
-
-```
-class SuggestionManager {
-  show(items, position)
-    ├── 渲染建议弹窗
-    ├── 键盘导航（↑↓回车选中）
-    └── 鼠标点击选中
-  
-  select(item)
-    ├── 触发 onSelect 回调
-    └── 隐藏弹窗
-}
-```
-
-### 18.4 AttachmentManager
-
-```
-class AttachmentManager {
-  attachFile(path, name)
-    ├── 添加到 attachedFiles 数组
-    └── 渲染附件面板（显示文件名 + 删除按钮）
-  
-  removeAttachment(index)
-    └── 从数组移除并重新渲染
-  
-  getAll()
-    └── 返回 [{ path, name }]
-}
-```
-
----
-
-## 19. 【v2.0 新增】Abilities 系统 proposal-helper 详解
-
-### 19.1 AbilityRegistry 架构
-
-```
-class DefaultAbilityRegistry {
-  abilities: Map<string, Ability>
-  
-  register(ability)       → abilities.set(name, ability)
-  findAction(actionName)  → 遍历所有 ability 的 actions，找到匹配的 handler
-}
-
-// 注册顺序
-abilityRegistry.register(spawnWorkerAbility)
-abilityRegistry.register(abilityManageAbility)
-abilityRegistry.register(proposalHelperAbility)
-```
-
-### 19.2 spawn-worker Ability
-
-- **actions**: `{ spawnWorker: (params, outputChannel) => ... }`
-- **功能**：在工作区中生成子 agent（通过在指定目录写入 agent 配置文件来触发）
-
-### 19.3 ability-manage Ability
-
-- **actions**: `{ listAbilities: ..., getAbilityInfo: ... }`
-- **功能**：列出所有注册的 ability 和它们的 README 信息
-
-### 19.4 proposal-helper Ability 完整 Actions
-
-```
-proposalHelperAbility = {
-  name: 'proposal-helper',
-  actions: {
-    createProposal(params)         → 创建 .hc/proposals/{id}/ 目录 + proposal.json
-    listProposals(params)          → 列出所有提案（含状态过滤）
-    updateProposal(params)         → 更新提案 JSON
-    deleteProposal(params)         → 删除提案目录
-    archiveProposal(params)        → 移入 .hc/proposals/archived/
-    addProposalTask(params)        → 在提案下添加子任务
-    completeProposalTask(params)   → 标记子任务完成
-    deleteTask(params)             → 删除子任务
-    updateTask(params)             → 更新子任务
-    stagingQueries(params)         → 查询暂存区任务
-    taskQueries(params)            → 查询任务状态
-  }
-}
-```
-
----
-
-## 20. 【v2.0 新增】TaskManage WebView 详解
-
-**文件**：`out/resources/views/taskManage/taskManage.html` + `taskManage.js` + `taskManage.css`
-
-### 20.1 功能
-
-TaskManage WebView 是一个独立于 Chat WebView 的面板，用于：
-- 展示 `.hc/workflow/` 目录下的所有任务
-- 按序号排列任务列表
-- 查看任务详情和产物
-- 对任务进行操作（打开、归档等）
-
-### 20.2 与 Chat WebView 的区别
-
-| 维度 | Chat WebView | TaskManage WebView |
-|---|---|---|
-| 触发方式 | 工具调用弹出 | `open_task_manage_webview` 工具触发 |
-| 模板 | `chat.html` | `taskManage.html` |
-| 交互模式 | 问答式（提问→回答→提交） | 列表式（浏览→选择→操作） |
-| Promise 挂起 | 提交时 resolve | 操作时 resolve |
-
----
-
-## 21. 【v2.0 新增】已发现的设计问题
-
-### 21.1 严重问题
-
-| # | 问题 | 影响 | 建议 |
-|---|---|---|---|
-| 1 | **请求超时缺失** | `requestClarification()` 挂起的 Promise 永不超时，如果用户不操作，LM 工具调用会永久挂起 | 添加 `Promise.race([request, timeout(30s)])` |
-| 2 | **图片临时文件泄漏** | `toolResultBuilder` 中 `setTimeout(60000, () => unlinkSync(tmpFile))`，如果进程在 60s 内崩溃，临时文件不会被清理 | 改用 `os.tmpdir()` + 启动时清理，或使用内存 Buffer |
-| 3 | **deactivate 不完整** | `deactivate()` 仅调用 `delegateClient.disconnect()`，未关闭 `CopilotHttpServer` | 补充 `httpServer.stop()` |
-
-### 21.2 中等问题
-
-| # | 问题 | 影响 | 建议 |
-|---|---|---|---|
-| 4 | **硬编码中文字符串** | 确认弹窗标题 `'授权申请'`、按钮 `'需要您的帮助'` 等直接硬编码 | 抽取到 `nls.json` 或 `vscode.l10n` |
-| 5 | **无错误恢复** | DelegateClient 连接断开后仅尝试一次重连 | 添加指数退避重连策略 |
-| 6 | **HistoryService 无并发保护** | 多个工具同时写 `history.json` 可能数据丢失 | 添加文件锁或写入队列 |
-
-### 21.3 轻微问题
-
-| # | 问题 | 影响 | 建议 |
-|---|---|---|---|
-| 7 | **ReportWriter 路径安全** | `sanitizeFilename()` 实现未完整审计，可能存在路径遍历风险 | 加强文件名清理（禁止 `..`、`/` 等） |
-| 8 | **RichInput 旧版残留** | 同时存在 `richInput.js` 和 `richInput.old.js` | 清理旧版文件 |
-
----
-
-## 22. 【v2.0 新增】完整文件结构速查（更新版）
-
-```
-extension/out/
-  extension.js                      # 插件激活入口
-  webviewManager.js                 # WebView 生命周期管理（Chat/TaskManage/Feedback 三种视图）
-  
-  tools/
-    toolRegistry.js                 # LM tools 注册（12+ 工具）
-    clarificationTool.js            # request_user_clarification handler
-    contactTool.js                  # request_contact_user handler
-    feedbackTool.js                 # request_user_feedback handler
-    dynamicActionTool.js            # request_dynamic_action handler（统一入口）
-    manageTodoListTool.js           # manage_todo_list handler  【v2.0 新增】
-    writeReportTool.js              # write_report handler      【v2.0 新增】
-    readReportTool.js               # read_report handler       【v2.0 新增】
-    openTaskManageWebviewTool.js    # open_task_manage_webview handler  【v2.0 新增】
-    testImageApiTool.js             # test_image_api handler    【v2.0 新增】
-    toolResultBuilder.js            # 构造 LanguageModelToolResult
-    reportWriter.js                 # 报告写入器（.hc/reports/）  【v2.0 新增】
-    todoWriter.js                   # Todo 写入器（.hc/todos/）   【v2.0 新增】
-    feedbackTestCommand.js          # 开发调试用测试命令  【v2.0 新增】
-    writeReportTestCommand.js       # 开发调试用测试命令  【v2.0 新增】
-    types.js                        # 工具类型定义
-  
-  delegate/
-    delegateClient.js               # WebSocket 委托客户端
-    types.js                        # 委托协议类型
-  
-  server/
-    httpServer.js                   # OpenAI 兼容 HTTP API 服务器
-  
-  services/
-    promptFileService.js            # 本地 prompt 文件搜索
-    toolService.js                  # 可用工具列表
-    workspaceFileService.js         # 工作区文件搜索
-    taskManageService.js            # 任务文件管理（.hc/workflow/）  【v2.0 新增】
-    historyService.js               # 历史记录（history.json，90天保留）  【v2.0 新增】
-  
-  abilities/
-    index.js                        # AbilityRegistry + tryHandleWithAbilities
-    types.js                        # Ability 类型定义
+    index.js                   # AbilityRegistry + tryHandleWithAbilities
+    types.js
     spawn-worker/
-      index.js                      # 子 agent 生成 ability
-      handlers/
-        spawnWorker.js              # spawnWorker action handler
-        index.js                    # handler 导出
-      README.js                     # ability 文档
+      index.js                 # actions: { spawnWorker }
+      handlers/{spawnWorker.js, index.js}
+      README.js
     ability-manage/
-      index.js                      # 能力管理 ability
-      README.js                     # ability 文档
-    proposal-helper/                        【v2.0 新增详细分析】
-      index.js                      # 提案管理 ability（10+ actions）
-      README.js                     # ability 文档
-      handlers/
-        index.js                    # handler 导出聚合
-        createProposal.js           # 创建提案
-        listProposals.js            # 列出提案
-        updateProposal.js           # 更新提案
-        deleteProposal.js           # 删除提案
-        archiveProposal.js          # 归档提案
-        addProposalTask.js          # 添加子任务
-        completeProposalTask.js     # 完成子任务
-        deleteTask.js               # 删除子任务
-        updateTask.js               # 更新子任务
-        stagingQueries.js           # 暂存区查询
-        taskQueries.js              # 任务查询
-  
+      index.js                 # actions: { readAbility }
+      handlers/{readAbility.js, index.js}
+      README.js
+    proposal-helper/
+      index.js                 # actions: 16 个（见 §9.2）
+      handlers/{addProposalTask, archiveProposal, completeProposalTask,
+                createProposal, deleteProposal, deleteTask, listProposals,
+                stagingQueries → 实际为 listStagedTasks/clearStagedTasks 等,
+                ...index.js}
+      README.js
+
   webview/
-    templateLoader.js               # 加载 configs/*.json 模板
-    viewLoader.js                   # 加载并注入 HTML 模板
-    types.js                        # WebView 类型定义
-  
+    templateLoader.js          # 加载 configs/*.json
+    viewLoader.js              # 注入 HTML
+    types.js
+
   hcInstall/
-    templateLoader.js               # 安装模板加载器
-  
+    templateLoader.js          # @hc /install 模板
+
   ui/
-    localPrompts.js                 # 本地 Prompt 命令注册
-  
+    localPrompts.js            # registerLocalPrompts
+
   utils/
-    openFile.js                     # 文件打开工具
-  
+    openFile.js
+
   resources/
-    views/
-      chat/
-        chat.html                   # WebView 主 HTML 模板
-        chat.js                     # WebView 前端逻辑（入口）
-        chat.css                    # 样式
-        richInput.js                # 富文本输入（旧版，已废弃）
-        richInput.old.js            # 富文本输入（更旧版）
-        richInput.css               # 富文本样式
-        chipManager.js              # 标签芯片管理（旧版入口）
-        suggestionManager.js        # 建议管理（旧版入口）
-        pasteHandler.js             # 粘贴处理（旧版入口）
-        htmlToMarkdown.js           # HTML 转 Markdown
-        undoManager.js              # 撤销管理（旧版入口）
-        attachmentManager.js        # 附件管理   【v2.0 新增】
-        richInput/                              【v2.0 新增】
-          richInput.js              # 重构版富文本输入核心
-          chipManager.js            # 重构版标签芯片管理
-          suggestionManager.js      # 重构版建议管理
-          undoManager.js            # 重构版撤销管理
-          pasteHandler.js           # 重构版粘贴处理
-          attachmentManager.js      # 重构版附件管理
-          richInput.css             # 重构版样式
-      feedback/
-        feedback.js                 # 反馈视图   【v2.0 新增】
-      taskManage/                               【v2.0 新增】
-        taskManage.html             # 任务管理 HTML
-        taskManage.js               # 任务管理前端逻辑
-        taskManage.css              # 任务管理样式
+    views/chat/                # 唯一存在的视图
+      chat.html / chat.js / chat.css / htmlToMarkdown.js
+      richInput/{richInput.js, chipManager.js, suggestionManager.js,
+                 undoManager.js, pasteHandler.js, attachmentManager.js,
+                 richInput.css}
     shared/
-      styles/
-        common.css                  # 通用样式
-        katex.min.css               # KaTeX 数学公式样式
-        highlight-github-dark.min.css  # 代码高亮样式
-      scripts/
-        webview-base.js             # WebView 基础脚本  【v2.0 新增】
-        markdown-it.min.js          # Markdown 渲染
-        markdown-it-katex.min.js    # KaTeX 插件
-        katex.min.js                # KaTeX 引擎
-        highlight.min.js            # 代码高亮
-  
+      styles/{common.css, katex.min.css, highlight-github-dark.min.css}
+      scripts/{webview-base.js, markdown-it.min.js, markdown-it-katex.min.js,
+               katex.min.js, highlight.min.js}
+
   configs/
-    clarification-templates.json    # 澄清回复模板
-    contact-templates.json          # 联系用户回复模板
-    feedback-templates.json         # 反馈回复模板
-  
-  sample-prompts/                               【v2.0 新增】
-    human-clarification.agent.md    # 示例 agent 模板
-    human-clarification.prompt.md   # 示例 prompt 模板
+    clarification-templates.json
+    contact-templates.json
+    feedback-templates.json
+
+  sample-prompts/              # @hc /install 写入到 ~/Code/User/prompts/
 ```
+
+孤儿文件清单见 §15。
+
+---
+
+## 附录 A：与 AgentILS 的关键对照（仅作启示，不做复刻方案）
+
+| 维度 | human-clarification | AgentILS（现状） |
+|---|---|---|
+| 状态机真值源 | 无（每次工具调用独立） | `packages/mcp` 是唯一真值源 |
+| 工具注册位置 | extension 内部 `vscode.lm.registerTool` | MCP server 工具 + thin VS Code bridge |
+| WebView 主控 | extension 直接 own WebView | extension（agentils-vscode）持有，但状态来自 MCP |
+| 多轮交互 | LLM 自主决定何时再调 | MCP 状态机决定 next action |
+| Delegate（远端用户） | WebSocket → tenant 网页 UI | 暂无；后续可参考 §7 |
+| HTTP API 暴露 LM | 提供 OpenAI 兼容 API | 不在 AgentILS 范围内 |
+
+> AgentILS 复刻方案（4 个 tools 的 native 实现 + WebView 协议合并）将在另一份 `agentils-human-clarification-impl-plan.md` 中给出，本文不展开。
