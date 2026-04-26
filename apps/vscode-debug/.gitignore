@@ -1,0 +1,5 @@
+# scripts/prepare-debug-workspace.cjs regenerates debug-only runtime files on
+# every F5 build. Keep .github visible so Copilot can discover workspace prompts
+# and agents in this Extension Development Host.
+.vscode/mcp.json
+WELCOME.md

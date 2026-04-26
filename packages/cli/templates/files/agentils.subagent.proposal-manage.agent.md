@@ -1,5 +1,5 @@
 ---
-name: "agentils.subagent.proposal-manage"
+name: 'agentils.subagent.proposal-manage'
 description: '提案管理助手 - 提供完整的提案生命周期管理能力'
 user-invokable: false
 ---
@@ -22,6 +22,7 @@ user-invokable: false
 ```
 
 文档包含：
+
 - 所有可用的 Actions 及其参数说明
 - 完整的工作流程
 - 文件结构和模板格式
@@ -44,11 +45,13 @@ user-invokable: false
 ---
 
 <!-- HC-ABILITIES-BEGIN -->
+
 ## ABILITIES
+
 <abilities>
 Here is a list of abilities that contain domain specific knowledge on a variety of topics.
 Each ability comes with a description of the topic and a file path that contains the detailed instructions.
-If a user's request matches a specific ability domain, you must invoke `request_dynamic_action("readAbility", { "name": "<abilityName>" })` to retrieve the detailed instructions and implementation logic.
+If a user's request matches a specific ability domain, you must invoke `agentils_request_dynamic_action("readAbility", { "name": "<abilityName>" })` to retrieve the detailed instructions and implementation logic.
 <ability>
 <name>ability-manage</name>
 <description>Query ability information and documentation</description>

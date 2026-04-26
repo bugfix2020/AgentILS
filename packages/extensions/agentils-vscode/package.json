@@ -8,7 +8,7 @@
     "engines": {
         "vscode": "^1.95.0"
     },
-    "main": "./dist/extension.js",
+    "main": "./dist/extension.cjs",
     "activationEvents": [
         "onStartupFinished"
     ],
@@ -16,24 +16,41 @@
         "Other"
     ],
     "contributes": {
+        "commands": [
+            {
+                "command": "agentils.openPanel",
+                "title": "Open AgentILS Panel",
+                "category": "AgentILS"
+            },
+            {
+                "command": "agentils.mcp.testConnection",
+                "title": "Test AgentILS MCP Bridge Connection",
+                "category": "AgentILS"
+            }
+        ],
         "languageModelTools": [
             {
-                "name": "request_user_clarification",
-                "displayName": "Request User Clarification",
-                "modelDescription": "Ask the user a clarifying question. Blocks until the user submits a response in the AgentILS panel.",
-                "toolReferenceName": "requestUserClarification",
+                "name": "agentils_request_user_clarification",
+                "displayName": "AgentILS: Request User Clarification",
+                "modelDescription": "**User clarification**: Ask the human developer for input or guidance. Give your question context in the chat, then use human intelligence to request input from the human.",
+                "userDescription": "Allows the agent to request clarification or guidance from the user through AgentILS.",
+                "toolReferenceName": "agentilsRequestUserClarification",
                 "canBeReferencedInPrompt": true,
+                "icon": "$(comment-discussion)",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "question": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "The question to ask the user"
                         },
                         "context": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Optional context information to help the user understand the question"
                         },
                         "placeholder": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Placeholder text for the input field"
                         }
                     },
                     "required": [
@@ -42,22 +59,27 @@
                 }
             },
             {
-                "name": "request_contact_user",
-                "displayName": "Contact User",
-                "modelDescription": "Proactively contact the user with a message.",
-                "toolReferenceName": "requestContactUser",
+                "name": "agentils_request_contact_user",
+                "displayName": "AgentILS: Contact User",
+                "modelDescription": "**Contact user**: Proactively contact the human. Provide enough context so the human understands why contact is needed.",
+                "userDescription": "Allows the agent to contact the user through AgentILS when immediate input is needed.",
+                "toolReferenceName": "agentilsRequestContactUser",
                 "canBeReferencedInPrompt": true,
+                "icon": "$(bell)",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "question": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "The urgent message or question to communicate to the user"
                         },
                         "context": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Context explaining why immediate contact is needed"
                         },
                         "placeholder": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Placeholder text for the input field"
                         }
                     },
                     "required": [
@@ -66,22 +88,27 @@
                 }
             },
             {
-                "name": "request_user_feedback",
-                "displayName": "Request User Feedback",
-                "modelDescription": "Collect feedback from the user after a task.",
-                "toolReferenceName": "requestUserFeedback",
+                "name": "agentils_request_user_feedback",
+                "displayName": "AgentILS: Request User Feedback",
+                "modelDescription": "**User feedback**: Ask the human for their opinion, rating, or suggestions about the process or result. Provide clear context so the human knows what aspect to evaluate.",
+                "userDescription": "Allows the agent to request user feedback through AgentILS.",
+                "toolReferenceName": "agentilsRequestUserFeedback",
                 "canBeReferencedInPrompt": true,
+                "icon": "$(feedback)",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "question": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "The feedback question to ask the user"
                         },
                         "context": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Summary of what was completed, to help user provide relevant feedback"
                         },
                         "placeholder": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Placeholder text for the input field"
                         }
                     },
                     "required": [
@@ -90,23 +117,28 @@
                 }
             },
             {
-                "name": "request_dynamic_action",
-                "displayName": "Dynamic Action",
-                "modelDescription": "Generic AgentILS action dispatch (action + params).",
-                "toolReferenceName": "requestDynamicAction",
+                "name": "agentils_request_dynamic_action",
+                "displayName": "AgentILS: Dynamic Action",
+                "modelDescription": "**Dynamic action**: A universal tool that supports multiple action types (clarification, contact, feedback) in a single interface. Use 'action' to specify the type and 'params' for the parameters. This reduces system prompt context usage while providing the same functionality.",
+                "userDescription": "Allows the agent to execute multiple user interaction actions through one AgentILS interface.",
+                "toolReferenceName": "agentilsRequestDynamicAction",
                 "canBeReferencedInPrompt": true,
+                "icon": "$(zap)",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "action": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "The action type to perform (e.g., 'createPlanFile', or custom action types)"
                         },
                         "params": {
-                            "type": "object"
+                            "type": "object",
+                            "description": "Parameters for the action. Can contain any properties needed by the action."
                         }
                     },
                     "required": [
-                        "action"
+                        "action",
+                        "params"
                     ]
                 }
             }
@@ -123,6 +155,126 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Auto-start a local MCP server on extension activation."
+                },
+                "agentils.mcp.heartbeatTimeoutMs": {
+                    "type": "number",
+                    "default": 3600000,
+                    "minimum": 1000,
+                    "description": "How long the local MCP server keeps a pending interaction alive without heartbeat, in milliseconds."
+                },
+                "agentils.mcp.sweepIntervalMs": {
+                    "type": "number",
+                    "default": 30000,
+                    "minimum": 1000,
+                    "description": "How often the local MCP server checks for expired pending interactions, in milliseconds."
+                },
+                "agentils.webview.viewColumn": {
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "beside"
+                    ],
+                    "default": "beside",
+                    "description": "Where AgentILS opens its webview panel."
+                },
+                "agentils.webview.appendAttachmentContent": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether AgentILS webview responses should append attachment content when supported by the webview."
+                },
+                "agentils.webview.hostHeartbeatMs": {
+                    "type": "number",
+                    "default": 20000,
+                    "minimum": 1000,
+                    "description": "How often the VS Code extension host refreshes pending interaction heartbeat while the AgentILS panel is open, in milliseconds."
+                },
+                "agentils.templates.global": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Global AgentILS reply templates. Each template should contain 'name' and 'template'. Use {{INPUT_CONTENT}} as the placeholder.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Template name"
+                            },
+                            "template": {
+                                "type": "string",
+                                "description": "Template content using {{INPUT_CONTENT}} as the placeholder"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "template"
+                        ]
+                    }
+                },
+                "agentils.templates.clarification": {
+                    "type": "array",
+                    "default": [],
+                    "description": "AgentILS reply templates for clarification requests.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Template name"
+                            },
+                            "template": {
+                                "type": "string",
+                                "description": "Template content using {{INPUT_CONTENT}} as the placeholder"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "template"
+                        ]
+                    }
+                },
+                "agentils.templates.contact": {
+                    "type": "array",
+                    "default": [],
+                    "description": "AgentILS reply templates for contact-user requests.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Template name"
+                            },
+                            "template": {
+                                "type": "string",
+                                "description": "Template content using {{INPUT_CONTENT}} as the placeholder"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "template"
+                        ]
+                    }
+                },
+                "agentils.templates.feedback": {
+                    "type": "array",
+                    "default": [],
+                    "description": "AgentILS reply templates for feedback requests.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Template name"
+                            },
+                            "template": {
+                                "type": "string",
+                                "description": "Template content using {{INPUT_CONTENT}} as the placeholder"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "template"
+                        ]
+                    }
                 }
             }
         }
@@ -133,6 +285,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@agentils/logger": "workspace:*",
         "@agentils/mcp": "workspace:*"
     },
     "devDependencies": {

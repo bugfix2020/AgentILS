@@ -5,12 +5,29 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
-        ignores: ['**/dist/**', '**/build/**', '**/node_modules/**', '**/*.min.js', 'scripts/**/*.mjs'],
+        ignores: [
+            '**/dist/**',
+            '**/build/**',
+            '**/node_modules/**',
+            '**/*.min.js',
+            'packages/extensions/*/webview/**',
+            'scripts/**/*.mjs',
+        ],
     },
     {
         files: ['**/*.cjs'],
         languageOptions: {
             sourceType: 'commonjs',
+            globals: {
+                __dirname: 'readonly',
+                console: 'readonly',
+                module: 'readonly',
+                process: 'readonly',
+                require: 'readonly',
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-require-imports': 'off',
         },
     },
     {
@@ -19,6 +36,12 @@ export default tseslint.config(
             '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
             '@typescript-eslint/no-require-imports': 'warn',
             'no-console': 'warn',
+        },
+    },
+    {
+        files: ['**/*.cjs'],
+        rules: {
+            '@typescript-eslint/no-require-imports': 'off',
         },
     },
 )
