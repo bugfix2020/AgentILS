@@ -1,0 +1,37 @@
+AgentILS Quality Gate
+
+Usage:
+    agentils-quality-gate init [options]
+
+Options:
+    -C, --cwd <dir>                    target project directory, defaults to cwd
+    --package-manager <pm>             pnpm, npm, yarn, or bun; auto-detected by default
+    --prettier-config <path>           defaults to prettier.config.mjs
+    --prettier-ignore <path>           defaults to .prettierignore
+    --czrc <path>                      defaults to .czrc
+    --commitlint-config <path>         defaults to commitlint.config.mjs
+    --lint-staged-config <path>        defaults to lint-staged.config.mjs
+    --husky-dir <path>                 defaults to .husky
+    --pre-commit-command <command>     defaults to '{pm} exec lint-staged'
+    --commit-msg-command <command>     defaults to '{pm} exec commitlint --edit "$1"'
+    --with-eslint                      lint JS/TS staged files with eslint before prettier
+    --install                          run the detected package manager install after writing files
+    --dry-run                          print planned changes without writing files or installing dependencies
+    --agentils-hooks                   use AgentILS custom Husky hook templates
+    --force                            overwrite existing config and hook files
+    --conflict <strategy>              overwrite, merge, skip, or cancel when config files already exist
+    --merge                            merge supported existing files and skip the rest
+    --skip-existing                    skip existing config and hook files
+    --interactive / --no-interactive   force interactive or non-interactive conflict handling
+    --no-package-json                  do not update package.json scripts/devDependencies
+    --no-husky                         do not write Husky hooks
+    --no-prettier                      do not write Prettier config files
+    --no-commitlint                    do not write commitlint config or commit-msg hook
+    --no-lint-staged                   do not write lint-staged config or pre-commit hook
+
+Examples:
+    pnpm dlx @agentils/quality-gate init
+    npx @agentils/quality-gate init
+    yarn dlx @agentils/quality-gate init
+    bunx @agentils/quality-gate init
+    pnpm dlx @agentils/quality-gate init --cwd packages/my-app --with-eslint
