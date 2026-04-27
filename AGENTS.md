@@ -20,6 +20,8 @@
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex 读取。
 
+调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。
+
 ## Codex / AGENTS 专属规则
 
 - 不要一开始就全仓扫描；按当前调用链与模块边界工作。

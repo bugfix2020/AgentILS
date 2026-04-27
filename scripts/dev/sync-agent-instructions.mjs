@@ -23,6 +23,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { format as formatWithPrettier, resolveConfig as resolvePrettierConfig } from 'prettier'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
@@ -49,8 +50,24 @@ const generatedHeader = (sourceRel) =>
 
 const writes = []
 let hasDiff = false
+const prettierConfigCache = new Map()
 
-function maybeWrite(targetRel, generated) {
+async function formatGenerated(targetRel, generated) {
+    if (!targetRel.endsWith('.md')) return generated
+    const targetPath = path.join(repoRoot, targetRel)
+    let prettierConfig = prettierConfigCache.get(targetRel)
+    if (!prettierConfig) {
+        prettierConfig = (await resolvePrettierConfig(targetPath)) ?? {}
+        prettierConfigCache.set(targetRel, prettierConfig)
+    }
+    return formatWithPrettier(generated, {
+        ...prettierConfig,
+        filepath: targetPath,
+    })
+}
+
+async function maybeWrite(targetRel, generated) {
+    const formatted = await formatGenerated(targetRel, generated)
     const targetPath = path.join(repoRoot, targetRel)
     let current = ''
     try {
@@ -58,14 +75,14 @@ function maybeWrite(targetRel, generated) {
     } catch (error) {
         if (error?.code !== 'ENOENT') throw error
     }
-    if (current === generated) return
+    if (current === formatted) return
     hasDiff = true
     if (checkOnly) {
         console.error(`[sync-agent-instructions] out of date: ${targetRel}`)
         return
     }
     mkdirSync(path.dirname(targetPath), { recursive: true })
-    writeFileSync(targetPath, generated)
+    writeFileSync(targetPath, formatted)
     writes.push(targetRel)
     console.log(`[sync-agent-instructions] updated ${targetRel}`)
 }
@@ -76,7 +93,7 @@ for (const entry of manifest.sources) {
     const targetRel = path.posix.join(targetInstructionsDirRel, entry.file)
     const sourceBody = readFileSync(path.join(repoRoot, sourceRel), 'utf8').replace(/\r\n/g, '\n').trimEnd()
     const generated = generatedHeader(sourceRel) + sourceBody + '\n'
-    maybeWrite(targetRel, generated)
+    await maybeWrite(targetRel, generated)
 }
 
 // 2) 渲染入口 stub（同源等价，AGENTS.md 与 copilot-instructions.md 共享同一段正文）
@@ -94,10 +111,14 @@ function renderEntryStub(audience) {
         '2. `.github/instructions/` 下全部 instruction 文件（即下方列表，与本入口同源生成）：',
         '',
     ]
-    const list = manifest.sources.map((s) => `   - [\`.github/instructions/${s.file}\`](.github/instructions/${s.file}) — ${s.summary}`)
+    const list = manifest.sources.map(
+        (s) => `   - [\`.github/instructions/${s.file}\`](.github/instructions/${s.file}) — ${s.summary}`,
+    )
     const tail = [
         '',
         '不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex 读取。',
+        '',
+        '调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。',
         '',
     ]
     const audienceNote = isCopilot
@@ -127,18 +148,8 @@ function renderEntryStub(audience) {
 const copilotStubBody = renderEntryStub('copilot')
 const agentsStubBody = renderEntryStub('agents')
 
-maybeWrite(
-    copilotEntryRel,
-    generatedHeader(manifestRel) +
-        copilotStubBody.trimEnd() +
-        '\n',
-)
-maybeWrite(
-    agentsEntryRel,
-    generatedHeader(manifestRel) +
-        agentsStubBody.trimEnd() +
-        '\n',
-)
+await maybeWrite(copilotEntryRel, generatedHeader(manifestRel) + copilotStubBody.trimEnd() + '\n')
+await maybeWrite(agentsEntryRel, generatedHeader(manifestRel) + agentsStubBody.trimEnd() + '\n')
 
 if (hasDiff && stageOutputs && !checkOnly) {
     const filesToStage = new Set([

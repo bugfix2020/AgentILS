@@ -19,6 +19,8 @@
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex 读取。
 
+调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。
+
 ## Copilot 专属规则
 
 - 在 VS Code 中使用 `@agentils` 启动 AgentILS WebView 会话；用 `/runtask` 作为 prompt 入口。
