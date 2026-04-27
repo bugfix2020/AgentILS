@@ -44,4 +44,27 @@ export default tseslint.config(
             '@typescript-eslint/no-require-imports': 'off',
         },
     },
+    {
+        files: ['apps/e2e-userflow/test/**/*.{ts,mjs,cjs}', 'packages/mcp/test/**/*.ts'],
+        languageOptions: {
+            globals: {
+                AbortSignal: 'readonly',
+                Buffer: 'readonly',
+                clearInterval: 'readonly',
+                console: 'readonly',
+                fetch: 'readonly',
+                process: 'readonly',
+                setInterval: 'readonly',
+                setTimeout: 'readonly',
+                suite: 'readonly',
+                suiteSetup: 'readonly',
+                test: 'readonly',
+                TextDecoder: 'readonly',
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-unused-vars': 'off',
+            'no-empty': ['error', { allowEmptyCatch: true }],
+        },
+    },
 )
