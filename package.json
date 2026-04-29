@@ -8,6 +8,8 @@
         "build": "turbo run build",
         "dev": "turbo run dev --parallel",
         "dev:http": "pnpm --filter @agentils/mcp dev:http",
+        "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
+        "changelog:all": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
         "generate:flowcharts": "node scripts/flowcharts/generate-all.mjs",
         "generate:changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
         "generate:changelog:first": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
