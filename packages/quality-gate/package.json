@@ -1,0 +1,36 @@
+{
+    "name": "@agentils/quality-gate",
+    "version": "0.0.1",
+    "description": "Initialize Husky, lint-staged, Prettier, commitlint, and Conventional Commits defaults for a project.",
+    "type": "module",
+    "main": "./dist/index.js",
+    "bin": {
+        "agentils-quality-gate": "dist/index.js"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "README.zh-CN.md"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/",
+        "provenance": true
+    },
+    "scripts": {
+        "build": "tsup && node scripts/copy-templates.mjs",
+        "dev": "tsup --watch",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@clack/prompts": "^0.11.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.3",
+        "tsup": "^8.5.1",
+        "typescript": "^5.8.3"
+    }
+}

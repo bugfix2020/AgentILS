@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentILS 第二章 状态图</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --stroke: #d8ddea;
+      --text: #20232d;
+      --muted: #667085;
+      --blue: #4669EA;
+      --red: #E74F4C;
+      --green: #0f9d58;
+      --amber: #f59e0b;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: Inter, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background:
+        linear-gradient(0deg, rgba(70,105,234,0.03), rgba(70,105,234,0.03)),
+        linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px),
+        linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+        var(--bg);
+      background-size: auto, 32px 32px, 32px 32px, auto;
+      color: var(--text);
+    }
+    .page {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 24px;
+      padding: 24px 28px;
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 34px;
+      line-height: 1.2;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+      max-width: 960px;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+    .grid.two {
+      grid-template-columns: 1.1fr 0.9fr;
+      align-items: start;
+    }
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+      height: 100%;
+    }
+    .panel.fill-grid-panel {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .panel.fill-grid-panel .decision-grid {
+      flex: 1 1 auto;
+      grid-auto-rows: 1fr;
+    }
+    .panel h2,
+    .panel h3 {
+      margin: 0 0 14px;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+    }
+    .card {
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 16px 18px;
+      background: #fcfcff;
+      flex: 1;
+    }
+    .card .label {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .card .desc {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-line;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .tag.blue { background: rgba(70,105,234,0.12); color: var(--blue); }
+    .tag.red { background: rgba(231,79,76,0.12); color: var(--red); }
+    .tag.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
+    .tag.green { background: rgba(15,157,88,0.12); color: var(--green); }
+    .list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.8;
+      font-size: 14px;
+    }
+    .status-layers {
+      display: grid;
+      gap: 14px;
+    }
+    .layer {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 16px;
+      align-items: start;
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fff;
+    }
+    .layer-title {
+      font-weight: 800;
+      font-size: 16px;
+    }
+    .layer-subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+      line-height: 1.6;
+    }
+    .pill-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .pill {
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      background: #fbfcff;
+    }
+    .pill.active { border-color: var(--blue); color: var(--blue); background: rgba(70,105,234,0.08); }
+    .pill.warn { border-color: var(--amber); color: #8a5a00; background: rgba(245,158,11,0.08); }
+    .pill.risk { border-color: var(--red); color: var(--red); background: rgba(231,79,76,0.08); }
+    .pill.ok { border-color: var(--green); color: var(--green); background: rgba(15,157,88,0.08); }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .flow-step {
+      min-width: 150px;
+      text-align: center;
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: #fff;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+    .flow-arrow {
+      color: var(--blue);
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .compare {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .mode {
+      border-radius: 18px;
+      padding: 20px;
+      border: 1px solid var(--stroke);
+      background: white;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .mode h3 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+    .mode .mode-name {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .mode .mode-summary {
+      font-size: 15px;
+      line-height: 1.8;
+      color: var(--text);
+      margin-bottom: 14px;
+      min-height: 81px;
+    }
+    .mode.normal { border-top: 4px solid var(--green); }
+    .mode.alternate { border-top: 4px solid var(--amber); }
+    .mode.direct { border-top: 4px solid var(--red); }
+    .note {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .rail {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rail-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 14px;
+      align-items: start;
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: #fff;
+    }
+    .rail-head {
+      font-weight: 800;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .rail-body {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+      white-space: pre-line;
+    }
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+    .decision-grid.two-cols {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .decision-card {
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fff;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .decision-card h4 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+    .decision-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+      white-space: pre-line;
+    }
+    .mini-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mini-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .mini-line.fill {
+      flex-wrap: nowrap;
+      justify-content: stretch;
+    }
+    .mini-line.fill .mini-node {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .mini-line.tight {
+      flex-wrap: nowrap;
+      justify-content: stretch;
+      gap: 8px;
+    }
+    .mini-line.tight .mini-node {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .mini-line.tight .mini-arrow {
+      font-size: 16px;
+      flex: 0 0 auto;
+    }
+    .mini-node {
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+      min-width: 130px;
+      text-align: center;
+    }
+    .mini-node.blue {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: rgba(70,105,234,0.07);
+    }
+    .mini-node.amber {
+      border-color: var(--amber);
+      color: #8a5a00;
+      background: rgba(245,158,11,0.08);
+    }
+    .mini-node.red {
+      border-color: var(--red);
+      color: var(--red);
+      background: rgba(231,79,76,0.08);
+    }
+    .mini-arrow {
+      color: var(--blue);
+      font-size: 18px;
+      font-weight: 800;
+    }
+    @media (max-width: 1100px) {
+      body { padding: 18px; }
+      .grid.two, .grid.three, .compare, .decision-grid { grid-template-columns: 1fr; }
+      .layer, .rail-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    
+<section class="hero">
+  <div class="eyebrow">Chapter 2</div>
+  <h1>第二章 状态图</h1>
+  <div class="subtitle">
+    本章不只定义状态名，还明确每个状态由谁维护、显示在哪里、控制什么，以及在流程的哪个节点生效。
+  </div>
+</section>
+
+<section class="panel">
+  <h2>2.1 一个时刻到底会同时发生什么</h2>
+  <div class="mini-flow">
+    <div class="mini-line tight">
+      <div class="mini-node blue">Conversation State<br/>active_task</div>
+      <div class="mini-arrow">→</div>
+      <div class="mini-node blue">Task Phase<br/>execute</div>
+      <div class="mini-arrow">→</div>
+      <div class="mini-node blue">Task Status<br/>active</div>
+      <div class="mini-arrow">→</div>
+      <div class="mini-node amber">Control Mode<br/>alternate</div>
+      <div class="mini-arrow">→</div>
+      <div class="mini-node">Override State<br/>soft override</div>
+      <div class="mini-arrow">→</div>
+      <div class="mini-node">Execution Readiness<br/>technicallyReady / boundaryApproved / policyAllowed</div>
+      <div class="mini-arrow">→</div>
+      <div class="mini-node">Verification Result<br/>pending</div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:14px;">
+    这不是 7 选 1，而是 7 层同时成立。一个状态负责展示当前任务做到哪一步，另一个状态负责决定系统现在还能不能继续强约束执行。
+  </p>
+</section>
+
+<section class="panel">
+  <h2>2.2 状态不是描述，它们直接控制流程</h2>
+  <div class="rail">
+    <div class="rail-row">
+      <div class="rail-head">Conversation State</div>
+      <div class="rail-body">谁维护：
+Gate / Conversation Orchestrator
+
+显示在哪里：
+插件顶层任务面板、WebView 顶部总状态
+
+控制什么：
+是否允许创建新 task，当前会话是否进入 await_next_task 或 conversation_done
+
+在哪些节点生效：
+task 完成后、用户开始新任务时、用户明确结束会话时</div>
+    </div>
+    <div class="rail-row">
+      <div class="rail-head">Task Phase</div>
+      <div class="rail-body">谁维护：
+Planner / Implementer / Reviewer 在各自阶段推进时写入
+
+显示在哪里：
+插件主状态区、Task 详情、流程图主节点
+
+控制什么：
+决定下一步应该继续 collect、plan、execute 还是 verify
+
+在哪些节点生效：
+进入 collect、confirm_elements、plan、execute、verify、done 时</div>
+    </div>
+    <div class="rail-row">
+      <div class="rail-head">Task Status</div>
+      <div class="rail-body">谁维护：
+运行时 orchestrator
+
+显示在哪里：
+插件状态副标题、等待用户/审批提示、错误提示
+
+控制什么：
+决定当前是继续运行、等待用户、等待审批、还是已失败
+
+在哪些节点生效：
+elicitation、approval、budget exceed、task fail、task complete</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>2.3 内部控制状态决定系统怎么做事</h2>
+  <div class="rail">
+    <div class="rail-row">
+      <div class="rail-head">Control Mode</div>
+      <div class="rail-body">谁维护：
+Gate / Control Mode Orchestrator
+
+显示在哪里：
+插件次级状态区、风险说明区、summary 文档
+
+控制什么：
+决定现在是 normal、alternate 还是 direct；
+进而影响是否继续强收敛、是否强制暴露风险、是否降级成用户接管
+
+在哪些节点生效：
+normal 收敛失败、用户要求继续、用户明确知晓风险时</div>
+    </div>
+    <div class="rail-row">
+      <div class="rail-head">Override State</div>
+      <div class="rail-body">谁维护：
+风险确认工具 / UI action / taskCard
+
+显示在哪里：
+风险确认弹层、summary 文档、审计记录
+
+控制什么：
+记录当前 task 是否已经发生软接管或硬接管
+
+在哪些节点生效：
+用户点击继续、用户输入“我已知晓风险，继续/直接执行”时</div>
+    </div>
+    <div class="rail-row">
+      <div class="rail-head">Execution Readiness / Verification Result</div>
+      <div class="rail-body">谁维护：
+Planner 在 execute 前判断；Reviewer 在 verify 后判断
+
+显示在哪里：
+执行前门禁说明、verify 结果区、summary 文档
+
+控制什么：
+前者决定“能不能开始改”；
+后者决定“能不能结束当前 task”
+
+在哪些节点生效：
+plan -> execute 之前；verify -> done 或 verify -> rollback 时</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>2.4 状态优先级和边界</h2>
+  <div class="decision-grid">
+    <div class="decision-card">
+      <h4>Task Phase != Control Mode</h4>
+      <p>Task Phase 决定“当前任务做到哪一步”。
+Control Mode 决定“当前系统以什么强度控制这一步”。</p>
+    </div>
+    <div class="decision-card">
+      <h4>Task done != Conversation done</h4>
+      <p>当前 task 完成后，标准行为是 await_next_task。
+只有用户明确结束会话，才进入 conversation_done。</p>
+    </div>
+    <div class="decision-card">
+      <h4>Readiness 在 execute 之前判定</h4>
+      <p>technicallyReady / boundaryApproved / policyAllowed
+三者共同决定“现在能不能安全开工”。</p>
+    </div>
+    <div class="decision-card">
+      <h4>Verification 决定能否收尾</h4>
+      <p>verify 通过，当前 task 才能结束。
+verify 不通过，要么回 execute，要么回 plan。</p>
+    </div>
+  </div>
+</section>
+
+<section class="grid two">
+  <article class="panel">
+    <h2>2.5 建议在界面上的摆放位置</h2>
+    <ul class="list">
+      <li>主界面最优先展示的是：Conversation State、Task Phase、Task Status。</li>
+      <li>Control Mode 是次级状态，用来解释为什么系统现在变保守了。</li>
+      <li>Override、Execution Readiness、Verification Result 更偏内部控制层，不需要长期占主位。</li>
+    </ul>
+  </article>
+  <article class="panel">
+    <h2>2.6 一个真实例子</h2>
+    <div class="card">
+      <div class="label">例子：执行中发现影响面扩大</div>
+      <div class="desc">Conversation State = active_task
+Task Phase = execute
+Task Status = active
+Control Mode = alternate
+Override State = soft override
+
+解释：
+任务仍在执行，所以 Task Phase 还是 execute。
+但因为用户要求继续、信息没有完全收敛，所以 Control Mode 已经从 normal 降级成 alternate。
+这时插件里应该看得到“当前在执行”，也应该看得到“当前已进入备用法则”。</div>
+    </div>
+  </article>
+</section>
+
+  </main>
+</body>
+</html>

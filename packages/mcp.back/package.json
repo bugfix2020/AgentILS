@@ -1,0 +1,57 @@
+{
+  "name": "@agentils/mcp",
+  "version": "1.0.0",
+  "description": "AgentILS V1 MCP loop runtime",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./gateway": {
+      "import": "./dist/gateway/index.js",
+      "types": "./dist/gateway/index.d.ts"
+    },
+    "./store": {
+      "import": "./dist/store/index.js",
+      "types": "./dist/store/index.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config/index.js",
+      "types": "./dist/config/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "dev:http": "tsx src/index.ts --http",
+    "smoke": "node -e \"import('./dist/index.js').then((m) => { const runtime = m.createAgentGateServer(); console.log(JSON.stringify({ ok: !!runtime.server, name: runtime.config.serverName })); }).catch((error) => { console.error(error); process.exit(1); })\"",
+    "start": "node dist/index.js",
+    "start:http": "node dist/index.js --http",
+    "test": "tsx --test test/v1/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "tsup": "^8.5.1",
+    "typescript": "^5.8.3"
+  }
+}

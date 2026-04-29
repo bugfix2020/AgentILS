@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - packages/extensions/*
+  - extensions/*
+  - extensions/*/webview
+  - apps/*
+  - '!packages/*.back'
+  - '!packages/**/*.back'

@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "lib": ["ES2022"]
+  },
+  "include": [
+    "src/index.ts",
+    "src/logger.ts",
+    "src/config/defaults.ts",
+    "src/gateway/context.ts",
+    "src/gateway/gateway.ts",
+    "src/gateway/prompts.ts",
+    "src/gateway/resources.ts",
+    "src/gateway/server.ts",
+    "src/gateway/shared.ts",
+    "src/gateway/tools.ts",
+    "src/gateway/transports.ts",
+    "src/orchestrator/index.ts",
+    "src/orchestrator/orchestrator.ts",
+    "src/runtime/lock.ts",
+    "src/store/index.ts",
+    "src/store/memory-store.ts",
+    "src/types/control-mode.ts",
+    "src/types/index.ts",
+    "src/types/session.ts",
+    "src/types/task.ts"
+  ]
+}

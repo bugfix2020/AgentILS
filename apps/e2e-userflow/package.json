@@ -1,0 +1,27 @@
+{
+    "name": "@agentils/e2e-userflow",
+    "version": "0.0.0",
+    "private": true,
+    "description": "End-to-end user-path tests: real `agentils init` → real MCP server → simulated VS Code LM tool round-trip with the agentils.runTask.prompt.md asset.",
+    "type": "module",
+    "scripts": {
+        "test": "tsx --test test/**/*.test.ts",
+        "test:single": "tsx --test"
+    },
+    "dependencies": {
+        "@agentils/cli": "workspace:*",
+        "@agentils/mcp": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.27.1",
+        "express": "^5.1.0",
+        "zod": "^3.25.76"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^22.15.3",
+        "@vscode/test-electron": "^2.5.2",
+        "glob": "^13.0.6",
+        "mocha": "^11.7.5",
+        "tsx": "^4.19.4",
+        "typescript": "^5.8.3"
+    }
+}

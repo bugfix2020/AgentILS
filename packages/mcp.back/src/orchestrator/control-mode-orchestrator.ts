@@ -1,0 +1,217 @@
+import { AgentGateAuditLogger } from '../audit/audit-logger.js'
+import { AgentGateMemoryStore } from '../store/memory-store.js'
+import {
+  ApprovalResultSchema,
+  createOverrideState,
+  createRunEvent,
+  type ApprovalResult,
+  type FeedbackDecision,
+  type OverrideState as TaskOverrideState,
+  type RiskLevel,
+  type RunRecord,
+} from '../types/index.js'
+import { nextControlMode, type ControlModeSignal } from '../control/mode-transitions.js'
+import { normalizeControlMode, type ControlMode } from '../control/control-modes.js'
+import { AgentGateTaskOrchestrator } from './task-orchestrator.js'
+
+export interface ApprovalRequestContext {
+  runId?: string
+  conversationId?: string
+  taskId?: string
+  traceId: string
+  now: () => string
+}
+
+export interface BeginApprovalRequestInput {
+  runId: string
+  summary: string
+  riskLevel: RiskLevel
+  toolName?: string
+  targets?: string[]
+}
+
+export class AgentGateControlModeOrchestrator {
+  constructor(
+    private readonly store: AgentGateMemoryStore,
+    private readonly audit: AgentGateAuditLogger,
+    private readonly task: AgentGateTaskOrchestrator,
+  ) {}
+
+  getControlMode(runId: string): ControlMode {
+    return normalizeControlMode(this.store.requireRun(runId).controlMode)
+  }
+
+  setControlMode(
+    runId: string,
+    controlMode: ControlMode | string | null | undefined,
+    reason = 'control.mode.updated',
+  ): RunRecord {
+    return this.task.setTaskControlMode(runId, controlMode, reason)
+  }
+
+  applyControlModeSignal(
+    runId: string,
+    signal: ControlModeSignal,
+    overrideState?: TaskOverrideState | null,
+    reason = 'control.mode.signal',
+  ): RunRecord {
+    const currentRun = this.store.requireRun(runId)
+    const taskCard = this.store.requireTaskCard(runId)
+    const nextMode = nextControlMode(
+      currentRun.controlMode,
+      signal,
+      overrideState ?? taskCard.overrideState,
+    )
+    return this.setControlMode(runId, nextMode, `${reason}:${signal}`)
+  }
+
+  beginApprovalRequest(ctx: ApprovalRequestContext, input: BeginApprovalRequestInput): RunRecord {
+    if (ctx.runId && ctx.runId !== input.runId) {
+      throw new Error('Request context runId does not match approval request runId.')
+    }
+
+    const currentRun = this.store.requireRun(input.runId)
+    const controlMode = normalizeControlMode(currentRun.controlMode)
+
+    // Direct mode: skip approval entirely, auto-set approvalPassed
+    if (controlMode === 'direct') {
+      const updated = this.store.updateRun(input.runId, { approvalPassed: true })
+      this.store.transitionRun(input.runId, 'execute', 'active')
+      this.audit.info(input.runId, 'approval.skip', 'Approval skipped in direct mode.', {
+        summary: input.summary,
+        traceId: ctx.traceId,
+      })
+      return updated
+    }
+
+    const activeApproval: RunRecord['activeApproval'] = {
+      approved: false,
+      action: 'cancel',
+      summary: input.summary,
+      riskLevel: input.riskLevel,
+      toolName: input.toolName,
+      targets: input.targets ?? [],
+      updatedAt: ctx.now(),
+    }
+
+    this.store.transitionRun(input.runId, 'approval', 'awaiting_approval')
+    const updatedRun = this.store.updateRun(input.runId, {
+      activeApproval,
+      verifyPassed: false,
+    })
+    this.store.appendRunEvent(
+      createRunEvent(input.runId, 'approval.pending', {
+        summary: input.summary,
+        riskLevel: input.riskLevel,
+        toolName: input.toolName,
+        targets: input.targets ?? [],
+        traceId: ctx.traceId,
+        conversationId: ctx.conversationId ?? currentRun.conversationId,
+        taskId: ctx.taskId ?? currentRun.taskId,
+      }),
+    )
+    this.audit.info(input.runId, 'approval.pending', 'Approval request started.', {
+      summary: input.summary,
+      riskLevel: input.riskLevel,
+      toolName: input.toolName,
+      targets: input.targets ?? [],
+      traceId: ctx.traceId,
+    })
+    return updatedRun
+  }
+
+  recordApproval(
+    runId: string,
+    summary: string,
+    result: ApprovalResult,
+    ctx?: Pick<ApprovalRequestContext, 'now' | 'traceId'>,
+  ): ApprovalResult {
+    const parsed = ApprovalResultSchema.parse(result)
+    const currentRun = this.store.requireRun(runId)
+    const approvalState: RunRecord['activeApproval'] = {
+      approved: parsed.action === 'accept',
+      action: parsed.action,
+      summary,
+      riskLevel: currentRun.activeApproval?.riskLevel ?? 'medium',
+      toolName: currentRun.activeApproval?.toolName,
+      targets: currentRun.activeApproval?.targets ?? [],
+      updatedAt: ctx?.now() ?? new Date().toISOString(),
+    }
+
+    if (parsed.action === 'decline') {
+      this.store.transitionRun(runId, 'cancelled', 'cancelled')
+      this.store.confirmDone(runId, false)
+      this.task.setTaskOverrideState(runId, null)
+    } else if (parsed.action === 'cancel') {
+      this.store.transitionRun(runId, 'approval', 'awaiting_approval')
+      this.store.confirmDone(runId, false)
+      this.task.setTaskOverrideState(runId, null)
+    } else if (parsed.payload?.status === 'revise') {
+      this.store.transitionRun(runId, 'confirm_elements', 'awaiting_user')
+      this.store.confirmDone(runId, false)
+      this.store.updateRun(runId, { verifyPassed: false })
+      this.task.setTaskOverrideState(runId, null)
+    } else if (parsed.payload?.status === 'done') {
+      this.store.transitionRun(runId, 'verify', 'active')
+      this.store.confirmDone(runId, true)
+      this.store.updateRun(runId, { verifyPassed: false })
+    } else {
+      this.store.transitionRun(runId, 'execute', 'active')
+    }
+
+    if (parsed.action === 'accept') {
+      // Set approvalPassed on accept
+      this.store.updateRun(runId, { approvalPassed: true })
+
+      const overrideState = createOverrideState({
+        confirmed: true,
+        taskId: currentRun.taskId,
+        conversationId: currentRun.conversationId,
+        level: approvalState.riskLevel === 'high' ? 'hard' : 'soft',
+        summary,
+        acceptedRisks: approvalState.targets,
+        skippedChecks: [],
+        mode: currentRun.controlMode,
+      })
+      this.task.setTaskOverrideState(runId, overrideState)
+
+      const signal: ControlModeSignal = normalizeControlMode(currentRun.controlMode) === 'normal' ? 'override' : 'repeat_override'
+      this.applyControlModeSignal(runId, signal, overrideState, 'approval.override')
+    }
+
+    this.store.updateRun(runId, {
+      activeApproval: approvalState,
+      userConfirmedDone: parsed.payload?.status === 'done',
+    })
+    this.store.appendDecision(runId, `${parsed.action}: ${parsed.payload?.msg || summary}`)
+    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { summary, result: parsed, traceId: ctx?.traceId }))
+    this.audit.info(runId, 'approval.result', 'Approval captured.', { summary, result: parsed })
+    return parsed
+  }
+
+  recordFeedback(
+    runId: string,
+    decision: FeedbackDecision,
+    ctx?: Pick<ApprovalRequestContext, 'traceId'>,
+  ): FeedbackDecision {
+    if (decision.status === 'done') {
+      this.store.transitionRun(runId, 'verify', 'active')
+      this.store.confirmDone(runId, true)
+    } else if (decision.status === 'revise') {
+      this.store.transitionRun(runId, 'confirm_elements', 'awaiting_user')
+      this.store.confirmDone(runId, false)
+      this.store.updateRun(runId, { verifyPassed: false })
+    } else {
+      this.store.transitionRun(runId, 'execute', 'active')
+    }
+
+    this.store.updateRun(runId, {
+      lastFeedback: decision,
+      userConfirmedDone: decision.status === 'done',
+    })
+    this.store.appendDecision(runId, `${decision.status}: ${decision.msg}`)
+    this.store.appendRunEvent(createRunEvent(runId, 'resume.received', { decision, traceId: ctx?.traceId }))
+    this.audit.info(runId, 'feedback.result', 'Feedback captured.', decision)
+    return decision
+  }
+}

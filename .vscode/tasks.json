@@ -1,0 +1,67 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build:mcp",
+            "type": "shell",
+            "command": "pnpm --filter @agentils/mcp build",
+            "problemMatcher": []
+        },
+        {
+            "label": "build:webview",
+            "type": "shell",
+            "command": "pnpm --filter agentils-vscode-webview build",
+            "problemMatcher": []
+        },
+        {
+            "label": "build:agentils-vscode",
+            "type": "shell",
+            "command": "pnpm --filter agentils-vscode build",
+            "problemMatcher": "$tsc"
+        },
+        {
+            "label": "ensure:debug-workspace",
+            "type": "shell",
+            "command": "node",
+            "args": ["scripts/prepare-debug-workspace.cjs"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        },
+        {
+            "label": "build:cli",
+            "type": "shell",
+            "command": "pnpm --filter @agentils/cli build",
+            "problemMatcher": []
+        },
+        {
+            "label": "prepare:agentils-extensions",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build:mcp",
+                "build:cli",
+                "build:webview",
+                "build:agentils-vscode",
+                "ensure:debug-workspace"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "open:agentils-extension-host",
+            "type": "shell",
+            "command": "${execPath}",
+            "args": [
+                "--new-window",
+                "--extensionDevelopmentPath=${workspaceFolder}/packages/extensions/agentils-vscode",
+                "${workspaceFolder}/apps/vscode-debug",
+                "--disable-extension=justwe9517.human-clarification-debugger"
+            ],
+            "dependsOrder": "sequence",
+            "dependsOn": ["prepare:agentils-extensions"],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
+    ]
+}

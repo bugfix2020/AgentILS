@@ -1,0 +1,5 @@
+*
+!.gitignore
+!codex-modular-debug.md
+!instructions/
+!instructions/**

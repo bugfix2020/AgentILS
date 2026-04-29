@@ -1,79 +1,49 @@
 {
-    "name": "agent-gate",
-    "version": "0.1.0",
-    "description": "Agent Gate MCP Server - VS Code AI Agent 编排平台控制层",
-    "type": "module",
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "exports": {
-        ".": {
-            "import": "./dist/index.js",
-            "types": "./dist/index.d.ts"
-        },
-        "./interaction": {
-            "import": "./dist/interaction/index.js",
-            "types": "./dist/interaction/index.d.ts"
-        },
-        "./interaction/sampling": {
-            "import": "./dist/interaction/sampling.js",
-            "types": "./dist/interaction/sampling.d.ts"
-        },
-        "./interaction/channel-mcp": {
-            "import": "./dist/interaction/channel-mcp.js",
-            "types": "./dist/interaction/channel-mcp.d.ts"
-        },
-        "./interaction/channel-hc": {
-            "import": "./dist/interaction/channel-hc.js",
-            "types": "./dist/interaction/channel-hc.d.ts"
-        },
-        "./gateway": {
-            "import": "./dist/gateway/index.js",
-            "types": "./dist/gateway/index.d.ts"
-        },
-        "./orchestrator": {
-            "import": "./dist/orchestrator/index.js",
-            "types": "./dist/orchestrator/index.d.ts"
-        },
-        "./store": {
-            "import": "./dist/store/index.js",
-            "types": "./dist/store/index.d.ts"
-        },
-        "./audit": {
-            "import": "./dist/audit/index.js",
-            "types": "./dist/audit/index.d.ts"
-        },
-        "./budget": {
-            "import": "./dist/budget/index.js",
-            "types": "./dist/budget/index.d.ts"
-        },
-        "./policy": {
-            "import": "./dist/policy/index.js",
-            "types": "./dist/policy/index.d.ts"
-        },
-        "./config": {
-            "import": "./dist/config/index.js",
-            "types": "./dist/config/index.d.ts"
-        },
-        "./types": {
-            "import": "./dist/types/index.js",
-            "types": "./dist/types/index.d.ts"
-        }
-    },
+    "name": "agentils-workspace",
+    "private": true,
+    "packageManager": "pnpm@10.14.0",
     "scripts": {
-        "build": "tsup",
-        "dev": "tsup --watch",
-        "start": "node dist/index.js",
-        "typecheck": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.12.1",
-        "zod": "^3.24.4"
+        "agentils:install:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js install vscode --workspace apps/vscode-debug",
+        "agentils:uninstall:vscode": "pnpm --filter @agentils/cli build && node packages/cli/dist/index.js uninstall vscode --workspace apps/vscode-debug",
+        "build": "turbo run build",
+        "dev": "turbo run dev --parallel",
+        "dev:http": "pnpm --filter @agentils/mcp dev:http",
+        "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
+        "changelog:all": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
+        "generate:flowcharts": "node scripts/flowcharts/generate-all.mjs",
+        "generate:changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
+        "generate:changelog:first": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
+        "sync:instructions": "node scripts/dev/sync-agent-instructions.mjs",
+        "sync:instructions:check": "node scripts/dev/sync-agent-instructions.mjs --check",
+        "smoke": "pnpm --filter @agentils/mcp smoke",
+        "start": "pnpm --filter @agentils/mcp start",
+        "start:http": "pnpm --filter @agentils/mcp start:http",
+        "start:webview": "pnpm --filter agentils-vscode-webview start",
+        "test": "turbo run test",
+        "test:unit": "pnpm --filter @agentils/mcp test",
+        "typecheck": "turbo run typecheck",
+        "typecheck:vscode-host": "pnpm --filter agentils-vscode typecheck",
+        "verify:surfaces": "pnpm --filter agentils-vscode typecheck",
+        "prepare": "husky",
+        "commit": "git-cz",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
     },
     "devDependencies": {
-        "@types/node": "^22.15.3",
-        "terser": "^5.46.1",
-        "tsup": "^8.5.1",
-        "tsx": "^4.19.4",
-        "typescript": "^5.8.3"
+        "@commitlint/cli": "^19.8.0",
+        "@commitlint/config-conventional": "^19.8.0",
+        "@eslint/js": "^9.25.0",
+        "commitizen": "^4.3.1",
+        "conventional-changelog-cli": "^5.0.0",
+        "cz-conventional-changelog": "^3.3.0",
+        "eslint": "^9.25.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.4.0",
+        "prettier": "^3.5.3",
+        "puppeteer-core": "^24.42.0",
+        "turbo": "^2.9.6",
+        "typescript-eslint": "^8.31.0"
     }
 }

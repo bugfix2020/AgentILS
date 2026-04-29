@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "AgentILS: VS Code Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "runtimeExecutable": "${execPath}",
+            "args": [
+                "--extensionDevelopmentPath",
+                "${workspaceFolder}/packages/extensions/agentils-vscode",
+                "${workspaceFolder}/apps/vscode-debug",
+                "--disable-extension",
+                "justwe9517.human-clarification-debugger"
+            ],
+            "env": {
+                "AGENTILS_DEBUG": "true"
+            },
+            "preLaunchTask": "prepare:agentils-extensions",
+            "outFiles": [
+                "${workspaceFolder}/packages/extensions/agentils-vscode/dist/**/*.js",
+                "${workspaceFolder}/packages/extensions/agentils-vscode/dist/**/*.cjs"
+            ]
+        }
+    ]
+}
