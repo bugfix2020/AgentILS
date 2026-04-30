@@ -30,8 +30,8 @@ Options:
     --no-lint-staged                   do not write lint-staged config or pre-commit hook
 
 Examples:
-    pnpm dlx @agentils/quality-gate init
-    npx @agentils/quality-gate init
-    yarn dlx @agentils/quality-gate init
-    bunx @agentils/quality-gate init
-    pnpm dlx @agentils/quality-gate init --cwd packages/my-app --with-eslint
+    pnpm dlx @agent-ils/quality-gate init
+    npx @agent-ils/quality-gate init
+    yarn dlx @agent-ils/quality-gate init
+    bunx @agent-ils/quality-gate init
+    pnpm dlx @agent-ils/quality-gate init --cwd packages/my-app --with-eslint

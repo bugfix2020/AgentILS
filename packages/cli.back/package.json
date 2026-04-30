@@ -1,28 +1,28 @@
 {
-  "name": "@agentils/cli",
-  "version": "1.0.0",
-  "description": "AgentILS V1 VS Code prompt pack installer",
-  "type": "module",
-  "bin": {
-    "agentils": "./dist/index.js"
-  },
-  "files": [
-    "dist",
-    "templates"
-  ],
-  "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "test": "tsx --test test/**/*.test.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@agentils/mcp": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^22.15.3",
-    "tsx": "^4.19.4",
-    "tsup": "^8.5.1",
-    "typescript": "^5.8.3"
-  }
+    "name": "@agent-ils/cli",
+    "version": "1.0.0",
+    "description": "AgentILS V1 VS Code prompt pack installer",
+    "type": "module",
+    "bin": {
+        "agentils": "./dist/index.js"
+    },
+    "files": [
+        "dist",
+        "templates"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "test": "tsx --test test/**/*.test.ts",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@agent-ils/mcp": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.3",
+        "tsx": "^4.19.4",
+        "tsup": "^8.5.1",
+        "typescript": "^5.8.3"
+    }
 }

@@ -2,7 +2,7 @@
  * E2E user-flow test #1 — real `agentils init --workspace` flow.
  *
  * Verifies the user-visible side-effects exactly as a developer running
- *   `npx @agentils/cli init --workspace .`
+ *   `npx @agent-ils/cli init --workspace .`
  * would observe them:
  *   1. CLI exit code 0
  *   2. .vscode/mcp.json is created with `servers.agentils` (stdio + npx)
@@ -47,7 +47,7 @@ test('user-flow: agentils init --workspace produces a usable VS Code workspace',
         assert.ok(mcpJson.servers?.agentils, 'mcp.json must declare servers.agentils')
         assert.equal(mcpJson.servers.agentils.type, 'stdio')
         assert.equal(mcpJson.servers.agentils.command, 'npx')
-        assert.deepEqual(mcpJson.servers.agentils.args, ['-y', '@agentils/mcp', '--stdio'])
+        assert.deepEqual(mcpJson.servers.agentils.args, ['-y', '@agent-ils/mcp', '--stdio'])
 
         // 2) the runTask prompt (the `runcode` analogue) is present
         const promptPath = join(tmp, '.github', 'prompts', 'agentils.runTask.prompt.md')

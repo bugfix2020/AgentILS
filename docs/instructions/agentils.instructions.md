@@ -6,11 +6,11 @@
 
 ## 仓库结构（Plan C / V1）
 
-| 包 | 路径 | 角色 |
-|----|------|------|
-| **MCP 控制平面** | `packages/mcp` | 单一 HTTP MCP server（默认 `http://127.0.0.1:8788/mcp`），唯一状态机真值源 |
-| **VS Code 扩展** | `extensions/agentils-vscode` | thin bridge：HTTP MCP client + WebView，**不**承载业务逻辑 |
-| **CLI 配置工具** | `packages/cli` | 仅 VS Code 配置注入器（`install vscode` / `uninstall vscode`） |
+| 包               | 路径                         | 角色                                                                       |
+| ---------------- | ---------------------------- | -------------------------------------------------------------------------- |
+| **MCP 控制平面** | `packages/mcp`               | 单一 HTTP MCP server（默认 `http://127.0.0.1:8788/mcp`），唯一状态机真值源 |
+| **VS Code 扩展** | `extensions/agentils-vscode` | thin bridge：HTTP MCP client + WebView，**不**承载业务逻辑                 |
+| **CLI 配置工具** | `packages/cli`               | 仅 VS Code 配置注入器（`install vscode` / `uninstall vscode`）             |
 
 ## 核心原则
 
@@ -86,11 +86,11 @@ runtime.disposeNotifier = registration.dispose
 
 ## 执行法则（Control Modes，航空 ILS 致敬）
 
-| 法则 | 值 | 特征 |
-|------|-----|------|
-| 正常法则 | `'normal'` | 标准收敛链路 |
-| 备用法则 | `'alternate'` | 用户确认后执行（提高控制权） |
-| 直接法则 | `'direct'` | 最少干预，用户掌控方向（审计可见性不减少） |
+| 法则     | 值            | 特征                                       |
+| -------- | ------------- | ------------------------------------------ |
+| 正常法则 | `'normal'`    | 标准收敛链路                               |
+| 备用法则 | `'alternate'` | 用户确认后执行（提高控制权）               |
+| 直接法则 | `'direct'`    | 最少干预，用户掌控方向（审计可见性不减少） |
 
 ## V1 任务阶段
 
@@ -102,5 +102,5 @@ runtime.disposeNotifier = registration.dispose
 ## 命名约定
 
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
-- npm 包名：`@agentils/mcp`、`@agentils/cli`；扩展 publisher：`bugfix2020`。
+- npm 包名：`@agent-ils/mcp`、`@agent-ils/cli`；扩展 publisher：`bugfix2020`。
 - HTTP MCP 端点：默认 `http://127.0.0.1:8788/mcp`，可通过 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖。

@@ -25,7 +25,7 @@ const CLI_DIST = join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js')
 
 async function main(): Promise<void> {
     if (!existsSync(CLI_DIST)) {
-        throw new Error(`CLI dist missing: ${CLI_DIST} — run \`pnpm --filter @agentils/cli build\` first`)
+        throw new Error(`CLI dist missing: ${CLI_DIST} — run \`pnpm --filter @agent-ils/cli build\` first`)
     }
     const workspaceDir = mkdtempSync(join(tmpdir(), 'agentils-vscode-ws-'))
     process.stderr.write(`[runTestWorkspace] tmp workspace: ${workspaceDir}\n`)

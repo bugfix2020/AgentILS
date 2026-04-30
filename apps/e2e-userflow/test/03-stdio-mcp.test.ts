@@ -1,6 +1,6 @@
 /**
  * E2E user-flow test #3 — real stdio MCP transport, the path that
- * `.vscode/mcp.json` declares (`{"command":"npx","args":["-y","@agentils/mcp","--stdio"]}`).
+ * `.vscode/mcp.json` declares (`{"command":"npx","args":["-y","@agent-ils/mcp","--stdio"]}`).
  *
  * We spawn `node packages/mcp/dist/index.js --stdio` and speak the bare
  * MCP newline-delimited JSON-RPC subset:

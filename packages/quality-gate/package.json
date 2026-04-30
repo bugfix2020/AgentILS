@@ -1,5 +1,5 @@
 {
-    "name": "@agentils/quality-gate",
+    "name": "@agent-ils/quality-gate",
     "version": "0.0.1",
     "description": "Initialize Husky, lint-staged, Prettier, commitlint, and Conventional Commits defaults for a project.",
     "type": "module",

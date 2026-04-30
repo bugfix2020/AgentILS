@@ -5,7 +5,7 @@
  * Stdout is reserved for MCP JSON-RPC; we report the chosen HTTP port to
  * stderr in the form `http=http://127.0.0.1:<port>`.
  */
-import { JsonStore, Orchestrator } from '@agentils/mcp'
+import { JsonStore, Orchestrator } from '@agent-ils/mcp'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import express from 'express'

@@ -1,4 +1,4 @@
-# @agentils/cli — VS Code 配置注入工具
+# @agent-ils/cli — VS Code 配置注入工具
 
 > **角色**：把 AgentILS 的 MCP server 配置 + 用户行为约束 prompt 写入工作区 `.vscode/` 和 `.github/`。
 > **当前能力**：**仅支持 VS Code**（cursor / codex / antigravity 在 V1 不在范围内）。
@@ -14,19 +14,19 @@ npx agentils uninstall vscode
 
 ## 命令
 
-| Command | 作用 |
-|---------|------|
-| `agentils install vscode` | 写入 `.vscode/mcp.json`（HTTP，默认 `http://127.0.0.1:8788/mcp`，可由 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖）+ `.github/agents/agentils.loop.agent.md` + `.github/prompts/runtask.prompt.md` |
-| `agentils uninstall vscode` | 移除上述写入文件 + 清理已知历史路径（`runTask.prompt.md` 大写、旧 `agentils.orchestrator.agent.md` 等） |
-| `agentils --help` / 无参 | 打印帮助 |
+| Command                     | 作用                                                                                                                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agentils install vscode`   | 写入 `.vscode/mcp.json`（HTTP，默认 `http://127.0.0.1:8788/mcp`，可由 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖）+ `.github/agents/agentils.loop.agent.md` + `.github/prompts/runtask.prompt.md` |
+| `agentils uninstall vscode` | 移除上述写入文件 + 清理已知历史路径（`runTask.prompt.md` 大写、旧 `agentils.orchestrator.agent.md` 等）                                                                                                 |
+| `agentils --help` / 无参    | 打印帮助                                                                                                                                                                                                |
 
 参数：
 
-| Flag | 默认 | 说明 |
-|------|------|------|
-| `--workspace <path>` | `process.cwd()` | 目标工作区根 |
-| `--scope workspace\|user\|both` | `workspace` | 仅工作区 / 仅用户级 / 同时写入 |
-| `--dry-run` | false | 预演不落盘 |
+| Flag                            | 默认            | 说明                           |
+| ------------------------------- | --------------- | ------------------------------ |
+| `--workspace <path>`            | `process.cwd()` | 目标工作区根                   |
+| `--scope workspace\|user\|both` | `workspace`     | 仅工作区 / 仅用户级 / 同时写入 |
+| `--dry-run`                     | false           | 预演不落盘                     |
 
 ## 模板
 
@@ -44,10 +44,10 @@ packages/cli/templates/vscode/
 
 ## 两套配置系统的硬边界（禁止混淆）
 
-| 系统 | 工具 | 内容 | 面向 | 方向 |
-|------|------|------|------|------|
-| **开发指引同步** | `scripts/dev/sync-agent-instructions.mjs` + `docs/instructions/sync-manifest.json` | 模块边界、调用链、状态真值源 | AgentILS 项目自身开发者 | `docs/instructions/` → `.github/` + `AGENTS.md` |
-| **用户配置注入（本 CLI）** | `agentils install vscode` | MCP server 配置 + 行为约束 prompt | 使用 AgentILS 的外部开发者 | `packages/cli/templates/` → 工作区 `.vscode/` + `.github/` |
+| 系统                       | 工具                                                                               | 内容                              | 面向                       | 方向                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------- | --------------------------------- | -------------------------- | ---------------------------------------------------------- |
+| **开发指引同步**           | `scripts/dev/sync-agent-instructions.mjs` + `docs/instructions/sync-manifest.json` | 模块边界、调用链、状态真值源      | AgentILS 项目自身开发者    | `docs/instructions/` → `.github/` + `AGENTS.md`            |
+| **用户配置注入（本 CLI）** | `agentils install vscode`                                                          | MCP server 配置 + 行为约束 prompt | 使用 AgentILS 的外部开发者 | `packages/cli/templates/` → 工作区 `.vscode/` + `.github/` |
 
 **绝对禁止**：
 
@@ -60,12 +60,12 @@ packages/cli/templates/vscode/
 
 ```jsonc
 {
-  "servers": {
-    "agentils": {
-      "type": "http",
-      "url": "http://127.0.0.1:8788/mcp"
-    }
-  }
+    "servers": {
+        "agentils": {
+            "type": "http",
+            "url": "http://127.0.0.1:8788/mcp",
+        },
+    },
 }
 ```
 

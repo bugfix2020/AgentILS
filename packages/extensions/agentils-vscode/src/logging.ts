@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode'
-import type { Level, Logger } from '@agentils/logger'
+import type { Level, Logger } from '@agent-ils/logger'
 
 const FILE_PREFIX = 'agentils-extension'
 const DEFAULT_LOG_ENDPOINT = 'http://127.0.0.1:12138'

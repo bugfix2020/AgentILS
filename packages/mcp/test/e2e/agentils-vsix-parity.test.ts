@@ -14,7 +14,7 @@
  *   8. stdio MCP transport (buildMcpServer) exposes the 4 tools to non-VS Code
  *      hosts, parking through the same Orchestrator.
  *
- * Run:  pnpm --filter @agentils/mcp test
+ * Run:  pnpm --filter @agent-ils/mcp test
  */
 import { strict as assert } from 'node:assert'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'

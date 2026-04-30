@@ -6,7 +6,7 @@
  *   - prints `port=<n>` to stdout
  *   - keeps running until killed
  */
-import { startAgentilsServer } from '@agentils/mcp'
+import { startAgentilsServer } from '@agent-ils/mcp'
 
 // Honour env overrides so #5 (cancel/timeout) can pass a tiny heartbeat
 // window and an isolated state file without colliding with concurrent runs.

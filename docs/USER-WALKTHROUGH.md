@@ -27,7 +27,7 @@ pnpm install
 >
 > - `.github/prompts/*.prompt.md` + `.github/agents/*.agent.md` 全部模板
 > - `.vscode/mcp.json` 指向**本地** node + `packages/mcp/dist/index.js --stdio`
->   （绕过 `npx -y @agentils/mcp` 在 npm 上还没发布的问题）
+>   （绕过 `npx -y @agent-ils/mcp` 在 npm 上还没发布的问题）
 > - `WELCOME.md` 说明 F5 之后该敲什么
 
 ---
@@ -111,7 +111,7 @@ npx tsx test\vscode-test\runTestDebug.ts
 Set-Location C:\Users\Administrator\Desktop\Lenovo\AgentILS
 
 # (a) mcp 包 vsix-parity 9
-pnpm --filter @agentils/mcp test
+pnpm --filter @agent-ils/mcp test
 
 # (b) 用户流 #1 至 #5 共 6
 Set-Location apps\e2e-userflow

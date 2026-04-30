@@ -5,7 +5,7 @@ export default defineConfig({
     format: ['esm'],
     target: 'node20',
     outDir: 'dist',
-    external: [/^node:/, '@agentils/logger', '@agentils/mcp'],
+    external: [/^node:/, '@agent-ils/logger', '@agent-ils/mcp'],
     clean: true,
     sourcemap: true,
     dts: false,

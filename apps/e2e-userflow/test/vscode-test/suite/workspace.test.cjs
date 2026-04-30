@@ -66,7 +66,7 @@ suite('AgentILS workspace — real VS Code host', () => {
         assert.ok(json.servers.agentils, 'mcp.json must contain `servers.agentils`')
         assert.equal(json.servers.agentils.type, 'stdio')
         assert.equal(json.servers.agentils.command, 'npx')
-        assert.deepEqual(json.servers.agentils.args, ['-y', '@agentils/mcp', '--stdio'])
+        assert.deepEqual(json.servers.agentils.args, ['-y', '@agent-ils/mcp', '--stdio'])
     })
 
     test('extension still activates inside this workspace and registers all 4 LM tools', async function () {

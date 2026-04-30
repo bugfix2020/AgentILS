@@ -9,7 +9,7 @@
 主要内容：
 
 - MCP 层补齐长等待场景：heartbeat timeout 默认拉长到 1 小时，并把 cancel、timeout、LLM 文本结果归一化到统一 response helper。
-- 新增 `@agentils/logger`，让 CLI、MCP、VS Code extension 都能写结构化日志，并让 MCP 默认启动 HTTP JSONL log server。
+- 新增 `@agent-ils/logger`，让 CLI、MCP、VS Code extension 都能写结构化日志，并让 MCP 默认启动 HTTP JSONL log server。
 - CLI 模板改成 AgentILS 命名空间，新增 `agentils.run-code.prompt.md`，清掉旧 `hcd.*`、`humanClarificationDebugger.*`、`search_subagent`、`subagentType` 等不应继续安装的引用。
 - VS Code extension 改成 AgentILS 自己的 tool id/reference name，补 tool result 适配、日志接入、webview manager 协议和 host heartbeat。
 - Webview 从直连 MCP URL 改为 extension-mediated protocol，提交了对应 source 和 built webview assets，保证 extension/webview runtime 不断链。

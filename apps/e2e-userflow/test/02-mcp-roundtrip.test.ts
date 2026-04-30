@@ -1,5 +1,5 @@
 /**
- * E2E user-flow test #2 — boot the real `@agentils/mcp` HTTP bridge and run
+ * E2E user-flow test #2 — boot the real `@agent-ils/mcp` HTTP bridge and run
  * a complete LM tool round-trip exactly as the VS Code extension would.
  *
  * Steps:

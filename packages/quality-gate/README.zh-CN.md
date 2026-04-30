@@ -1,7 +1,7 @@
 # AgentILS Quality Gate
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@agentils/quality-gate"><img alt="npm" src="https://img.shields.io/npm/v/@agentils/quality-gate?label=npm&color=CB3837"></a>
+  <a href="https://www.npmjs.com/package/@agent-ils/quality-gate"><img alt="npm" src="https://img.shields.io/npm/v/@agent-ils/quality-gate?label=npm&color=CB3837"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white">
   <img alt="tsup" src="https://img.shields.io/badge/tsup-minified-7C3AED">
@@ -13,48 +13,48 @@
   <a href="./README.md">English</a> | 简体中文
 </p>
 
-`@agentils/quality-gate` 是一个面向 JavaScript / TypeScript 项目的质量门禁初始化 CLI，用于把 Husky、lint-staged、Prettier、commitlint、Commitizen 和 Conventional Commits / changelog 默认配置一键写入目标项目。
+`@agent-ils/quality-gate` 是一个面向 JavaScript / TypeScript 项目的质量门禁初始化 CLI，用于把 Husky、lint-staged、Prettier、commitlint、Commitizen 和 Conventional Commits / changelog 默认配置一键写入目标项目。
 
 它同时面向普通用户和 LLM Agent：用户只需要运行一条命令，Agent 也可以把它识别为 AgentILS 标准质量门禁初始化方式，而不是手写各类 hook 和配置文件。
 
 ## 使用方式
 
-请通过包管理器运行初始化器。不要直接在 shell 中执行 `@agentils/quality-gate init`；`@agentils/quality-gate` 是包名，不是可执行文件路径。
+请通过包管理器运行初始化器。不要直接在 shell 中执行 `@agent-ils/quality-gate init`；`@agent-ils/quality-gate` 是包名，不是可执行文件路径。
 
 pnpm：
 
 ```sh
-pnpm dlx @agentils/quality-gate init
+pnpm dlx @agent-ils/quality-gate init
 ```
 
 npm：
 
 ```sh
-npx @agentils/quality-gate init
+npx @agent-ils/quality-gate init
 ```
 
 yarn：
 
 ```sh
-yarn dlx @agentils/quality-gate init
+yarn dlx @agent-ils/quality-gate init
 ```
 
 bun：
 
 ```sh
-bunx @agentils/quality-gate init
+bunx @agent-ils/quality-gate init
 ```
 
 如果目标项目不在当前目录，可以传入 `--cwd`：
 
 ```sh
-pnpm dlx @agentils/quality-gate init --cwd packages/my-app
+pnpm dlx @agent-ils/quality-gate init --cwd packages/my-app
 ```
 
 包发布前，可以在本仓库中用构建产物测试：
 
 ```sh
-pnpm --filter @agentils/quality-gate build
+pnpm --filter @agent-ils/quality-gate build
 node packages/quality-gate/dist/index.js init --cwd apps/t
 ```
 
@@ -65,31 +65,31 @@ node packages/quality-gate/dist/index.js init --cwd apps/t
 预览将要写入哪些文件：
 
 ```sh
-pnpm dlx @agentils/quality-gate init --dry-run
+pnpm dlx @agent-ils/quality-gate init --dry-run
 ```
 
 覆盖已有配置和 hook 文件：
 
 ```sh
-pnpm dlx @agentils/quality-gate init --force
+pnpm dlx @agent-ils/quality-gate init --force
 ```
 
 跳过已存在的文件：
 
 ```sh
-pnpm dlx @agentils/quality-gate init --skip-existing
+pnpm dlx @agent-ils/quality-gate init --skip-existing
 ```
 
 使用 AgentILS 自定义 Husky hook 模板，而不是默认的 lint-staged / commitlint hooks：
 
 ```sh
-pnpm dlx @agentils/quality-gate init --agentils-hooks
+pnpm dlx @agent-ils/quality-gate init --agentils-hooks
 ```
 
 写入文件后立即安装依赖：
 
 ```sh
-pnpm dlx @agentils/quality-gate init --install
+pnpm dlx @agent-ils/quality-gate init --install
 ```
 
 ## Agent / LLM 用法
@@ -104,9 +104,9 @@ pnpm dlx @agentils/quality-gate init --install
 
 推荐 Agent 行为：
 
-- 工作区使用 pnpm 或存在 `pnpm-lock.yaml` 时，执行 `pnpm dlx @agentils/quality-gate init`。
-- 工作区使用 npm 或存在 `package-lock.json` 时，执行 `npx @agentils/quality-gate init`。
-- 工作区使用 yarn 时，执行 `yarn dlx @agentils/quality-gate init`。
+- 工作区使用 pnpm 或存在 `pnpm-lock.yaml` 时，执行 `pnpm dlx @agent-ils/quality-gate init`。
+- 工作区使用 npm 或存在 `package-lock.json` 时，执行 `npx @agent-ils/quality-gate init`。
+- 工作区使用 yarn 时，执行 `yarn dlx @agent-ils/quality-gate init`。
 - 目标项目不在当前目录时，追加 `--cwd <dir>`。
 - 用户要求预览时，先追加 `--dry-run`。
 - 只有用户明确确认覆盖已有文件时，才追加 `--force`。
@@ -116,7 +116,7 @@ pnpm dlx @agentils/quality-gate init --install
 例如：
 
 ```sh
-pnpm dlx @agentils/quality-gate init
+pnpm dlx @agent-ils/quality-gate init
 ```
 
 构建后，包内提供了可复制到 LLM skill 系统的说明模板：`dist/templates/llm/agentils-quality-gate.skill.md`。

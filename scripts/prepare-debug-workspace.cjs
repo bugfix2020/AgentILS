@@ -5,9 +5,9 @@
  * Idempotently prepares apps/vscode-debug so the user can press F5 in the
  * AgentILS root and immediately get an Extension Development Host that has:
  *
- *   1. The full set of agentils.* prompts and agents (via @agentils/cli init)
- *   2. A working .vscode/mcp.json that points at the LOCAL @agentils/mcp build
- *      (instead of the unpublished `npx -y @agentils/mcp`).
+ *   1. The full set of agentils.* prompts and agents (via @agent-ils/cli init)
+ *   2. A working .vscode/mcp.json that points at the LOCAL @agent-ils/mcp build
+ *      (instead of the unpublished `npx -y @agent-ils/mcp`).
  *   3. A welcome README explaining what to type into Copilot Chat.
  *
  * This runs as the last step of `prepare:agentils-extensions` (preLaunchTask
@@ -30,10 +30,10 @@ function log(msg) {
 
 function ensureCliInit() {
     if (!fs.existsSync(CLI_DIST)) {
-        throw new Error(`CLI dist missing: ${CLI_DIST} — run \`pnpm --filter @agentils/cli build\` first`)
+        throw new Error(`CLI dist missing: ${CLI_DIST} — run \`pnpm --filter @agent-ils/cli build\` first`)
     }
     if (!fs.existsSync(MCP_DIST)) {
-        throw new Error(`MCP dist missing: ${MCP_DIST} — run \`pnpm --filter @agentils/mcp build\` first`)
+        throw new Error(`MCP dist missing: ${MCP_DIST} — run \`pnpm --filter @agent-ils/mcp build\` first`)
     }
     // Always re-run CLI init: it's idempotent and keeps templates in sync if
     // they change in the source tree.
@@ -60,7 +60,7 @@ function resetGeneratedWorkspaceAssets() {
 }
 
 function rewriteMcpJsonToLocalStdio() {
-    // The CLI writes `npx -y @agentils/mcp --stdio`, which fails locally
+    // The CLI writes `npx -y @agent-ils/mcp --stdio`, which fails locally
     // because the package isn't published. We override it with a stdio entry
     // that runs the freshly-built local dist directly.
     const mcpJsonPath = path.join(DEMO, '.vscode', 'mcp.json')
@@ -91,7 +91,7 @@ function ensureWelcomeFile() {
         '  `extension activate done`.',
         '- ✓ The in-process MCP HTTP bridge starts on an available local port and',
         '  the extension wires Copilot LM tools to that server automatically.',
-        '- ✓ `.vscode/mcp.json` points at the LOCAL `@agentils/mcp` build (stdio).',
+        '- ✓ `.vscode/mcp.json` points at the LOCAL `@agent-ils/mcp` build (stdio).',
         '- ✓ Four LM tools are registered with `vscode.lm`:',
         '  - `agentils_request_user_clarification`',
         '  - `agentils_request_contact_user`',

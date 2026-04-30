@@ -4,7 +4,7 @@
         {
             "label": "build:mcp",
             "type": "shell",
-            "command": "pnpm --filter @agentils/mcp build",
+            "command": "pnpm --filter @agent-ils/mcp build",
             "problemMatcher": []
         },
         {
@@ -30,7 +30,7 @@
         {
             "label": "build:cli",
             "type": "shell",
-            "command": "pnpm --filter @agentils/cli build",
+            "command": "pnpm --filter @agent-ils/cli build",
             "problemMatcher": []
         },
         {

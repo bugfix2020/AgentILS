@@ -1,4 +1,4 @@
-# @agentils/mcp — AgentILS V1 控制平面
+# @agent-ils/mcp — AgentILS V1 控制平面
 
 > **角色**：AgentILS 状态机的**唯一真值源**。完全独立于任何 IDE。
 > **当前版本**：V1（task loop 收敛架构）。
@@ -31,7 +31,7 @@ node packages/mcp/dist/index.js --stdio
 ### 程序内启动（测试用）
 
 ```ts
-import { startStreamableHttpServer, defaultConfig } from '@agentils/mcp'
+import { startStreamableHttpServer, defaultConfig } from '@agent-ils/mcp'
 const runtime = await startStreamableHttpServer(defaultConfig, { host: '127.0.0.1', port: 0 })
 // runtime.url 给出真实 url；runtime.close() 关停
 ```
@@ -40,23 +40,23 @@ const runtime = await startStreamableHttpServer(defaultConfig, { host: '127.0.0.
 
 ### Tools（仅 3 个，`gateway/tools.ts`）
 
-| Tool | 输入 | 作用 |
-|------|------|------|
-| `state_get` | `{ taskId? }` | 读取 `StateSnapshot`（活动 task + 待处理交互），不变更状态 |
-| `request_user_clarification` | `{ question, context?, placeholder?, required? }` | 通过 MCP `elicitation/create` 协议向客户端要一段澄清文本 |
-| `run_task_loop` | `RunTaskLoopInput`（见 `types/task.ts`） | 推动 V1 任务循环一步，返回 `RunTaskLoopResult` |
+| Tool                         | 输入                                              | 作用                                                       |
+| ---------------------------- | ------------------------------------------------- | ---------------------------------------------------------- |
+| `state_get`                  | `{ taskId? }`                                     | 读取 `StateSnapshot`（活动 task + 待处理交互），不变更状态 |
+| `request_user_clarification` | `{ question, context?, placeholder?, required? }` | 通过 MCP `elicitation/create` 协议向客户端要一段澄清文本   |
+| `run_task_loop`              | `RunTaskLoopInput`（见 `types/task.ts`）          | 推动 V1 任务循环一步，返回 `RunTaskLoopResult`             |
 
 V1 之前的 `new_task_request` / `ui_task_start_gate` / `approval_request` / `feedback_gate` / `verify_run` / `ui_session_*` 等 tool **已全部移除**。所有任务推进通过 `run_task_loop` 的 `directive` 字段驱动。
 
 ### Resources（仅 `state://*`，`gateway/resources.ts`）
 
-| URI | 内容 |
-|-----|------|
-| `state://current` | 当前活动 task 的 `StateSnapshot` |
-| `state://{taskId}` | 指定 task 的 `StateSnapshot` |
+| URI                            | 内容                                                      |
+| ------------------------------ | --------------------------------------------------------- |
+| `state://current`              | 当前活动 task 的 `StateSnapshot`                          |
+| `state://{taskId}`             | 指定 task 的 `StateSnapshot`                              |
 | `state://controlMode/{taskId}` | 指定 task 的 `controlMode`（normal / alternate / direct） |
-| `state://timeline/{taskId}` | 指定 task 的事件时间线 |
-| `state://interaction/pending` | 当前待处理的 `TaskInteraction`（如果有） |
+| `state://timeline/{taskId}`    | 指定 task 的事件时间线                                    |
+| `state://interaction/pending`  | 当前待处理的 `TaskInteraction`（如果有）                  |
 
 每个 HTTP 客户端连接都会拿到一个独立的 `ResourceNotifier`（注册到 orchestrator 的 `notifiers: Set`），断开时自动 dispose。**单 server，多 push 通道**。
 
@@ -76,11 +76,11 @@ collect → plan → execute → test → summarize
 
 ### Loop next action（`loopNextActions`）
 
-| 值 | 含义 |
-|----|------|
-| `recall_tool` | Caller 必须立即再次调用 `run_task_loop`（无人参与） |
-| `await_webview` | 保持 tool 调用挂起，等 WebView/用户输入 |
-| `return_control` | 任务到达终态，返回控制权 |
+| 值               | 含义                                                |
+| ---------------- | --------------------------------------------------- |
+| `recall_tool`    | Caller 必须立即再次调用 `run_task_loop`（无人参与） |
+| `await_webview`  | 保持 tool 调用挂起，等 WebView/用户输入             |
+| `return_control` | 任务到达终态，返回控制权                            |
 
 ### 控制模式（`ControlMode`，`types/control-mode.ts`）
 
@@ -88,14 +88,14 @@ collect → plan → execute → test → summarize
 
 ## 模块边界
 
-| 目录 | 职责 |
-|------|------|
-| `src/gateway/` | MCP 协议入口：`server.ts`（创建 runtime + 注册）、`tools.ts`（3 个 tool）、`resources.ts`（5 个 state://）、`transports.ts`（HTTP + stdio）、`context.ts`（runtime + ResourceNotifier 契约）、`shared.ts`（textResult 等） |
-| `src/orchestrator/` | 业务聚合：`orchestrator.ts`（V1 主循环：`runTaskLoop` / `stateGet` / `addNotifier`）、`conversation-orchestrator.ts`、`task-orchestrator.ts`、`control-mode-orchestrator.ts`、`verification-orchestrator.ts` |
-| `src/store/` | 状态层（**纯内存**）：`memory-store.ts` 是真值源；`conversation-store.ts` / `task-store.ts` / `summary-store.ts` / `audit-store.ts` 是投影；`persistence/json-store.ts` 已实现但**当前未接入** |
-| `src/runtime/` | `lock.ts`：lock 文件 + `pickFreePort` + `updateLockPort`（EADDRINUSE 回退后改写 lock） |
-| `src/types/` | 类型契约：`task.ts`、`conversation.ts`、`control-mode.ts`、`session.ts` |
-| `src/audit/` `src/budget/` `src/policy/` `src/control/` `src/control-plane/` `src/interaction/` `src/summary/` | 子领域辅助模块 |
+| 目录                                                                                                           | 职责                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/gateway/`                                                                                                 | MCP 协议入口：`server.ts`（创建 runtime + 注册）、`tools.ts`（3 个 tool）、`resources.ts`（5 个 state://）、`transports.ts`（HTTP + stdio）、`context.ts`（runtime + ResourceNotifier 契约）、`shared.ts`（textResult 等） |
+| `src/orchestrator/`                                                                                            | 业务聚合：`orchestrator.ts`（V1 主循环：`runTaskLoop` / `stateGet` / `addNotifier`）、`conversation-orchestrator.ts`、`task-orchestrator.ts`、`control-mode-orchestrator.ts`、`verification-orchestrator.ts`               |
+| `src/store/`                                                                                                   | 状态层（**纯内存**）：`memory-store.ts` 是真值源；`conversation-store.ts` / `task-store.ts` / `summary-store.ts` / `audit-store.ts` 是投影；`persistence/json-store.ts` 已实现但**当前未接入**                             |
+| `src/runtime/`                                                                                                 | `lock.ts`：lock 文件 + `pickFreePort` + `updateLockPort`（EADDRINUSE 回退后改写 lock）                                                                                                                                     |
+| `src/types/`                                                                                                   | 类型契约：`task.ts`、`conversation.ts`、`control-mode.ts`、`session.ts`                                                                                                                                                    |
+| `src/audit/` `src/budget/` `src/policy/` `src/control/` `src/control-plane/` `src/interaction/` `src/summary/` | 子领域辅助模块                                                                                                                                                                                                             |
 
 ## Gateway 边界规则
 

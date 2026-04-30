@@ -1,7 +1,7 @@
 # AgentILS Quality Gate
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@agentils/quality-gate"><img alt="npm" src="https://img.shields.io/npm/v/@agentils/quality-gate?label=npm&color=CB3837"></a>
+  <a href="https://www.npmjs.com/package/@agent-ils/quality-gate"><img alt="npm" src="https://img.shields.io/npm/v/@agent-ils/quality-gate?label=npm&color=CB3837"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white">
   <img alt="tsup" src="https://img.shields.io/badge/tsup-minified-7C3AED">
@@ -13,48 +13,48 @@
   English | <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
-`@agentils/quality-gate` is a project quality-gate initializer for JavaScript and TypeScript projects. It writes Husky, lint-staged, Prettier, commitlint, Commitizen, and Conventional Commits / changelog defaults into a target project.
+`@agent-ils/quality-gate` is a project quality-gate initializer for JavaScript and TypeScript projects. It writes Husky, lint-staged, Prettier, commitlint, Commitizen, and Conventional Commits / changelog defaults into a target project.
 
 It is designed for both humans and LLM agents: humans can run one command, and agents can recognize this package as the standard AgentILS quality-gate setup instead of hand-writing hook/config files.
 
 ## Usage
 
-Run the initializer through your package manager. Do not run `@agentils/quality-gate init` directly in a shell; `@agentils/quality-gate` is a package name, not an executable path.
+Run the initializer through your package manager. Do not run `@agent-ils/quality-gate init` directly in a shell; `@agent-ils/quality-gate` is a package name, not an executable path.
 
 pnpm:
 
 ```sh
-pnpm dlx @agentils/quality-gate init
+pnpm dlx @agent-ils/quality-gate init
 ```
 
 npm:
 
 ```sh
-npx @agentils/quality-gate init
+npx @agent-ils/quality-gate init
 ```
 
 yarn:
 
 ```sh
-yarn dlx @agentils/quality-gate init
+yarn dlx @agent-ils/quality-gate init
 ```
 
 bun:
 
 ```sh
-bunx @agentils/quality-gate init
+bunx @agent-ils/quality-gate init
 ```
 
 For a nested project, pass `--cwd`:
 
 ```sh
-pnpm dlx @agentils/quality-gate init --cwd packages/my-app
+pnpm dlx @agent-ils/quality-gate init --cwd packages/my-app
 ```
 
 Before the package is published, test the built CLI from this repository:
 
 ```sh
-pnpm --filter @agentils/quality-gate build
+pnpm --filter @agent-ils/quality-gate build
 node packages/quality-gate/dist/index.js init --cwd apps/t
 ```
 
@@ -65,31 +65,31 @@ If the target directory has no `package.json`, the initializer creates a minimal
 Preview the files that would be written:
 
 ```sh
-pnpm dlx @agentils/quality-gate init --dry-run
+pnpm dlx @agent-ils/quality-gate init --dry-run
 ```
 
 Overwrite existing config and hook files:
 
 ```sh
-pnpm dlx @agentils/quality-gate init --force
+pnpm dlx @agent-ils/quality-gate init --force
 ```
 
 Skip files that already exist:
 
 ```sh
-pnpm dlx @agentils/quality-gate init --skip-existing
+pnpm dlx @agent-ils/quality-gate init --skip-existing
 ```
 
 Use the AgentILS custom Husky hook templates instead of the default lint-staged / commitlint hooks:
 
 ```sh
-pnpm dlx @agentils/quality-gate init --agentils-hooks
+pnpm dlx @agent-ils/quality-gate init --agentils-hooks
 ```
 
 Write files and install dependencies immediately:
 
 ```sh
-pnpm dlx @agentils/quality-gate init --install
+pnpm dlx @agent-ils/quality-gate init --install
 ```
 
 ## Agent / LLM Usage
@@ -104,9 +104,9 @@ Install AgentILS quality gate for me
 
 Recommended agent behavior:
 
-- Use `pnpm dlx @agentils/quality-gate init` when the workspace uses pnpm or has `pnpm-lock.yaml`.
-- Use `npx @agentils/quality-gate init` when the workspace uses npm or has `package-lock.json`.
-- Use `yarn dlx @agentils/quality-gate init` when the workspace uses yarn.
+- Use `pnpm dlx @agent-ils/quality-gate init` when the workspace uses pnpm or has `pnpm-lock.yaml`.
+- Use `npx @agent-ils/quality-gate init` when the workspace uses npm or has `package-lock.json`.
+- Use `yarn dlx @agent-ils/quality-gate init` when the workspace uses yarn.
 - Add `--cwd <dir>` when the target project is not the current working directory.
 - Add `--dry-run` first when the user asks to preview changes.
 - Do not add `--force` unless the user explicitly confirms overwriting existing files.
@@ -116,7 +116,7 @@ Recommended agent behavior:
 For example:
 
 ```sh
-pnpm dlx @agentils/quality-gate init
+pnpm dlx @agent-ils/quality-gate init
 ```
 
 The package includes a skill-style instruction template at `dist/templates/llm/agentils-quality-gate.skill.md` after build.

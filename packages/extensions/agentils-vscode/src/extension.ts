@@ -1,7 +1,7 @@
 /**
  * AgentILS VS Code extension entry.
  *
- * Responsibilities (kept minimal — the heavy lifting lives in @agentils/mcp):
+ * Responsibilities (kept minimal — the heavy lifting lives in @agent-ils/mcp):
  *  1. Auto-start the in-process MCP HTTP bridge so the webview can connect.
  *  2. Register the four LM tools and route invocations through the MCP
  *     orchestrator (so a single tool call can host multi-turn UI interaction
@@ -9,8 +9,8 @@
  *  3. Open the AgentILS webview panel (loaded from `apps/webview/dist`).
  */
 import * as vscode from 'vscode'
-import { startAgentilsServer, type RunningServer } from '@agentils/mcp'
-import { AgentilsClient } from '@agentils/mcp/client'
+import { startAgentilsServer, type RunningServer } from '@agent-ils/mcp'
+import { AgentilsClient } from '@agent-ils/mcp/client'
 import { registerTools, REGISTERED_LM_IDS } from './tools/registerTools.js'
 import { AgentilsWebviewManager } from './webview/manager.js'
 import { createExtensionLogger } from './logging.js'

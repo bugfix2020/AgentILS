@@ -8,8 +8,8 @@
 import * as vscode from 'vscode'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Logger } from '@agentils/logger'
-import type { StateSnapshot } from '@agentils/mcp/types'
+import type { Logger } from '@agent-ils/logger'
+import type { StateSnapshot } from '@agent-ils/mcp/types'
 import type {
     HostToWebviewMessage,
     InteractionView,

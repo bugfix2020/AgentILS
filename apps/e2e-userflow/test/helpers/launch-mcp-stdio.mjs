@@ -5,7 +5,7 @@
  * `buildMcpServer` is internal to the mcp package; we recreate it here using
  * the same shape as src/transport/stdio.ts.
  */
-import { JsonStore, Orchestrator } from '@agentils/mcp'
+import { JsonStore, Orchestrator } from '@agent-ils/mcp'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { homedir, tmpdir } from 'node:os'

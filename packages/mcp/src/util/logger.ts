@@ -1,12 +1,12 @@
 /**
  * MCP-local logger facade.
  *
- * Public consumers should import from `@agentils/logger`. MCP internals import
+ * Public consumers should import from `@agent-ils/logger`. MCP internals import
  * here so every lifecycle log is persisted through the shared HTTP JSONL
  * logger when the server is running, while still falling back to stderr during
  * early boot or external-log-server failures.
  */
-import { createLogger as createStderrLogger, createHttpLogger, type Logger } from '@agentils/logger'
+import { createLogger as createStderrLogger, createHttpLogger, type Logger } from '@agent-ils/logger'
 
 export {
     createChannelLogger,
@@ -15,7 +15,7 @@ export {
     defaultLogDir,
     safeSerialize,
     startHttpLogServer,
-} from '@agentils/logger'
+} from '@agent-ils/logger'
 export type {
     HttpLoggerOptions,
     HttpLogPayload,
@@ -25,7 +25,7 @@ export type {
     Level,
     Logger,
     LogSink,
-} from '@agentils/logger'
+} from '@agent-ils/logger'
 
 const noopLogger: Logger = {
     debug: () => {},

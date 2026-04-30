@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
-import type { Logger } from '@agentils/logger'
-import type { InteractionResponse } from '@agentils/mcp/types'
+import type { Logger } from '@agent-ils/logger'
+import type { InteractionResponse } from '@agent-ils/mcp/types'
 
 interface ResultFields {
     traceId?: string

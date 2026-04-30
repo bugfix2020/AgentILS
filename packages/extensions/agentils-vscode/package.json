@@ -285,8 +285,8 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@agentils/logger": "workspace:*",
-        "@agentils/mcp": "workspace:*"
+        "@agent-ils/logger": "workspace:*",
+        "@agent-ils/mcp": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "^22.15.3",

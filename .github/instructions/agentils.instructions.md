@@ -106,5 +106,5 @@ runtime.disposeNotifier = registration.dispose
 ## 命名约定
 
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
-- npm 包名：`@agentils/mcp`、`@agentils/cli`；扩展 publisher：`bugfix2020`。
+- npm 包名：`@agent-ils/mcp`、`@agent-ils/cli`；扩展 publisher：`bugfix2020`。
 - HTTP MCP 端点：默认 `http://127.0.0.1:8788/mcp`，可通过 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖。

@@ -1,5 +1,5 @@
 {
-    "name": "@agentils/cli",
+    "name": "@agent-ils/cli",
     "version": "0.1.0",
     "description": "AgentILS CLI — replaces the VS Code extension installer (npx agentils init --vscode)",
     "type": "module",
@@ -19,8 +19,8 @@
         "test": "tsx --test test/**/*.test.ts"
     },
     "dependencies": {
-        "@agentils/logger": "workspace:*",
-        "@agentils/mcp": "workspace:*"
+        "@agent-ils/logger": "workspace:*",
+        "@agent-ils/mcp": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "^22.15.3",

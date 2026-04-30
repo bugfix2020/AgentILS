@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { AgentilsClient } from '@agentils/mcp/client'
+import { AgentilsClient } from '@agent-ils/mcp/client'
 import { REPO_ROOT } from './helpers/paths.ts'
 
 interface BootInfo {

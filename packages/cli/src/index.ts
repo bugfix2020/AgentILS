@@ -1,7 +1,7 @@
 /**
  * AgentILS (Intelligent Logical System) CLI
  *
- * Installs prompt/agent templates and registers the @agentils/mcp server with
+ * Installs prompt/agent templates and registers the @agent-ils/mcp server with
  * VS Code (or any MCP-aware IDE). Supports two install scopes:
  *
  *   --user (default)     Writes prompts/agents to the VS Code user profile.
@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto'
 import { homedir, platform } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHttpLogger, type Logger } from '@agentils/logger'
+import { createHttpLogger, type Logger } from '@agent-ils/logger'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -82,9 +82,9 @@ Usage:
                            and merge <dir>/.vscode/mcp.json (cwd if no dir)
 
 Examples:
-  npx @agentils/cli init
-  npx @agentils/cli init --workspace ./my-project
-  npx @agentils/cli uninstall --workspace .
+  npx @agent-ils/cli init
+  npx @agent-ils/cli init --workspace ./my-project
+  npx @agent-ils/cli uninstall --workspace .
 `
 
 function userPromptsDir(): string {
@@ -254,7 +254,7 @@ async function injectMcpJson(ctx: CliContext, workspace: string): Promise<string
     servers.agentils = {
         type: 'stdio',
         command: 'npx',
-        args: ['-y', '@agentils/mcp', '--stdio'],
+        args: ['-y', '@agent-ils/mcp', '--stdio'],
     }
     await writeFile(mcpPath, JSON.stringify({ ...existing, servers }, null, 2), 'utf8')
     ctx.log.info(

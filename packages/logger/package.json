@@ -1,5 +1,5 @@
 {
-    "name": "@agentils/logger",
+    "name": "@agent-ils/logger",
     "version": "0.1.0",
     "private": true,
     "type": "module",

@@ -50,10 +50,10 @@ importers:
 
   apps/e2e-userflow:
     dependencies:
-      '@agentils/cli':
+      '@agent-ils/cli':
         specifier: workspace:*
         version: link:../../packages/cli
-      '@agentils/mcp':
+      '@agent-ils/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
       '@modelcontextprotocol/sdk':
@@ -124,10 +124,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@agentils/logger':
+      '@agent-ils/logger':
         specifier: workspace:*
         version: link:../logger
-      '@agentils/mcp':
+      '@agent-ils/mcp':
         specifier: workspace:*
         version: link:../mcp
     devDependencies:
@@ -146,10 +146,10 @@ importers:
 
   packages/extensions/agentils-vscode:
     dependencies:
-      '@agentils/logger':
+      '@agent-ils/logger':
         specifier: workspace:*
         version: link:../../logger
-      '@agentils/mcp':
+      '@agent-ils/mcp':
         specifier: workspace:*
         version: link:../../mcp
     devDependencies:
@@ -180,7 +180,7 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@agentils/logger':
+      '@agent-ils/logger':
         specifier: workspace:*
         version: link:../logger
       '@modelcontextprotocol/sdk':

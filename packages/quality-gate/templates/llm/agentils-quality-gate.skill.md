@@ -21,19 +21,19 @@ It initializes:
 Prefer the package manager already used by the target project:
 
 ```sh
-pnpm dlx @agentils/quality-gate init
+pnpm dlx @agent-ils/quality-gate init
 ```
 
 ```sh
-npx @agentils/quality-gate init
+npx @agent-ils/quality-gate init
 ```
 
 ```sh
-yarn dlx @agentils/quality-gate init
+yarn dlx @agent-ils/quality-gate init
 ```
 
 ```sh
-bunx @agentils/quality-gate init
+bunx @agent-ils/quality-gate init
 ```
 
 Use `--cwd <dir>` when the target project is not the current working directory.
