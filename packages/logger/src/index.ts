@@ -55,6 +55,7 @@ export interface HttpLogPayload {
     source?: string
     level?: Level
     namespace?: string
+    event?: string
     message?: string
     fields?: Record<string, unknown>
     traceId?: string
@@ -72,6 +73,7 @@ export interface JsonlLogRecord {
     source: string
     namespace: string
     level: Level
+    event?: string
     message: string
     fields: unknown
     traceId?: string
@@ -286,7 +288,13 @@ async function handleLogRequest(
         return
     }
     if (req.method === 'POST' && url.pathname === '/api/logs') {
-        const payload = JSON.parse(await readRequestBody(req)) as HttpLogPayload
+        const payload = JSON.parse(await readRequestBody(req)) as HttpLogPayload | HttpLogPayload[]
+        if (Array.isArray(payload)) {
+            const records = []
+            for (const entry of payload) records.push(await writeLogRecord(logDir, filePrefix, entry))
+            sendJson(res, 200, { ok: true, records })
+            return
+        }
         const record = await writeLogRecord(logDir, filePrefix, payload)
         sendJson(res, 200, { ok: true, record })
         return
@@ -305,6 +313,7 @@ async function writeLogRecord(logDir: string, filePrefix: string, payload: HttpL
         source,
         namespace: payload.namespace ?? source,
         level: isLevel(payload.level) ? payload.level : 'info',
+        event: payload.event,
         message: payload.message ?? '',
         fields: safeSerialize(payload.fields ?? {}),
         traceId: payload.traceId,

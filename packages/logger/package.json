@@ -1,21 +1,42 @@
 {
     "name": "@agent-ils/logger",
-    "version": "0.1.0",
-    "private": true,
+    "version": "0.0.1",
+    "description": "Local JSONL logger for AI-assisted debugging, with browser writes and CLI reads.",
     "type": "module",
     "main": "./dist/index.cjs",
     "module": "./dist/index.js",
     "types": "./dist/index.d.ts",
+    "bin": {
+        "agent-ils-logger": "./dist/cli.js"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
             "import": "./dist/index.js",
             "require": "./dist/index.cjs"
+        },
+        "./browser": {
+            "types": "./dist/browser.d.ts",
+            "import": "./dist/browser.js",
+            "require": "./dist/browser.cjs"
+        },
+        "./query": {
+            "types": "./dist/query.d.ts",
+            "import": "./dist/query.js",
+            "require": "./dist/query.cjs"
         }
     },
     "files": [
-        "dist"
+        "dist",
+        "README.md"
     ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "scripts": {
         "build": "tsup",
         "dev": "tsup --watch",
@@ -25,5 +46,8 @@
         "@types/node": "^22.15.3",
         "tsup": "^8.5.1",
         "typescript": "^5.8.3"
+    },
+    "dependencies": {
+        "cac": "^6.7.14"
     }
 }

@@ -2,12 +2,15 @@
 /**
  * sync-agent-instructions.mjs
  *
- * 真值源 = docs/instructions/*.instructions.md（由 docs/instructions/sync-manifest.json 列出）。
+ * 真值源 = docs/instructions/*.instructions.md + docs/skills/<name>/SKILL.md
+ * （由 docs/instructions/sync-manifest.json 列出）。
  *
  * 同步动作：
  *   1) 复制源到 .github/instructions/<file>（Copilot 会读这里）
- *   2) 生成 .github/copilot-instructions.md（入口 stub，列出全部 instruction 文件清单）
- *   3) 生成 AGENTS.md（Codex 入口 stub，与 .github/copilot-instructions.md 同源等价，仅入口语气不同）
+ *   2) 复制 skill 源到 .github/skills/<name>/SKILL.md 和 .agents/skills/<name>/SKILL.md
+ *      （保留 frontmatter 为首段）
+ *   3) 生成 .github/copilot-instructions.md（入口 stub，列出全部 instruction 文件清单）
+ *   4) 生成 AGENTS.md（Codex 入口 stub，与 .github/copilot-instructions.md 同源等价，仅入口语气不同）
  *
  * 入口 stub 由本脚本生成，禁止手写 —— 这样 Copilot 与 Codex 永远看到同一份内容，
  * 不存在双源漂移。
@@ -36,7 +39,9 @@ const checkOnly = args.has('--check')
 const stageOutputs = args.has('--stage')
 
 const sourceDirRel = 'docs/instructions'
+const sourceSkillsDirRel = 'docs/skills'
 const targetInstructionsDirRel = '.github/instructions'
+const targetSkillsDirRels = ['.github/skills', '.agents/skills']
 const copilotEntryRel = '.github/copilot-instructions.md'
 const agentsEntryRel = 'AGENTS.md'
 
@@ -47,6 +52,17 @@ const generatedHeader = (sourceRel) =>
         '<!-- DO NOT EDIT this generated target. Edit the source file instead. -->',
         '',
     ].join('\n')
+
+function generatedSkill(sourceRel, sourceBody) {
+    if (!sourceBody.startsWith('---\n')) return generatedHeader(sourceRel) + sourceBody + '\n'
+
+    const frontmatterEnd = sourceBody.indexOf('\n---\n', 4)
+    if (frontmatterEnd === -1) return generatedHeader(sourceRel) + sourceBody + '\n'
+
+    const frontmatter = sourceBody.slice(0, frontmatterEnd + '\n---'.length)
+    const body = sourceBody.slice(frontmatterEnd + '\n---'.length).trimStart()
+    return `${frontmatter}\n${generatedHeader(sourceRel)}${body}\n`
+}
 
 const writes = []
 let hasDiff = false
@@ -94,6 +110,17 @@ for (const entry of manifest.sources) {
     const sourceBody = readFileSync(path.join(repoRoot, sourceRel), 'utf8').replace(/\r\n/g, '\n').trimEnd()
     const generated = generatedHeader(sourceRel) + sourceBody + '\n'
     await maybeWrite(targetRel, generated)
+}
+
+// 1.5) 复制 skill 源到各 agent skill 目录，但保持 YAML frontmatter 为文件首段
+for (const entry of manifest.skills ?? []) {
+    const sourceRel = path.posix.join(sourceSkillsDirRel, entry.dir, 'SKILL.md')
+    const sourceBody = readFileSync(path.join(repoRoot, sourceRel), 'utf8').replace(/\r\n/g, '\n').trimEnd()
+    const generated = generatedSkill(sourceRel, sourceBody)
+    for (const targetSkillsDirRel of targetSkillsDirRels) {
+        const targetRel = path.posix.join(targetSkillsDirRel, entry.dir, 'SKILL.md')
+        await maybeWrite(targetRel, generated)
+    }
 }
 
 // 2) 渲染入口 stub（同源等价，AGENTS.md 与 copilot-instructions.md 共享同一段正文）
@@ -155,6 +182,7 @@ if (hasDiff && stageOutputs && !checkOnly) {
     const filesToStage = new Set([
         manifestRel,
         ...manifest.sources.map((s) => path.posix.join(sourceDirRel, s.file)),
+        ...(manifest.skills ?? []).map((s) => path.posix.join(sourceSkillsDirRel, s.dir, 'SKILL.md')),
         ...writes,
     ])
     execFileSync('git', ['add', '--', ...filesToStage], { cwd: repoRoot, stdio: 'inherit' })
