@@ -14,7 +14,8 @@ Options:
     --husky-dir <path>                 defaults to .husky
     --pre-commit-command <command>     defaults to '{pm} exec lint-staged'
     --commit-msg-command <command>     defaults to '{pm} exec commitlint --edit "$1"'
-    --with-eslint                      lint JS/TS staged files with eslint before prettier
+    --with-eslint                      lint JS/TS staged files with eslint before prettier; writes eslint.config.mjs
+    --with-turbo                       write turbo.json and add turbo to devDependencies
     --install                          run the detected package manager install after writing files
     --dry-run                          print planned changes without writing files or installing dependencies
     --agentils-hooks                   use AgentILS custom Husky hook templates

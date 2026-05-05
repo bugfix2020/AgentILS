@@ -1,2 +1,2 @@
 #!/bin/sh
-node scripts/dev/pre-commit-gate.mjs
+node packages/quality-gate/dist/precommit.js

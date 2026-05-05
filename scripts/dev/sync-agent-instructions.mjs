@@ -68,6 +68,14 @@ const writes = []
 let hasDiff = false
 const prettierConfigCache = new Map()
 
+const totalTargets = manifest.sources.length + (manifest.skills?.length ?? 0) * targetSkillsDirRels.length + 2 // copilot + agents entry stubs
+let processedTargets = 0
+
+function emitProgress(targetRel) {
+    processedTargets += 1
+    process.stderr.write(`[${processedTargets}/${totalTargets}] sync ${targetRel}\n`)
+}
+
 async function formatGenerated(targetRel, generated) {
     if (!targetRel.endsWith('.md')) return generated
     const targetPath = path.join(repoRoot, targetRel)
@@ -91,16 +99,21 @@ async function maybeWrite(targetRel, generated) {
     } catch (error) {
         if (error?.code !== 'ENOENT') throw error
     }
-    if (current === formatted) return
+    if (current === formatted) {
+        emitProgress(targetRel)
+        return
+    }
     hasDiff = true
     if (checkOnly) {
         console.error(`[sync-agent-instructions] out of date: ${targetRel}`)
+        emitProgress(targetRel)
         return
     }
     mkdirSync(path.dirname(targetPath), { recursive: true })
     writeFileSync(targetPath, formatted)
     writes.push(targetRel)
     console.log(`[sync-agent-instructions] updated ${targetRel}`)
+    emitProgress(targetRel)
 }
 
 // 1) 复制每份内容源到 .github/instructions/
