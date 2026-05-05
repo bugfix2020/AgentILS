@@ -40,6 +40,7 @@ interface InitOptions {
     preCommitCommand: string
     commitMsgCommand: string
     withEslint: boolean
+    withTurbo: boolean
     install: boolean
     dryRun: boolean
     force: boolean
@@ -86,6 +87,7 @@ function parseArgs(argv: string[]): InitOptions {
         preCommitCommand: '{pm} exec lint-staged',
         commitMsgCommand: '{pm} exec commitlint --edit "$1"',
         withEslint: false,
+        withTurbo: false,
         install: false,
         dryRun: false,
         force: false,
@@ -145,6 +147,9 @@ function parseArgs(argv: string[]): InitOptions {
                 break
             case '--with-eslint':
                 options.withEslint = true
+                break
+            case '--with-turbo':
+                options.withTurbo = true
                 break
             case '--install':
                 options.install = true
@@ -222,26 +227,109 @@ async function readPackageJson(cwd: string): Promise<PackageJson> {
     }
 }
 
-async function detectPackageManager(cwd: string, packageJson: PackageJson): Promise<PackageManager> {
-    const packageManager = packageJson.packageManager?.split('@')[0]
-    if (packageManager && isPackageManager(packageManager)) return packageManager
-    const lockRoot = findPackageManagerLockRoot(cwd)
-    if (lockRoot?.packageManager) return lockRoot.packageManager
-    return 'npm'
+interface LockMatch {
+    packageManager: PackageManager
+    lockFile: string
+    root: string
 }
 
-function findPackageManagerLockRoot(cwd: string): { packageManager: PackageManager; root: string } | undefined {
+const LOCKFILE_TABLE: ReadonlyArray<{ file: string; packageManager: PackageManager }> = [
+    { file: 'pnpm-lock.yaml', packageManager: 'pnpm' },
+    { file: 'package-lock.json', packageManager: 'npm' },
+    { file: 'npm-shrinkwrap.json', packageManager: 'npm' },
+    { file: 'yarn.lock', packageManager: 'yarn' },
+    { file: 'bun.lockb', packageManager: 'bun' },
+    { file: 'bun.lock', packageManager: 'bun' },
+]
+
+function packageManagerFromField(packageJson: PackageJson): PackageManager | undefined {
+    const pm = packageJson.packageManager?.split('@')[0]
+    return pm && isPackageManager(pm) ? pm : undefined
+}
+
+function findLockMatchesAt(dir: string): LockMatch[] {
+    const matches: LockMatch[] = []
+    for (const { file, packageManager } of LOCKFILE_TABLE) {
+        if (existsSync(join(dir, file))) matches.push({ packageManager, lockFile: file, root: dir })
+    }
+    return matches
+}
+
+function findAllLockMatches(cwd: string): LockMatch[] {
     let current = resolve(cwd)
     while (true) {
-        if (existsSync(join(current, 'pnpm-lock.yaml'))) return { packageManager: 'pnpm', root: current }
-        if (existsSync(join(current, 'yarn.lock'))) return { packageManager: 'yarn', root: current }
-        if (existsSync(join(current, 'bun.lockb')) || existsSync(join(current, 'bun.lock'))) {
-            return { packageManager: 'bun', root: current }
-        }
+        const matches = findLockMatchesAt(current)
+        if (matches.length > 0) return matches
         const parent = dirname(current)
-        if (parent === current) return undefined
+        if (parent === current) return []
         current = parent
     }
+}
+
+async function detectPackageManager(cwd: string, packageJson: PackageJson): Promise<PackageManager> {
+    const matches = findAllLockMatches(cwd)
+    const distinct = new Set(matches.map((match) => match.packageManager))
+
+    if (distinct.size === 1) return matches[0].packageManager
+
+    const fieldPm = packageManagerFromField(packageJson)
+
+    if (matches.length > 0 && distinct.size > 1) {
+        if (fieldPm) {
+            const others = matches.filter((match) => match.packageManager !== fieldPm)
+            if (others.length > 0) {
+                const list = others.map((match) => `${match.lockFile} (${match.packageManager})`).join(', ')
+                process.stderr.write(
+                    `${colorize(
+                        `! multiple lockfiles detected; using package.json packageManager=${fieldPm}. ` +
+                            `Stale lockfile(s) to clean up: ${list}.`,
+                        ANSI_YELLOW,
+                    )}\n`,
+                )
+            }
+            return fieldPm
+        }
+        return promptForPackageManagerOrThrow(matches)
+    }
+
+    if (fieldPm) return fieldPm
+    return promptForPackageManagerOrThrow([])
+}
+
+async function promptForPackageManagerOrThrow(matches: LockMatch[]): Promise<PackageManager> {
+    const interactive = process.stdin.isTTY
+    if (!interactive) {
+        const detail =
+            matches.length > 0
+                ? `Multiple lockfiles detected: ${matches
+                      .map((match) => `${match.lockFile} (${match.packageManager})`)
+                      .join(', ')}. ` + 'Set package.json "packageManager" or pass --package-manager.'
+                : 'No lockfile found and package.json has no "packageManager" field. ' +
+                  'Pass --package-manager to choose one of pnpm/npm/yarn/bun.'
+        throw new Error(detail)
+    }
+
+    const message =
+        matches.length > 0
+            ? `Multiple lockfiles detected (${matches
+                  .map((match) => `${match.lockFile}`)
+                  .join(', ')}). Pick the package manager to use:`
+            : 'No lockfile or packageManager field found. Pick the package manager to use:'
+
+    const answer = await select<PackageManager>({
+        message,
+        options: [
+            { label: 'pnpm', value: 'pnpm' },
+            { label: 'npm', value: 'npm' },
+            { label: 'yarn', value: 'yarn' },
+            { label: 'bun', value: 'bun' },
+        ],
+    })
+    if (isCancel(answer)) {
+        cancel('Package manager selection cancelled.')
+        throw new Error('package manager selection cancelled')
+    }
+    return answer
 }
 
 interface PlannedFile {
@@ -257,16 +345,14 @@ interface ChangeStat {
 }
 
 function mergeUniqueLines(existing: string, incoming: string): string {
-    const existingLines = existing
-        .split(/\r?\n/)
-        .filter((line, index, lines) => line.length > 0 || index < lines.length - 1)
-    const existingSet = new Set(existingLines)
+    const existingLines = existing.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n')
+    const existingSet = new Set(existingLines.filter((line) => line.length > 0))
     const merged = [...existingLines]
 
-    for (const line of incoming.split(/\r?\n/)) {
-        if (!line || existingSet.has(line)) continue
+    for (const line of incoming.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n')) {
+        if (line.length > 0 && existingSet.has(line)) continue
         merged.push(line)
-        existingSet.add(line)
+        if (line.length > 0) existingSet.add(line)
     }
 
     return `${merged.join('\n')}\n`
@@ -455,7 +541,23 @@ function mergePackageJson(packageJson: PackageJson, options: InitOptions): Packa
     scripts['generate:changelog'] ??= 'conventional-changelog -p conventionalcommits -i CHANGELOG.md -s'
     scripts['generate:changelog:first'] ??= 'conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0'
 
-    const dependencies = options.withEslint ? { ...DEV_DEPENDENCIES, eslint: '^9.25.0' } : DEV_DEPENDENCIES
+    if (options.withEslint) {
+        scripts.lint ??= 'eslint .'
+        scripts['lint:fix'] ??= 'eslint . --fix'
+    }
+
+    let dependencies: Record<string, string> = { ...DEV_DEPENDENCIES }
+    if (options.withEslint) {
+        dependencies = {
+            ...dependencies,
+            eslint: '^9.25.0',
+            '@eslint/js': '^9.25.0',
+            'typescript-eslint': '^8.31.0',
+        }
+    }
+    if (options.withTurbo) {
+        dependencies = { ...dependencies, turbo: '^2.9.6' }
+    }
     for (const [name, version] of Object.entries(dependencies)) {
         devDependencies[name] ??= version
     }
@@ -525,6 +627,9 @@ function shouldWritePackageJson(options: InitOptions): boolean {
 }
 
 async function runInstall(cwd: string, packageManager: PackageManager): Promise<void> {
+    if (!existsSync(join(cwd, 'package.json'))) {
+        throw new Error(`cannot run ${packageManager} install: ${join(cwd, 'package.json')} does not exist`)
+    }
     const args = ['install']
     await new Promise<void>((resolvePromise, rejectPromise) => {
         const child = spawn(packageManager, args, { cwd, stdio: 'inherit' })
@@ -577,6 +682,20 @@ async function doInit(options: InitOptions): Promise<void> {
         plannedFiles.push({
             path: join(options.cwd, options.lintStagedConfig),
             body: await readTemplate(lintStagedTemplate),
+        })
+    }
+
+    if (options.withEslint) {
+        plannedFiles.push({
+            path: join(options.cwd, 'eslint.config.mjs'),
+            body: await readTemplate('eslint.config.mjs'),
+        })
+    }
+
+    if (options.withTurbo) {
+        plannedFiles.push({
+            path: join(options.cwd, 'turbo.json'),
+            body: await readTemplate('turbo.json'),
         })
     }
 
@@ -635,6 +754,11 @@ async function doInit(options: InitOptions): Promise<void> {
     if (options.dryRun) process.stdout.write('Dry run: no files were written.\n')
     process.stdout.write(`${colorize(`Package manager: ${packageManager}`, ANSI_LIGHT_GRAY)}\n`)
     printChangeStats(stats)
+    if (merged.length > 0) {
+        process.stdout.write(`\n`)
+        process.stdout.write(`${colorize('The following files were merged:', ANSI_GREEN)}\n`)
+        for (const path of merged) process.stdout.write(` ${colorize(path, ANSI_MUTED_GRAY)}\n`)
+    }
     if (skipped.length > 0) {
         const skippedTitle =
             conflictStrategy === 'merge'
