@@ -29,6 +29,14 @@
         {
             "dir": "npm-package-publish-checklist",
             "summary": "npm package 发布前检查清单"
+        },
+        {
+            "dir": "branch-name-standard",
+            "summary": "Git 分支命名规范（与 Conventional Commits 类型对齐）"
+        },
+        {
+            "dir": "instructions-sync-discipline",
+            "summary": "instructions / skills / AGENTS.md 必须改源 + 跑 sync 脚本"
         }
     ]
 }
