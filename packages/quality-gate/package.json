@@ -24,7 +24,7 @@
         "directory": "packages/quality-gate"
     },
     "license": "MIT",
-    "author": "AgentILS contributors (https://github.com/bugfix2020/AgentILS)",
+    "author": "liuyuxuan <ts02315607@gmail.com>",
     "type": "module",
     "main": "./dist/index.js",
     "bin": {
