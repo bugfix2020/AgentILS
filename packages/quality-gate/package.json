@@ -2,6 +2,29 @@
     "name": "@agent-ils/quality-gate",
     "version": "0.0.1",
     "description": "Initialize Husky, lint-staged, Prettier, commitlint, and Conventional Commits defaults for a project.",
+    "keywords": [
+        "agentils",
+        "quality-gate",
+        "precommit",
+        "husky",
+        "lint-staged",
+        "prettier",
+        "commitlint",
+        "conventional-commits",
+        "ecam",
+        "tui"
+    ],
+    "homepage": "https://github.com/bugfix2020/AgentILS/tree/main/packages/quality-gate#readme",
+    "bugs": {
+        "url": "https://github.com/bugfix2020/AgentILS/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bugfix2020/AgentILS.git",
+        "directory": "packages/quality-gate"
+    },
+    "license": "MIT",
+    "author": "AgentILS contributors (https://github.com/bugfix2020/AgentILS)",
     "type": "module",
     "main": "./dist/index.js",
     "bin": {
