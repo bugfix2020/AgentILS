@@ -1,3 +1,4 @@
 dist/
 node_modules/
-preview/
+# preview/ holds README GIFs + their source frame logs; do not ignore it.
+

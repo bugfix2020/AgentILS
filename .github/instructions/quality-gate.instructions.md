@@ -3,7 +3,7 @@
 
 ## <!-- DO NOT EDIT this generated target. Edit the source file instead. -->
 
-## applyTo: "packages/quality-gate/\*\*"
+## applyTo: 'packages/quality-gate/\*\*'
 
 # `@agent-ils/quality-gate` Instructions (LLM)
 

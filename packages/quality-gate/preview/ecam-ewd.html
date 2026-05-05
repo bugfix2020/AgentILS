@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AGENTILS · A320 ECAM E/WD Preview</title>
+<!--
+    AgentILS Quality Gate — A320 ECAM E/WD style preview.
+
+    Single-file HTML, no external libraries. Double-click to open in any
+    modern browser. The page renders an Airbus A320/A330 style Engine /
+    Warning Display (E/WD): twin N1 half-dials, twin EGT half-dials, N2 /
+    FF digital rows, FOB readout, flaps SVG, T.O MEMO typewriter and a
+    right-side status memo column.
+
+    Color semantics follow Airbus ECAM convention:
+        green   — nominal / available / completed
+        cyan    — selected / commanded / target
+        amber   — caution / limit
+        red     — exceedance / red limit
+        white   — labels / scale / fixed text
+        magenta — inhibit / special mode
+
+    Animation is driven by a single requestAnimationFrame loop. There is no
+    bank of setTimeout calls; everything reads from `simTime` and the
+    aircraftState/displayState records. Display values low-pass-filter the
+    aircraft targets so needles glide instead of snapping.
+-->
+<style>
+    :root {
+        --green:   #2eea2e;
+        --green-d: #1aa61a;
+        --cyan:    #00d8ff;
+        --amber:   #ffb000;
+        --red:     #ff2828;
+        --white:   #f0f0f0;
+        --magenta: #ff5fff;
+        --bg:      #050608;
+        --bezel:   #1a1a1d;
+        --bezel-d: #0a0a0c;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+        margin: 0; padding: 0;
+        background: #000;
+        color: var(--white);
+        font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+        min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .stage { display: flex; gap: 16px; padding: 16px; align-items: flex-start; }
+
+    /* Bezel: thick dark frame around the ECAM screen */
+    .bezel {
+        background: linear-gradient(180deg, #232325 0%, #111113 100%);
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow:
+            inset 0 0 0 2px #2a2a2c,
+            inset 0 0 0 4px #050505,
+            0 12px 48px rgba(0,0,0,.7);
+    }
+    .screen {
+        position: relative;
+        width: 700px; height: 620px;
+        background: var(--bg);
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: inset 0 0 80px rgba(0, 60, 0, .12);
+    }
+    /* Subtle CRT scanlines */
+    .screen::after {
+        content: ''; position: absolute; inset: 0;
+        background: repeating-linear-gradient(
+            to bottom,
+            rgba(0,0,0,0) 0px,
+            rgba(0,0,0,0) 2px,
+            rgba(255,255,255,.025) 3px,
+            rgba(0,0,0,0) 4px
+        );
+        pointer-events: none;
+        mix-blend-mode: overlay;
+    }
+    .screen svg { display: block; width: 100%; height: 100%; }
+
+    /* Right-side control column (not part of ECAM, dev controls only) */
+    .controls {
+        width: 220px;
+        color: var(--white);
+        font-size: 12px;
+    }
+    .controls h3 {
+        font-size: 11px; letter-spacing: 2px; color: #777;
+        margin: 0 0 8px; font-weight: 600;
+    }
+    .controls button {
+        display: block; width: 100%;
+        margin: 4px 0; padding: 8px 10px;
+        background: #15171b; color: var(--white);
+        border: 1px solid #2a2d33; border-radius: 4px;
+        font-family: inherit; font-size: 12px;
+        cursor: pointer; text-align: left;
+    }
+    .controls button:hover { background: #1d2027; }
+    .controls .stat {
+        margin-top: 12px;
+        padding: 8px 10px;
+        background: #0c0d11;
+        border: 1px solid #1f2127;
+        border-radius: 4px;
+        line-height: 1.6;
+    }
+    .controls .stat span { color: var(--green); }
+    .controls .step {
+        margin: 4px 0; padding: 6px 8px;
+        background: #0c0d11;
+        border-left: 3px solid #2a2d33;
+        font-size: 11px;
+    }
+    .controls .step.run { border-left-color: var(--amber); color: var(--amber); }
+    .controls .step.ok  { border-left-color: var(--green); color: var(--green); }
+    .controls .step.err { border-left-color: var(--red);   color: var(--red); }
+</style>
+</head>
+<body>
+<div class="stage">
+    <div class="bezel">
+        <div class="screen" id="screen"></div>
+    </div>
+    <div class="controls">
+        <h3>SIM CONTROL</h3>
+        <button id="btn-run">▶ AUTO RUN</button>
+        <button id="btn-pause">❚❚ PAUSE</button>
+        <button id="btn-jump">⤓ JUMP T.O READY</button>
+        <button id="btn-step">+5s STEP</button>
+        <button id="btn-reset">⟲ RESET</button>
+        <div class="stat" id="stat">
+            phase: <span id="stat-phase">COLD &amp; DARK</span><br>
+            t = <span id="stat-time">0.0</span> s<br>
+            FOB = <span id="stat-fob">9520</span> kg
+        </div>
+        <h3 style="margin-top:14px">PRE-COMMIT STEPS</h3>
+        <div id="steps"></div>
+    </div>
+</div>
+
+<script>
+'use strict'
+
+/* =========================================================================
+ * 1. CONSTANTS / GEOMETRY
+ * ========================================================================= */
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const W = 700
+const H = 620
+
+// N1 dial geometry (left engine; right is mirrored at +260 px)
+const N1 = {
+    cxL: 130, cxR: 380 + 70 + 50, cy: 95, r: 60,
+    /** sweep range in degrees, 0deg = up, increases clockwise */
+    aMin: -130, aMax:  130,
+    /** value range mapped onto the sweep */
+    vMin: 0, vMax: 110,
+    /** scale tick values shown along the arc */
+    ticks: [0, 5, 10],
+    /** numeric labels we actually render */
+    labelTicks: [5, 10],
+    /** N1 limit (amber tick) */
+    limit: 84.1,
+    /** red zone start (red arc) */
+    redFrom: 100,
+}
+// EGT dial geometry
+const EGT = {
+    cxL: 130, cxR: 500, cy: 230, r: 55,
+    aMin: -130, aMax: 130,
+    vMin: 0, vMax: 1000,
+    redFrom: 950,
+    limit: 900,
+}
+
+/* =========================================================================
+ * 2. STATE
+ * ========================================================================= */
+
+const aircraftState = {
+    phase: 'COLD & DARK',
+    eng1: { n1Target: 0, n2Target: 0, egtTarget: 20, ffTarget: 0 },
+    eng2: { n1Target: 0, n2Target: 0, egtTarget: 20, ffTarget: 0 },
+    thrustLeverN1Target: 0,
+    n1Limit: 84.1,
+    thrustMode: '',           // '', 'TOGA', etc.
+    fob: 9520,
+    flapsSelected: 0,         // 0..1 normalized (0 = clean, 1 = T.O / FLAPS 1+F)
+    flapsActual: 0,
+    toConfigState: 'WAIT',    // WAIT | TEST | NORMAL
+    statusMemo: ['PARK BRK', 'PRED W/S OFF', 'TCAS STBY'],
+}
+
+const displayState = {
+    eng1N1: 0,  eng1N2: 0,  eng1EGT: 20,  eng1FF: 0,
+    eng2N1: 0,  eng2N2: 0,  eng2EGT: 20,  eng2FF: 0,
+    /** cyan command dot — leads N1 needle */
+    thrustLeverDot: 0,
+    displayedFob: 9520,
+    displayedFlaps: 0,
+    /** T.O MEMO typewriter buffer */
+    memoTypedChars: 0,
+}
+
+// T.O MEMO lines: dotted right-justified label::value pairs.
+// Each entry: { left, right, condition() => bool turns it green }
+const MEMO_LINES = [
+    { left: 'T.O AUTO BRK', right: 'MAX',   width: 24, ready: () => simTime >= 74 },
+    { left: 'SIGNS ON',     right: '',      width: 24, ready: () => simTime >= 76 },
+    { left: 'CABIN',        right: 'CHECK', width: 24, ready: () => simTime >= 78 },
+    { left: 'SPLRS',        right: 'ARM',   width: 24, ready: () => simTime >= 80 },
+    { left: 'FLAPS',        right: 'T.O',   width: 24, ready: () => displayState.displayedFlaps > 0.92 },
+    { left: 'T.O CONFIG',   right: 'TEST',  width: 24, ready: () => false /* see toConfigState */ },
+]
+
+/** Per-character typing speed. */
+const TYPE_CPS = 24
+
+/* =========================================================================
+ * 3. PHASE / STATE-MACHINE
+ *
+ * Time-based phases. Each phase mutates aircraftState targets; the display
+ * loop low-passes display values toward the targets so animation is smooth.
+ * ========================================================================= */
+
+let simTime = 0
+let lastWall = 0
+let running = true
+
+function setPhase(name) {
+    aircraftState.phase = name
+    document.getElementById('stat-phase').textContent = name
+}
+
+/** Apply phase-driven target updates. Called every frame with simTime. */
+function applyPhase(t) {
+    // Cold & Dark: nothing on
+    if (t < 8) {
+        setPhase('COLD & DARK')
+        zeroEngines()
+        aircraftState.flapsSelected = 0
+        aircraftState.thrustLeverN1Target = 0
+        aircraftState.thrustMode = ''
+        return
+    }
+    // Electrical power: displays alive but engines still off
+    if (t < 18) {
+        setPhase('ELEC PWR')
+        zeroEngines()
+        return
+    }
+    // Engine 2 start — N2 leads, FF follows at ~22%, EGT spike, N1 settles
+    if (t < 38) {
+        setPhase('ENG 2 START')
+        const k = (t - 18) / 20            // 0..1
+        startEngine(aircraftState.eng2, k, /*startSpike=*/ true)
+        return
+    }
+    // Engine 1 start
+    if (t < 58) {
+        setPhase('ENG 1 START')
+        const k = (t - 38) / 20
+        startEngine(aircraftState.eng1, k, true)
+        // Engine 2 already idling at this point
+        idleEngine(aircraftState.eng2)
+        return
+    }
+    // After start / flaps transit
+    if (t < 72) {
+        setPhase('AFTER START')
+        idleEngine(aircraftState.eng1)
+        idleEngine(aircraftState.eng2)
+        // Pilot selects T.O flaps part-way through
+        aircraftState.flapsSelected = t > 64 ? 1 : 0
+        return
+    }
+    // T.O memo build (typewriter)
+    if (t < 86) {
+        setPhase('T.O MEMO BUILD')
+        idleEngine(aircraftState.eng1)
+        idleEngine(aircraftState.eng2)
+        aircraftState.flapsSelected = 1
+        return
+    }
+    // T.O CONFIG TEST
+    if (t < 94) {
+        setPhase('T.O CONFIG TEST')
+        idleEngine(aircraftState.eng1)
+        idleEngine(aircraftState.eng2)
+        aircraftState.flapsSelected = 1
+        aircraftState.toConfigState = t < 92 ? 'TEST' : 'NORMAL'
+        return
+    }
+    // Takeoff thrust preview — TOGA, N1 to ~84.1
+    setPhase('TAKEOFF THRUST')
+    aircraftState.thrustMode = 'TOGA'
+    aircraftState.thrustLeverN1Target = 84.1
+    aircraftState.eng1.n1Target = 84.1
+    aircraftState.eng2.n1Target = 84.1
+    aircraftState.eng1.n2Target = 92.0
+    aircraftState.eng2.n2Target = 91.8
+    aircraftState.eng1.egtTarget = 720
+    aircraftState.eng2.egtTarget = 715
+    aircraftState.eng1.ffTarget = 2500
+    aircraftState.eng2.ffTarget = 2480
+    aircraftState.flapsSelected = 1
+    aircraftState.toConfigState = 'NORMAL'
+}
+
+function zeroEngines() {
+    for (const e of [aircraftState.eng1, aircraftState.eng2]) {
+        e.n1Target = 0; e.n2Target = 0; e.egtTarget = 20; e.ffTarget = 0
+    }
+}
+function idleEngine(e) {
+    e.n1Target = 19.7
+    e.n2Target = 68.2
+    e.egtTarget = 518
+    e.ffTarget = 320
+}
+/**
+ * Engine start curve. k is 0..1 across the start window. We model:
+ *   N2 ramps first (0 → 68 by k=1)
+ *   FF appears once N2 ≈ 22%
+ *   EGT spikes ~k=0.55 then settles (20 → 80 → 300 → 720 → 518)
+ *   N1 follows last
+ */
+function startEngine(e, k, startSpike) {
+    e.n2Target = 68.2 * smoothstep(0, 1, k)
+    e.ffTarget = e.n2Target > 22 ? lerp(0, 320, smoothstep(0.3, 0.9, k)) : 0
+    if (startSpike) {
+        // Piecewise EGT spike
+        let egt
+        if (k < 0.25) egt = lerp(20, 80, k / 0.25)
+        else if (k < 0.55) egt = lerp(80, 720, (k - 0.25) / 0.30)
+        else if (k < 0.75) egt = lerp(720, 560, (k - 0.55) / 0.20)
+        else egt = lerp(560, 518, (k - 0.75) / 0.25)
+        e.egtTarget = egt
+    } else {
+        e.egtTarget = lerp(20, 518, smoothstep(0.4, 1, k))
+    }
+    e.n1Target = lerp(0, 19.7, smoothstep(0.5, 1, k))
+}
+
+function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)) }
+function smoothstep(a, b, x) {
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+}
+
+/* =========================================================================
+ * 4. DISPLAY UPDATE — low-pass filtering for that "real needle" feel
+ * ========================================================================= */
+
+function updateDisplay(dt) {
+    // N1 actual pointer lags the target (slow, like a spool)
+    const N1_LAG  = 0.04
+    // Cyan command dot follows thrust lever directly with quick ease
+    const CMD_LAG = 0.18
+    const N2_LAG  = 0.06
+    const EGT_LAG = 0.10
+    const FF_LAG  = 0.10
+    const FLAP_LAG = 0.025
+    const FOB_LAG  = 1.0   // direct (we integrate by dt)
+
+    displayState.eng1N1 += (aircraftState.eng1.n1Target - displayState.eng1N1) * N1_LAG
+    displayState.eng2N1 += (aircraftState.eng2.n1Target - displayState.eng2N1) * N1_LAG
+    displayState.eng1N2 += (aircraftState.eng1.n2Target - displayState.eng1N2) * N2_LAG
+    displayState.eng2N2 += (aircraftState.eng2.n2Target - displayState.eng2N2) * N2_LAG
+    displayState.eng1EGT += (aircraftState.eng1.egtTarget - displayState.eng1EGT) * EGT_LAG
+    displayState.eng2EGT += (aircraftState.eng2.egtTarget - displayState.eng2EGT) * EGT_LAG
+    displayState.eng1FF += (aircraftState.eng1.ffTarget - displayState.eng1FF) * FF_LAG
+    displayState.eng2FF += (aircraftState.eng2.ffTarget - displayState.eng2FF) * FF_LAG
+
+    displayState.thrustLeverDot += (aircraftState.thrustLeverN1Target - displayState.thrustLeverDot) * CMD_LAG
+
+    // Flaps: cyan target leads, green actual lags
+    displayState.displayedFlaps += (aircraftState.flapsSelected - displayState.displayedFlaps) * FLAP_LAG
+
+    // FOB: integrate fuel burn from instantaneous FF (kg/h → kg/s)
+    const burnKgPerSec = (displayState.eng1FF + displayState.eng2FF) / 3600
+    aircraftState.fob = Math.max(0, aircraftState.fob - burnKgPerSec * dt)
+    displayState.displayedFob = aircraftState.fob
+
+    // Tiny stable jitter once engines are running — sensor noise on EGT
+    if (displayState.eng1N2 > 50) {
+        displayState.eng1EGT += (Math.random() - 0.5) * 1.5
+        displayState.eng2EGT += (Math.random() - 0.5) * 1.5
+    }
+
+    // T.O MEMO typewriter — only types after we enter T.O MEMO BUILD
+    if (simTime >= 72) {
+        const dueChars = (simTime - 72) * TYPE_CPS
+        displayState.memoTypedChars = Math.floor(dueChars)
+    } else {
+        displayState.memoTypedChars = 0
+    }
+}
+
+/* =========================================================================
+ * 5. SVG CONSTRUCTION (built once; nodes mutated each frame)
+ * ========================================================================= */
+
+const svg = document.createElementNS(SVG_NS, 'svg')
+svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+document.getElementById('screen').appendChild(svg)
+
+function el(name, attrs = {}, parent = svg) {
+    const node = document.createElementNS(SVG_NS, name)
+    for (const k in attrs) node.setAttribute(k, attrs[k])
+    parent.appendChild(node)
+    return node
+}
+function txt(x, y, str, attrs = {}, parent = svg) {
+    const t = el('text', { x, y, ...attrs }, parent)
+    t.textContent = str
+    return t
+}
+
+/** Convert dial value to (x, y) on its arc. */
+function dialPoint(d, value, rOverride) {
+    const k = (value - d.vMin) / (d.vMax - d.vMin)
+    const a = (d.aMin + (d.aMax - d.aMin) * k) * Math.PI / 180
+    const r = rOverride ?? d.r
+    return [Math.sin(a) * r, -Math.cos(a) * r]
+}
+function dialAngleDeg(d, value) {
+    const k = (value - d.vMin) / (d.vMax - d.vMin)
+    return d.aMin + (d.aMax - d.aMin) * k
+}
+
+/** Build a single half-dial (white arc + ticks + red zone + amber limit). */
+function buildDial(d, cx, cy, label, valueRef, opts = {}) {
+    const g = el('g', { transform: `translate(${cx} ${cy})` })
+    // White arc
+    const [x0, y0] = dialPoint(d, d.vMin)
+    const [x1, y1] = dialPoint(d, d.vMax)
+    el('path', {
+        d: `M ${x0} ${y0} A ${d.r} ${d.r} 0 1 1 ${x1} ${y1}`,
+        stroke: 'var(--white)', 'stroke-width': 1.2, fill: 'none', opacity: 0.85,
+    }, g)
+
+    // Red zone arc (from redFrom to vMax)
+    if (d.redFrom !== undefined) {
+        const [rx0, ry0] = dialPoint(d, d.redFrom)
+        const [rx1, ry1] = dialPoint(d, d.vMax)
+        el('path', {
+            d: `M ${rx0} ${ry0} A ${d.r} ${d.r} 0 0 1 ${rx1} ${ry1}`,
+            stroke: 'var(--red)', 'stroke-width': 5, fill: 'none',
+        }, g)
+    }
+
+    // Amber limit tick
+    if (d.limit !== undefined) {
+        const a = dialAngleDeg(d, d.limit) * Math.PI / 180
+        const [lx0, ly0] = [Math.sin(a) * (d.r - 6), -Math.cos(a) * (d.r - 6)]
+        const [lx1, ly1] = [Math.sin(a) * (d.r + 6), -Math.cos(a) * (d.r + 6)]
+        el('line', {
+            x1: lx0, y1: ly0, x2: lx1, y2: ly1,
+            stroke: 'var(--amber)', 'stroke-width': 3,
+        }, g)
+    }
+
+    // Tick labels (white numbers like 5 / 10)
+    if (opts.labelTicks) {
+        for (const v of opts.labelTicks) {
+            const a = dialAngleDeg(d, v) * Math.PI / 180
+            const lx = Math.sin(a) * (d.r - 14)
+            const ly = -Math.cos(a) * (d.r - 14) + 4
+            txt(lx, ly, String(v), {
+                fill: 'var(--white)', 'font-size': 11, 'text-anchor': 'middle',
+            }, g)
+        }
+    }
+
+    // Center label (e.g. "N1 / %") — drawn between the two dials by caller, so skip here
+    return g
+}
+
+// ========== Build N1 dials ==========
+const N1_LCx = 145
+const N1_RCx = 555
+const N1L = buildDial(N1, N1_LCx, 110, 'N1', 'eng1N1', { labelTicks: [5, 10] })
+const N1R = buildDial(N1, N1_RCx, 110, 'N1', 'eng2N1', { labelTicks: [5, 10] })
+
+// N1 needles (green) + cyan command dots + numeric value boxes
+function buildNeedle(parent, d, color, width = 2) {
+    return el('line', {
+        x1: 0, y1: 0, x2: 0, y2: -d.r * 0.85,
+        stroke: color, 'stroke-width': width,
+        'stroke-linecap': 'round',
+    }, parent)
+}
+const N1L_needle = buildNeedle(N1L, N1, 'var(--green)', 2.5)
+const N1R_needle = buildNeedle(N1R, N1, 'var(--green)', 2.5)
+const N1L_cmdDot = el('circle', { cx: 0, cy: 0, r: 4, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2 }, N1L)
+const N1R_cmdDot = el('circle', { cx: 0, cy: 0, r: 4, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2 }, N1R)
+
+function buildValueBox(parent, x, y, w, h) {
+    const g = el('g', { transform: `translate(${x} ${y})` }, parent)
+    el('rect', { x: -w/2, y: -h/2, width: w, height: h, fill: 'none', stroke: 'var(--green)', 'stroke-width': 1 }, g)
+    const t = txt(0, 5, '0.0', {
+        fill: 'var(--green)', 'font-size': 18, 'font-weight': 700, 'text-anchor': 'middle',
+    }, g)
+    return t
+}
+const N1L_val = buildValueBox(N1L, 18, 22, 56, 22)
+const N1R_val = buildValueBox(N1R, 18, 22, 56, 22)
+
+// ========== Build EGT dials ==========
+const EGT_LCx = 145, EGT_RCx = 555
+const EGTL = buildDial(EGT, EGT_LCx, 245, 'EGT', 'eng1EGT', {})
+const EGTR = buildDial(EGT, EGT_RCx, 245, 'EGT', 'eng2EGT', {})
+const EGTL_needle = buildNeedle(EGTL, EGT, 'var(--green)', 2.5)
+const EGTR_needle = buildNeedle(EGTR, EGT, 'var(--green)', 2.5)
+const EGTL_val = buildValueBox(EGTL, 0, 22, 56, 22)
+const EGTR_val = buildValueBox(EGTR, 0, 22, 56, 22)
+
+// ========== Center label column (N1 / %, EGT / °C, N2 / %, FF / KG/H) ==========
+const CENTER_X = 350
+function centerLabel(y, big, small) {
+    txt(CENTER_X, y, big, { fill: 'var(--white)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'middle' })
+    txt(CENTER_X, y + 18, small, { fill: 'var(--cyan)', 'font-size': 12, 'text-anchor': 'middle' })
+}
+centerLabel(105, 'N1', '%')
+centerLabel(245, 'EGT', '°C')
+centerLabel(330, 'N2', '%')
+centerLabel(390, 'FF', 'KG/H')
+
+// White separator lines beside center labels (small "---")
+function sideTicks(y) {
+    el('line', { x1: 250, y1: y, x2: 305, y2: y, stroke: 'var(--white)', 'stroke-width': 1, opacity: 0.5 })
+    el('line', { x1: 395, y1: y, x2: 450, y2: y, stroke: 'var(--white)', 'stroke-width': 1, opacity: 0.5 })
+}
+sideTicks(335); sideTicks(395)
+
+// ========== N2 / FF digital readouts ==========
+const n2L_t = txt(180, 340, '0.0',  { fill: 'var(--green)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'end' })
+const n2R_t = txt(520, 340, '0.0',  { fill: 'var(--green)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'start' })
+const ffL_t = txt(180, 400, '0',    { fill: 'var(--green)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'end' })
+const ffR_t = txt(520, 400, '0',    { fill: 'var(--green)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'start' })
+
+// ========== Top-right thrust mode ==========
+const thrustModeT = txt(680, 30, '', {
+    fill: 'var(--green)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'end',
+})
+const thrustValT = txt(680, 54, '', {
+    fill: 'var(--green)', 'font-size': 22, 'font-weight': 700, 'text-anchor': 'end',
+})
+
+// ========== Horizontal divider above bottom block ==========
+el('line', { x1: 20, y1: 432, x2: W - 20, y2: 432, stroke: 'var(--white)', 'stroke-width': 1, opacity: 0.6 })
+// Vertical center divider in lower half
+el('line', { x1: W/2, y1: 432, x2: W/2, y2: H - 12, stroke: 'var(--white)', 'stroke-width': 1, opacity: 0.6 })
+
+// ========== FOB ==========
+const fobLine = el('g', {})
+txt(30, 460, 'FOB :', { fill: 'var(--white)', 'font-size': 18 }, fobLine)
+const fobVal = txt(110, 460, '9520',  { fill: 'var(--green)', 'font-size': 18, 'font-weight': 700 }, fobLine)
+txt(180, 460, 'KG',    { fill: 'var(--cyan)', 'font-size': 14 }, fobLine)
+
+// ========== Flaps SVG (small wing schematic) — center bottom ==========
+// Drawn as a top-down wing; selected = cyan ghost; actual = filled green.
+const flapsG = el('g', { transform: `translate(${CENTER_X} 408)` })
+// Wing leading edge baseline
+el('path', {
+    d: 'M -50 0 L 50 0 L 30 14 L -30 14 Z',
+    fill: 'none', stroke: 'var(--white)', 'stroke-width': 1, opacity: 0.5,
+}, flapsG)
+// Selected (cyan ghost)
+const flapSel = el('path', {
+    d: 'M -30 14 L 30 14 L 22 22 L -22 22 Z',
+    fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 1.4, opacity: 0.9,
+}, flapsG)
+// Actual (green filled, scales with displayedFlaps)
+const flapAct = el('path', {
+    d: 'M -30 14 L 30 14 L 22 22 L -22 22 Z',
+    fill: 'var(--green-d)', stroke: 'var(--green)', 'stroke-width': 1, opacity: 0.95,
+}, flapsG)
+
+// ========== T.O MEMO column (left bottom) ==========
+const memoG = el('g', { transform: 'translate(30 490)' })
+const memoTextNodes = MEMO_LINES.map((line, i) =>
+    txt(0, i * 22, '', {
+        fill: 'var(--cyan)', 'font-size': 16, 'font-family': 'inherit',
+    }, memoG),
+)
+
+// ========== Status memo column (right bottom) ==========
+const statusG = el('g', { transform: `translate(${W/2 + 20} 490)` })
+const statusTextNodes = aircraftState.statusMemo.map((s, i) =>
+    txt(0, i * 22, s, { fill: 'var(--green)', 'font-size': 16 }, statusG),
+)
+
+/* =========================================================================
+ * 6. PER-FRAME RENDER — pure DOM mutation (no rebuild)
+ * ========================================================================= */
+
+function rotateNeedle(node, d, value) {
+    const a = dialAngleDeg(d, value)
+    node.setAttribute('transform', `rotate(${a})`)
+}
+function moveCmdDot(node, d, value) {
+    const k = (value - d.vMin) / (d.vMax - d.vMin)
+    const a = (d.aMin + (d.aMax - d.aMin) * k) * Math.PI / 180
+    const r = d.r - 6
+    node.setAttribute('cx', Math.sin(a) * r)
+    node.setAttribute('cy', -Math.cos(a) * r)
+}
+
+function render() {
+    // N1 needles + command dots + value text
+    rotateNeedle(N1L_needle, N1, displayState.eng1N1)
+    rotateNeedle(N1R_needle, N1, displayState.eng2N1)
+    moveCmdDot(N1L_cmdDot, N1, displayState.thrustLeverDot)
+    moveCmdDot(N1R_cmdDot, N1, displayState.thrustLeverDot)
+    N1L_val.textContent = displayState.eng1N1.toFixed(1)
+    N1R_val.textContent = displayState.eng2N1.toFixed(1)
+    paintExceedance(N1L_val, displayState.eng1N1, N1)
+    paintExceedance(N1R_val, displayState.eng2N1, N1)
+
+    // EGT needles + value text
+    rotateNeedle(EGTL_needle, EGT, displayState.eng1EGT)
+    rotateNeedle(EGTR_needle, EGT, displayState.eng2EGT)
+    EGTL_val.textContent = Math.round(displayState.eng1EGT)
+    EGTR_val.textContent = Math.round(displayState.eng2EGT)
+    paintExceedance(EGTL_val, displayState.eng1EGT, EGT)
+    paintExceedance(EGTR_val, displayState.eng2EGT, EGT)
+
+    // N2 / FF
+    n2L_t.textContent = displayState.eng1N2.toFixed(1)
+    n2R_t.textContent = displayState.eng2N2.toFixed(1)
+    ffL_t.textContent = Math.round(displayState.eng1FF)
+    ffR_t.textContent = Math.round(displayState.eng2FF)
+
+    // Thrust mode
+    if (aircraftState.thrustMode) {
+        thrustModeT.textContent = aircraftState.thrustMode
+        thrustValT.textContent = aircraftState.thrustLeverN1Target.toFixed(1) + '%'
+    } else {
+        thrustModeT.textContent = ''
+        thrustValT.textContent = ''
+    }
+
+    // FOB
+    fobVal.textContent = Math.round(displayState.displayedFob).toString()
+    document.getElementById('stat-fob').textContent = Math.round(displayState.displayedFob)
+    document.getElementById('stat-time').textContent = simTime.toFixed(1)
+
+    // Flaps actual: scale Y from 1 (down) to 1.6 (extended) and shift down
+    const k = displayState.displayedFlaps
+    flapAct.setAttribute('transform', `translate(0 ${k * 6}) scale(1 ${1 + k * 0.5})`)
+    // Cyan target ghost: visible only while still moving
+    flapSel.style.opacity = Math.abs(aircraftState.flapsSelected - displayState.displayedFlaps) > 0.02 ? 0.9 : 0.15
+
+    // T.O MEMO typewriter
+    let charBudget = displayState.memoTypedChars
+    for (let i = 0; i < MEMO_LINES.length; i++) {
+        const line = MEMO_LINES[i]
+        const full = formatDottedLine(line.left, line.right, line.width)
+        const shown = full.slice(0, Math.max(0, charBudget))
+        memoTextNodes[i].textContent = shown
+        charBudget -= full.length
+        // Color: cyan while pending, green once condition met
+        let color
+        if (i === MEMO_LINES.length - 1) {
+            // Last line: T.O CONFIG — TEST while testing, NORMAL when settled
+            if (aircraftState.toConfigState === 'NORMAL') {
+                memoTextNodes[i].textContent = formatDottedLine('T.O CONFIG', 'NORMAL', 24)
+                    .slice(0, Math.max(0, displayState.memoTypedChars - sumPriorLen(i)))
+                color = 'var(--green)'
+            } else if (aircraftState.toConfigState === 'TEST') {
+                color = 'var(--cyan)'
+            } else {
+                color = 'var(--white)'
+            }
+        } else {
+            color = line.ready() ? 'var(--green)' : 'var(--cyan)'
+        }
+        memoTextNodes[i].setAttribute('fill', color)
+    }
+
+    // Status memo on right (changes during takeoff)
+    if (aircraftState.thrustMode === 'TOGA') {
+        aircraftState.statusMemo = ['PRED W/S OFF', 'TCAS TA/RA', 'T.O INHIBIT']
+    } else {
+        aircraftState.statusMemo = ['PARK BRK', 'PRED W/S OFF', 'TCAS STBY']
+    }
+    for (let i = 0; i < aircraftState.statusMemo.length; i++) {
+        const node = statusTextNodes[i]
+        node.textContent = aircraftState.statusMemo[i]
+        if (aircraftState.statusMemo[i].includes('INHIBIT')) node.setAttribute('fill', 'var(--magenta)')
+        else if (aircraftState.statusMemo[i].includes('TA/RA')) node.setAttribute('fill', 'var(--green)')
+        else node.setAttribute('fill', 'var(--green)')
+    }
+}
+
+function sumPriorLen(idx) {
+    let n = 0
+    for (let i = 0; i < idx; i++) n += formatDottedLine(MEMO_LINES[i].left, MEMO_LINES[i].right, MEMO_LINES[i].width).length
+    return n
+}
+
+function paintExceedance(textNode, value, dial) {
+    if (dial.redFrom !== undefined && value >= dial.redFrom) textNode.setAttribute('fill', 'var(--red)')
+    else if (dial.limit !== undefined && value >= dial.limit) textNode.setAttribute('fill', 'var(--amber)')
+    else textNode.setAttribute('fill', 'var(--green)')
+}
+
+/** ECAM-style dotted line: "LABEL........VALUE" padded to width chars. */
+function formatDottedLine(left, right, width) {
+    if (!right) return left
+    const dots = Math.max(2, width - left.length - right.length)
+    return left + '.'.repeat(dots) + right
+}
+
+/* =========================================================================
+ * 7. PRE-COMMIT STEP MIRROR (right-side dev panel only)
+ *
+ * The user wants pre-commit steps to be visible. We model them as wall-time
+ * driven mock entries ticking alongside the simulation: each step has a
+ * synthetic duration so the panel shows running → ok with realistic timing,
+ * mirroring how an ink runner would print them.
+ * ========================================================================= */
+
+const preCommitSteps = [
+    { label: 'SYNC COPILOT INSTRUCTIONS', startAt: 18, durMs: 1500, status: 'pending' },
+    { label: 'GENERATE FLOWCHARTS',        startAt: 38, durMs: 2200, status: 'pending' },
+    { label: 'LINT-STAGED  STAGED FILES',  startAt: 60, durMs: 1900, status: 'pending' },
+]
+const stepsRoot = document.getElementById('steps')
+const stepNodes = preCommitSteps.map((s) => {
+    const d = document.createElement('div')
+    d.className = 'step'
+    d.textContent = `[ ] ${s.label}`
+    stepsRoot.appendChild(d)
+    return d
+})
+function updateStepPanel() {
+    for (let i = 0; i < preCommitSteps.length; i++) {
+        const s = preCommitSteps[i]
+        const wall = simTime
+        if (wall < s.startAt) { s.status = 'pending'; stepNodes[i].className = 'step'; stepNodes[i].textContent = `[ ] ${s.label}` }
+        else if (wall < s.startAt + s.durMs / 1000) {
+            s.status = 'running'
+            stepNodes[i].className = 'step run'
+            const spin = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'][Math.floor(performance.now() / 90) % 10]
+            stepNodes[i].textContent = `[${spin}] ${s.label}  ${(wall - s.startAt).toFixed(1)}s`
+        } else {
+            s.status = 'ok'
+            stepNodes[i].className = 'step ok'
+            stepNodes[i].textContent = `[✔] ${s.label}  ${(s.durMs / 1000).toFixed(1)}s`
+        }
+    }
+}
+
+/* =========================================================================
+ * 8. MAIN LOOP
+ * ========================================================================= */
+
+function tick(now) {
+    if (!lastWall) lastWall = now
+    const dt = Math.min(0.1, (now - lastWall) / 1000)
+    lastWall = now
+    if (running) simTime += dt
+    applyPhase(simTime)
+    updateDisplay(dt)
+    render()
+    updateStepPanel()
+    requestAnimationFrame(tick)
+}
+requestAnimationFrame(tick)
+
+/* =========================================================================
+ * 9. CONTROLS
+ * ========================================================================= */
+
+document.getElementById('btn-run').onclick   = () => { running = true }
+document.getElementById('btn-pause').onclick = () => { running = false }
+document.getElementById('btn-step').onclick  = () => { simTime += 5 }
+document.getElementById('btn-jump').onclick  = () => { simTime = 72 }
+document.getElementById('btn-reset').onclick = () => {
+    simTime = 0
+    aircraftState.fob = 9520
+    displayState.displayedFob = 9520
+    displayState.eng1N1 = displayState.eng2N1 = 0
+    displayState.eng1N2 = displayState.eng2N2 = 0
+    displayState.eng1EGT = displayState.eng2EGT = 20
+    displayState.eng1FF = displayState.eng2FF = 0
+    displayState.thrustLeverDot = 0
+    displayState.displayedFlaps = 0
+    aircraftState.thrustMode = ''
+    aircraftState.thrustLeverN1Target = 0
+    aircraftState.toConfigState = 'WAIT'
+}
+</script>
+</body>
+</html>

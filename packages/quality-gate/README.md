@@ -223,6 +223,18 @@ Configuration templates and help text live in source `templates/` instead of the
 
 The package also installs a second bin, `agentils-precommit-gate`, which renders an A320 ECAM-style TUI panel for your Husky `pre-commit` hook. Each pipeline step shows a live spinner, optional `[i/N]` progress, and a final pass/fail color block, so commit-time feedback is visual instead of an opaque scroll of subprocess logs.
 
+<p align="center">
+  <img alt="dry-run pipeline (all steps pass)" src="./preview/dry-run.gif" width="640">
+  <br>
+  <em>Dry-run: every step passes; the panel collapses into the green ECAM summary.</em>
+</p>
+
+<p align="center">
+  <img alt="error pipeline (a step fails)" src="./preview/error.gif" width="640">
+  <br>
+  <em>Failure path: the failing step turns red and the run exits non-zero.</em>
+</p>
+
 Wire it into Husky:
 
 ```sh

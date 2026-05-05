@@ -223,6 +223,18 @@ Options:
 
 本包同时安装第二个 bin —— `agentils-precommit-gate`，它会在 Husky `pre-commit` 阶段渲染一块 A320 ECAM 风格的 TUI 面板：每一步都有实时旋转指示、可选的 `[i/N]` 进度数字、以及最终的颜色块，把 commit 时的反馈从一坨灰色子进程日志变成可视化的检查清单。
 
+<p align="center">
+  <img alt="dry-run 流水线（全部通过）" src="./preview/dry-run.gif" width="640">
+  <br>
+  <em>Dry-run：所有步骤通过，面板收敛为绿色 ECAM 概要。</em>
+</p>
+
+<p align="center">
+  <img alt="error 流水线（某步失败）" src="./preview/error.gif" width="640">
+  <br>
+  <em>失败路径：失败步骤变红，整体以非零状态退出。</em>
+</p>
+
 接到 Husky：
 
 ```sh
