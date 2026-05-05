@@ -19,6 +19,12 @@ function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
     const [state, setState] = useState<StepState[]>(() => steps.map((s) => ({ ...s, status: 'pending' })))
     const [done, setDone] = useState(false)
     const [failed, setFailed] = useState(false)
+    const [frame, setFrame] = useState(0)
+
+    useEffect(() => {
+        const id = setInterval(() => setFrame((f) => f + 1), 80)
+        return () => clearInterval(id)
+    }, [])
 
     useEffect(() => {
         let cancelled = false
@@ -53,8 +59,7 @@ function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
         }
     }, [steps, cwd, onSettle, exit])
 
-    const phase = !done ? 'CLB' : failed ? 'FAULT' : 'CRZ'
-    return <EcamPanel steps={state} done={done} failed={failed} phase={phase} />
+    return <EcamPanel steps={state} frame={frame} done={done} failed={failed} />
 }
 
 function updateAt(list: StepState[], index: number, patch: Partial<StepState>): StepState[] {
