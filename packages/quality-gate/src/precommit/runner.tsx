@@ -34,17 +34,27 @@ function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
             for (let i = 0; i < steps.length; i++) {
                 if (cancelled) return
                 setState((cur) =>
-                    updateAt(cur, i, { status: 'running', runningStartedAt: Date.now(), currentLine: undefined }),
+                    updateAt(cur, i, {
+                        status: 'running',
+                        runningStartedAt: Date.now(),
+                        currentLine: undefined,
+                        progress: 'idle',
+                    }),
                 )
                 const result = await runStep(steps[i]!, cwd, (chunk) => {
                     if (cancelled) return
                     const line = lastMeaningfulLine(chunk)
-                    if (line) {
-                        setState((cur) => updateAt(cur, i, { currentLine: line }))
-                    }
+                    const isDone = looksDone(chunk)
+                    if (!line && !isDone) return
+                    setState((cur) => {
+                        const patch: Partial<StepState> = {}
+                        if (line) patch.currentLine = line
+                        if (isDone) patch.progress = 'done'
+                        return updateAt(cur, i, patch)
+                    })
                 })
                 if (cancelled) return
-                setState((cur) => updateAt(cur, i, { ...result, currentLine: undefined }))
+                setState((cur) => updateAt(cur, i, { ...result, currentLine: undefined, progress: undefined }))
                 if (result.status === 'failed') {
                     didFail = true
                     break
@@ -90,6 +100,17 @@ function lastMeaningfulLine(chunk: string): string | undefined {
         if (t) return t
     }
     return undefined
+}
+
+/**
+ * Sniff a chunk for a subprocess success / completion marker. We look for
+ * lint-staged's [SUCCESS] / [COMPLETED] tags, the trailing 'Done' line that
+ * many CLIs print, or a single trailing checkmark — without false-firing on
+ * intermediate '✔ Backed up original state' style sub-status lines.
+ */
+function looksDone(chunk: string): boolean {
+    const stripped = chunk.replace(ANSI_RE, '')
+    return /\[(SUCCESS|COMPLETED|DONE)\]/i.test(stripped) || /\bdone\b/i.test(stripped)
 }
 
 /**

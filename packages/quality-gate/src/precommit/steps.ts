@@ -22,10 +22,17 @@ export interface StepState extends StepDefinition {
     tail?: string
     /** Process exit code for completed steps. */
     exitCode?: number
-    /** Date.now() when the step entered the 'running' state. Drives the typewriter reveal. */
+    /** Date.now() when the step entered the 'running' state. */
     runningStartedAt?: number
     /** Last non-empty stripped output line; rendered live under the running step. */
     currentLine?: string
+    /**
+     * Real subprocess progress derived from stdout sniffing. Stays at 'idle'
+     * until the runner sees a completion signal (e.g. lint-staged '[SUCCESS]'),
+     * at which point the label flips from gray to green even though the step
+     * is still technically 'running' (subprocess teardown can take a beat).
+     */
+    progress?: 'idle' | 'done'
 }
 
 /**
@@ -111,6 +118,7 @@ function dryArgv(ms: number, message: string, exitCode = 0): { command: string; 
                 return;
             }
             console.log(${JSON.stringify(message)});
+            console.log(${exitCode === 0 ? '"[SUCCESS] dry step"' : '"[FAILED] dry step"'});
             process.exit(${exitCode});
         };
         tick();

@@ -170,30 +170,27 @@ function stepIndicator(status: StepStatus, frame: number): string {
     }
 }
 
-/** Speed of the gray→green typewriter reveal during 'running'. */
-const REVEAL_MS_PER_CHAR = 45
-
-function revealedLabel(label: string, status: StepStatus, runningStartedAt: number | undefined): string {
+/** Color the label based on real subprocess state, not a fake timer. */
+function revealedLabel(label: string, status: StepStatus, progress: 'idle' | 'done' | undefined): string {
     if (status === 'pending') {
         return `${C.gry}${label}${C.rst}`
     }
     if (status === 'failed') {
         return `${C.red}${label}${C.rst}`
     }
-    if (status === 'passed') {
-        return `${C.wht}${label}${C.rst}`
+    if (status === 'passed' || progress === 'done') {
+        // Either the step has fully settled, OR the subprocess emitted a
+        // completion signal (lint-staged [SUCCESS] etc.) and we are still
+        // waiting for the process to fully exit.
+        return `${C.brt}${label}${C.rst}`
     }
-    // running: gray base, green reveal sweeps left-to-right
-    const elapsed = runningStartedAt ? Date.now() - runningStartedAt : 0
-    const revealed = Math.min(label.length, Math.max(0, Math.floor(elapsed / REVEAL_MS_PER_CHAR)))
-    const head = label.slice(0, revealed)
-    const tail = label.slice(revealed)
-    return `${C.brt}${head}${C.rst}${C.gry}${tail}${C.rst}`
+    // running + still working
+    return `${C.gry}${label}${C.rst}`
 }
 
 function stepRow(step: StepState, frame: number): string {
     const indicator = stepIndicator(step.status, frame)
-    const label = revealedLabel(step.label, step.status, step.runningStartedAt)
+    const label = revealedLabel(step.label, step.status, step.progress)
     let inner = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
     if (step.status === 'failed') {
         inner += `  ${C.amb}AP DISCONNECT${C.rst}`
