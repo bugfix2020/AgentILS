@@ -33,7 +33,7 @@ function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
             let didFail = false
             for (let i = 0; i < steps.length; i++) {
                 if (cancelled) return
-                setState((cur) => updateAt(cur, i, { status: 'running' }))
+                setState((cur) => updateAt(cur, i, { status: 'running', runningStartedAt: Date.now() }))
                 const result = await runStep(steps[i]!, cwd)
                 if (cancelled) return
                 setState((cur) => updateAt(cur, i, result))

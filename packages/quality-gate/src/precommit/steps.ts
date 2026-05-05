@@ -22,6 +22,8 @@ export interface StepState extends StepDefinition {
     tail?: string
     /** Process exit code for completed steps. */
     exitCode?: number
+    /** Date.now() when the step entered the 'running' state. Drives the typewriter reveal. */
+    runningStartedAt?: number
 }
 
 /**

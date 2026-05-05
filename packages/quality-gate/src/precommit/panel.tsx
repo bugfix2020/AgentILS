@@ -28,6 +28,7 @@ const C = {
     cyn: '\x1b[36m',
     dim: '\x1b[2;32m',
     red: '\x1b[31m',
+    gry: '\x1b[90m',
     rst: '\x1b[0m',
 } as const
 
@@ -140,22 +141,43 @@ function headerLines(): string[] {
 function stepIndicator(status: StepStatus, frame: number): string {
     switch (status) {
         case 'pending':
-            return ' '
+            return `${C.gry}·${C.rst}`
         case 'running': {
             const f = SPIN_FRAMES[frame % SPIN_FRAMES.length] ?? SPIN_FRAMES[0]
             return `${C.amb}${f}${C.rst}`
         }
         case 'passed':
-            return `${C.brt}✔${C.rst}`
+            return `${C.brt}✓${C.rst}`
         case 'failed':
-            return `${C.red}✘${C.rst}`
+            return `${C.red}✕${C.rst}`
     }
+}
+
+/** Speed of the gray→green typewriter reveal during 'running'. */
+const REVEAL_MS_PER_CHAR = 45
+
+function revealedLabel(label: string, status: StepStatus, runningStartedAt: number | undefined): string {
+    if (status === 'pending') {
+        return `${C.gry}${label}${C.rst}`
+    }
+    if (status === 'failed') {
+        return `${C.red}${label}${C.rst}`
+    }
+    if (status === 'passed') {
+        return `${C.wht}${label}${C.rst}`
+    }
+    // running: gray base, green reveal sweeps left-to-right
+    const elapsed = runningStartedAt ? Date.now() - runningStartedAt : 0
+    const revealed = Math.min(label.length, Math.max(0, Math.floor(elapsed / REVEAL_MS_PER_CHAR)))
+    const head = label.slice(0, revealed)
+    const tail = label.slice(revealed)
+    return `${C.brt}${head}${C.rst}${C.gry}${tail}${C.rst}`
 }
 
 function stepRow(step: StepState, frame: number): string {
     const indicator = stepIndicator(step.status, frame)
-    const labelColor = step.status === 'failed' ? C.red : C.wht
-    let inner = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${labelColor}${step.label}${C.rst}`
+    const label = revealedLabel(step.label, step.status, step.runningStartedAt)
+    let inner = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
     if (step.status === 'failed') {
         inner += `  ${C.amb}AP DISCONNECT${C.rst}`
     }
