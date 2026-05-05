@@ -24,6 +24,8 @@ export interface StepState extends StepDefinition {
     exitCode?: number
     /** Date.now() when the step entered the 'running' state. Drives the typewriter reveal. */
     runningStartedAt?: number
+    /** Last non-empty stripped output line; rendered live under the running step. */
+    currentLine?: string
 }
 
 /**
@@ -84,11 +86,35 @@ export const DRY_RUN_FAIL_STEPS: StepDefinition[] = [
 ]
 
 /**
- * Build an argv that runs a tiny node snippet with the given delay/output/exit.
- * Avoids shell-quoting issues that broke dry-run on cmd.exe.
+ * Build an argv that streams a few synthetic "processing" lines, sleeping
+ * between each, then exits with the requested code. Lets the panel show the
+ * live `currentLine` sub-row during dry-runs.
  */
 function dryArgv(ms: number, message: string, exitCode = 0): { command: string; args: string[] } {
-    const snippet = `setTimeout(() => { console.log(${JSON.stringify(message)}); process.exit(${exitCode}); }, ${ms});`
+    const fakeFiles = [
+        'packages/quality-gate/src/precommit/panel.tsx',
+        'packages/quality-gate/src/precommit/runner.tsx',
+        'packages/quality-gate/src/cli.ts',
+        'packages/quality-gate/src/index.ts',
+        'apps/webview/src/App.tsx',
+        'docs/instructions/agentils.instructions.md',
+    ]
+    const steps = Math.max(2, Math.min(fakeFiles.length, Math.round(ms / 220)))
+    const interval = Math.floor(ms / (steps + 1))
+    const snippet = `
+        const files = ${JSON.stringify(fakeFiles.slice(0, steps))};
+        let i = 0;
+        const tick = () => {
+            if (i < files.length) {
+                console.log('  processing ' + files[i++]);
+                setTimeout(tick, ${interval});
+                return;
+            }
+            console.log(${JSON.stringify(message)});
+            process.exit(${exitCode});
+        };
+        tick();
+    `
     return { command: process.execPath, args: ['-e', snippet] }
 }
 

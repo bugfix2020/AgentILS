@@ -33,10 +33,18 @@ function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
             let didFail = false
             for (let i = 0; i < steps.length; i++) {
                 if (cancelled) return
-                setState((cur) => updateAt(cur, i, { status: 'running', runningStartedAt: Date.now() }))
-                const result = await runStep(steps[i]!, cwd)
+                setState((cur) =>
+                    updateAt(cur, i, { status: 'running', runningStartedAt: Date.now(), currentLine: undefined }),
+                )
+                const result = await runStep(steps[i]!, cwd, (chunk) => {
+                    if (cancelled) return
+                    const line = lastMeaningfulLine(chunk)
+                    if (line) {
+                        setState((cur) => updateAt(cur, i, { currentLine: line }))
+                    }
+                })
                 if (cancelled) return
-                setState((cur) => updateAt(cur, i, result))
+                setState((cur) => updateAt(cur, i, { ...result, currentLine: undefined }))
                 if (result.status === 'failed') {
                     didFail = true
                     break
@@ -66,6 +74,22 @@ function updateAt(list: StepState[], index: number, patch: Partial<StepState>): 
     const next = list.slice()
     next[index] = { ...next[index]!, ...patch }
     return next
+}
+
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g
+
+/**
+ * Pull the last non-empty line out of a chunk, after stripping ANSI codes.
+ * Returns undefined if the chunk only contains whitespace / control sequences.
+ */
+function lastMeaningfulLine(chunk: string): string | undefined {
+    const lines = chunk.replace(ANSI_RE, '').split(/\r?\n/)
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const t = lines[i]!.trim()
+        if (t) return t
+    }
+    return undefined
 }
 
 /**

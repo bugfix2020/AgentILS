@@ -201,6 +201,19 @@ function stepRow(step: StepState, frame: number): string {
     return rowLine(inner)
 }
 
+/**
+ * Render a dimmed sub-row showing the step's latest output line. Truncates so
+ * the trailing border stays aligned with the rest of the box.
+ */
+function stepDetailRow(line: string): string {
+    const prefix = `      ${C.gry}\u21b3 `
+    const suffix = C.rst
+    // Plain visible budget = IW - "      ↳ ".length (8) so the right border lines up.
+    const budget = IW - 8
+    const safe = line.length > budget ? `${line.slice(0, budget - 1)}\u2026` : line
+    return rowLine(`${prefix}${safe}${suffix}`)
+}
+
 function footerLine(failed: boolean): string {
     if (failed) {
         return rowLine(`  ${C.red}FAULT  ─  COMMIT BLOCKED${C.rst}`)
@@ -216,6 +229,9 @@ export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React
     const lines: string[] = [...headerLines(tSec)]
     for (const step of steps) {
         lines.push(stepRow(step, frame))
+        if (step.status === 'running' && step.currentLine) {
+            lines.push(stepDetailRow(step.currentLine))
+        }
     }
     if (done) {
         lines.push(footerLine(failed))
