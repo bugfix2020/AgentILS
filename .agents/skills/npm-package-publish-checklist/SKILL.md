@@ -90,6 +90,57 @@ node <package-root>/dist/<entry>.js --help
 
 The CLI version should come from `package.json`, not a duplicated hard-coded constant.
 
+## Release Branch & Tag Workflow
+
+Every publish must be reproducible from `main`. Do not publish from an integration branch or a local-only commit.
+
+1. Sync `main`:
+
+    ```sh
+    git checkout main
+    git pull origin main
+    ```
+
+2. Cut a dedicated release branch named `chore/release-<package>-<version>` (matches `branch-name-standard` skill):
+
+    ```sh
+    git checkout -b chore/release-quality-gate-0.0.2 main
+    ```
+
+3. Bump only the target package's `package.json` `version` field. Do not bundle unrelated changes into a release commit.
+4. If the publish ships behavior changes, ensure the matching feature/fix commits are already on `main` before opening the release PR.
+5. Commit with a `chore(<package>): release v<version>` message and push the branch:
+
+    ```sh
+    git add packages/<package>/package.json
+    git commit -m "chore(<package>): release v<version>"
+    git push -u origin chore/release-<package>-<version>
+    ```
+
+6. Open a PR against `main`, get it merged (squash or merge commit, repo default).
+7. After merge, sync `main` locally, then publish from `main`:
+
+    ```sh
+    git checkout main && git pull origin main
+    pnpm --filter <package-name> build
+    cd packages/<package>
+    npm pack --dry-run    # final sanity check
+    npm publish
+    ```
+
+8. Tag the published commit and push the tag:
+
+    ```sh
+    git tag <package>@<version>
+    git push origin <package>@<version>
+    ```
+
+This keeps `npm view <pkg>` `dist.tarball` ↔ git tag ↔ `main` commit in 1:1 correspondence so any future bisect or PR review can trace a published artifact back to the exact tree.
+
+### Pre-existing Version Conflicts
+
+`npm` rejects republishing the same `version` even with different content (`E403 cannot publish over previously published versions`). If `npm view <pkg> versions` shows the version already exists (possibly from a prior squatter or earlier release), bump to the next available patch version on the release branch instead of trying to overwrite.
+
 ## Common Mistakes
 
 - Removing `private: true` but forgetting `publishConfig.access = "public"` for a scoped public package.
@@ -98,3 +149,5 @@ The CLI version should come from `package.json`, not a duplicated hard-coded con
 - Publishing source maps unintentionally.
 - Hard-coding a CLI version instead of reading package metadata.
 - Updating README after publishing; npm package README updates only when publishing a new package version.
+- Publishing from `dev` or a feature branch — the npm tarball commit will not exist on `main` and `repository.directory` traceability breaks.
+- Forgetting to push the git tag after `npm publish` — the tag is the only durable bridge between npm and git history.
