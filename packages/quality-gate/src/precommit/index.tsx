@@ -1,14 +1,5 @@
-import { render, useApp } from 'ink'
-import React, { useEffect, useState } from 'react'
-import { EcamPanel } from './panel.js'
-import {
-    DEFAULT_STEPS,
-    DRY_RUN_FAIL_STEPS,
-    DRY_RUN_STEPS,
-    runStep,
-    type StepDefinition,
-    type StepState,
-} from './steps.js'
+import { DEFAULT_STEPS, DRY_RUN_FAIL_STEPS, DRY_RUN_STEPS, type StepDefinition } from './steps.js'
+import { runPrecommit } from './runner.js'
 
 interface CliOptions {
     cwd: string
@@ -55,61 +46,6 @@ Default pipeline:
 ${DEFAULT_STEPS.map((s) => `  - ${s.label}: ${s.cmd ?? `${s.argv?.command} ${s.argv?.args.join(' ')}`}`).join('\n')}
 `
 
-interface AppProps {
-    steps: StepDefinition[]
-    cwd: string
-    onSettle: (failed: boolean) => void
-}
-
-function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
-    const { exit } = useApp()
-    const [state, setState] = useState<StepState[]>(() => steps.map((s) => ({ ...s, status: 'pending' })))
-    const [done, setDone] = useState(false)
-    const [failed, setFailed] = useState(false)
-
-    useEffect(() => {
-        let cancelled = false
-        let exitTimer: ReturnType<typeof setTimeout> | undefined
-        ;(async () => {
-            let didFail = false
-            for (let i = 0; i < steps.length; i++) {
-                if (cancelled) return
-                setState((cur) => updateAt(cur, i, { status: 'running' }))
-                const result = await runStep(steps[i]!, cwd)
-                if (cancelled) return
-                setState((cur) => updateAt(cur, i, result))
-                if (result.status === 'failed') {
-                    didFail = true
-                    break
-                }
-            }
-            if (cancelled) return
-            setFailed(didFail)
-            setDone(true)
-            onSettle(didFail)
-            // Give the final frame ~250ms to render before unmounting so the
-            // user sees the resolved state instead of a flicker.
-            exitTimer = setTimeout(() => exit(), 250)
-        })().catch((err) => {
-            process.stderr.write(`${(err as Error).stack ?? String(err)}\n`)
-            exit(err as Error)
-        })
-        return () => {
-            cancelled = true
-            if (exitTimer) clearTimeout(exitTimer)
-        }
-    }, [steps, cwd, onSettle, exit])
-
-    const phase = !done ? 'CLB' : failed ? 'FAULT' : 'CRZ'
-    return <EcamPanel steps={state} done={done} failed={failed} phase={phase} />
-}
-
-function updateAt(list: StepState[], index: number, patch: Partial<StepState>): StepState[] {
-    const next = list.slice()
-    next[index] = { ...next[index]!, ...patch }
-    return next
-}
-
 async function main(): Promise<number> {
     let opts: CliOptions
     try {
@@ -122,19 +58,7 @@ async function main(): Promise<number> {
         process.stdout.write(HELP)
         return 0
     }
-    let exitCode = 0
-    const { waitUntilExit } = render(
-        <App
-            steps={opts.steps}
-            cwd={opts.cwd}
-            onSettle={(failed) => {
-                exitCode = failed ? 1 : 0
-            }}
-        />,
-        { exitOnCtrlC: true },
-    )
-    await waitUntilExit()
-    return exitCode
+    return runPrecommit({ cwd: opts.cwd, steps: opts.steps })
 }
 
 main().then(

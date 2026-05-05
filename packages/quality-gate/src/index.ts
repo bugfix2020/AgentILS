@@ -24,11 +24,10 @@ const BANNER_COLORS = [
     '\u001B[38;5;204m',
 ]
 
-type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun'
-type ConflictStrategy = 'overwrite' | 'merge' | 'skip' | 'cancel'
+export type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun'
+export type ConflictStrategy = 'overwrite' | 'merge' | 'skip' | 'cancel'
 
-interface InitOptions {
-    command: 'init' | 'help'
+export interface InitOptions {
     cwd: string
     packageManager?: PackageManager
     prettierConfig: string
@@ -54,30 +53,9 @@ interface InitOptions {
     lintStaged: boolean
 }
 
-interface PackageJson {
-    packageManager?: string
-    scripts?: Record<string, string>
-    devDependencies?: Record<string, string>
-    config?: Record<string, unknown>
-    [key: string]: unknown
-}
-
-const DEV_DEPENDENCIES: Record<string, string> = {
-    '@commitlint/cli': '^19.8.0',
-    '@commitlint/config-conventional': '^19.8.0',
-    commitizen: '^4.3.1',
-    'conventional-changelog-cli': '^5.0.0',
-    'cz-conventional-changelog': '^3.3.0',
-    husky: '^9.1.7',
-    'lint-staged': '^16.4.0',
-    prettier: '^3.5.3',
-}
-
-function parseArgs(argv: string[]): InitOptions {
-    const [command, ...rest] = argv
-    const options: InitOptions = {
-        command: command === 'init' ? 'init' : 'help',
-        cwd: process.cwd(),
+export function createDefaultInitOptions(cwd: string = process.cwd()): InitOptions {
+    return {
+        cwd,
         prettierConfig: 'prettier.config.mjs',
         prettierIgnore: '.prettierignore',
         czrcConfig: '.czrc',
@@ -100,113 +78,25 @@ function parseArgs(argv: string[]): InitOptions {
         commitlint: true,
         lintStaged: true,
     }
+}
 
-    for (let index = 0; index < rest.length; index++) {
-        const arg = rest[index]
-        const next = rest[index + 1]
-        const readValue = (): string => {
-            if (!next || next.startsWith('-')) throw new Error(`${arg} requires a value`)
-            index++
-            return next
-        }
+interface PackageJson {
+    packageManager?: string
+    scripts?: Record<string, string>
+    devDependencies?: Record<string, string>
+    config?: Record<string, unknown>
+    [key: string]: unknown
+}
 
-        switch (arg) {
-            case '-C':
-            case '--cwd':
-                options.cwd = resolve(readValue())
-                break
-            case '--package-manager': {
-                const value = readValue()
-                if (!isPackageManager(value)) throw new Error(`unsupported package manager: ${value}`)
-                options.packageManager = value
-                break
-            }
-            case '--prettier-config':
-                options.prettierConfig = readValue()
-                break
-            case '--prettier-ignore':
-                options.prettierIgnore = readValue()
-                break
-            case '--czrc':
-                options.czrcConfig = readValue()
-                break
-            case '--commitlint-config':
-                options.commitlintConfig = readValue()
-                break
-            case '--lint-staged-config':
-                options.lintStagedConfig = readValue()
-                break
-            case '--husky-dir':
-                options.huskyDir = readValue()
-                break
-            case '--pre-commit-command':
-                options.preCommitCommand = readValue()
-                break
-            case '--commit-msg-command':
-                options.commitMsgCommand = readValue()
-                break
-            case '--with-eslint':
-                options.withEslint = true
-                break
-            case '--with-turbo':
-                options.withTurbo = true
-                break
-            case '--install':
-                options.install = true
-                break
-            case '--dry-run':
-                options.dryRun = true
-                break
-            case '--agentils-hooks':
-                options.agentilsHooks = true
-                break
-            case '--force':
-                options.force = true
-                options.conflictStrategy = 'overwrite'
-                break
-            case '--conflict': {
-                const value = readValue()
-                if (!isConflictStrategy(value)) throw new Error(`unsupported conflict strategy: ${value}`)
-                options.conflictStrategy = value
-                break
-            }
-            case '--merge':
-                options.conflictStrategy = 'merge'
-                break
-            case '--skip-existing':
-                options.conflictStrategy = 'skip'
-                break
-            case '--interactive':
-                options.interactive = true
-                break
-            case '--no-interactive':
-                options.interactive = false
-                break
-            case '--no-package-json':
-                options.packageJson = false
-                break
-            case '--no-husky':
-                options.husky = false
-                break
-            case '--no-prettier':
-                options.prettier = false
-                break
-            case '--no-commitlint':
-                options.commitlint = false
-                break
-            case '--no-lint-staged':
-                options.lintStaged = false
-                break
-            case '--help':
-            case '-h':
-                options.command = 'help'
-                break
-            default:
-                throw new Error(`unknown option: ${arg}`)
-        }
-    }
-
-    return options
+const DEV_DEPENDENCIES: Record<string, string> = {
+    '@commitlint/cli': '^19.8.0',
+    '@commitlint/config-conventional': '^19.8.0',
+    commitizen: '^4.3.1',
+    'conventional-changelog-cli': '^5.0.0',
+    'cz-conventional-changelog': '^3.3.0',
+    husky: '^9.1.7',
+    'lint-staged': '^16.4.0',
+    prettier: '^3.5.3',
 }
 
 function isPackageManager(value: string): value is PackageManager {
@@ -216,6 +106,8 @@ function isPackageManager(value: string): value is PackageManager {
 function isConflictStrategy(value: string): value is ConflictStrategy {
     return value === 'overwrite' || value === 'merge' || value === 'skip' || value === 'cancel'
 }
+
+export { isPackageManager, isConflictStrategy }
 
 async function readPackageJson(cwd: string): Promise<PackageJson> {
     const packageJsonPath = join(cwd, 'package.json')
@@ -649,7 +541,7 @@ async function ensureTarget(cwd: string): Promise<void> {
     }
 }
 
-async function doInit(options: InitOptions): Promise<void> {
+export async function doInit(options: InitOptions): Promise<void> {
     await ensureTarget(options.cwd)
     const packageJson = await readPackageJson(options.cwd)
     const packageManager = options.packageManager ?? (await detectPackageManager(options.cwd, packageJson))
@@ -777,16 +669,4 @@ async function doInit(options: InitOptions): Promise<void> {
     process.stdout.write(`${colorize(`Success: AgentILS quality gate initialized in ${options.cwd}`, ANSI_GREEN)}\n`)
 }
 
-async function main(): Promise<void> {
-    const options = parseArgs(process.argv.slice(2))
-    if (options.command === 'help') {
-        process.stdout.write(await renderHelp())
-        return
-    }
-    await doInit(options)
-}
-
-main().catch((error) => {
-    process.stderr.write(`agentils-quality-gate: ${(error as Error).message}\n`)
-    process.exit(1)
-})
+export { renderHelp, renderBanner }
