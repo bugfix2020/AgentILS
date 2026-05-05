@@ -64,13 +64,30 @@ function gauge(value: number, maxVal: number, width: number): string {
     return `${C.grn}${chars.join('')}${C.rst}`
 }
 
+function easeOut(p: number): number {
+    return 1 - (1 - p) * (1 - p)
+}
+
+/**
+ * Engine-style spool-up: ramp from 0 to `target` over `spoolSec` with ease-out,
+ * then a small sinusoidal jitter to keep the needle alive.
+ */
+function animatedValue(target: number, tSec: number, spoolSec = 2.5, jitterPct = 0.015, jitterHz = 1.7): number {
+    const p = Math.min(1, tSec / spoolSec)
+    const baseline = target * easeOut(p)
+    if (p >= 1) {
+        return baseline * (1 + jitterPct * Math.sin(tSec * jitterHz * 2 * Math.PI))
+    }
+    return baseline
+}
+
 function vbox(val: string | number, unit = ''): string {
     return `${C.dim}[${C.rst}${C.brt}${String(val).padStart(5)}${C.rst}${C.amb}${unit}${C.rst}${C.dim}]${C.rst}`
 }
 
-function headerLines(): string[] {
-    const E1 = { epr: '1.012', ff: 380, egt: 496, n1: 22.6, n2: 62.6 }
-    const E2 = { epr: '1.012', ff: 380, egt: 493, n1: 22.6, n2: 61.9 }
+function headerLines(tSec: number): string[] {
+    const E1 = { epr: 1.012, ff: 380, egt: 496, n1: 22.6, n2: 62.6 }
+    const E2 = { epr: 1.012, ff: 380, egt: 493, n1: 22.6, n2: 61.9 }
 
     const out: string[] = []
     out.push(TOP)
@@ -91,9 +108,9 @@ function headerLines(): string[] {
 
     out.push(rowLine(`              ${C.wht}EPR${C.rst}`))
     {
-        const g1 = gauge(parseFloat(E1.epr) * 100, 200, 12)
-        const g2 = gauge(parseFloat(E2.epr) * 100, 200, 12)
-        const inner = `  ${g1}  ${vbox(E1.epr)}    ${g2}  ${vbox(E2.epr)}  `
+        const g1 = gauge(animatedValue(E1.epr * 100, tSec, 2.5, 0.012, 1.5), 200, 12)
+        const g2 = gauge(animatedValue(E2.epr * 100, tSec, 2.5, 0.012, 1.9), 200, 12)
+        const inner = `  ${g1}  ${vbox(E1.epr.toFixed(3))}    ${g2}  ${vbox(E2.epr.toFixed(3))}  `
         out.push(`${C.dim}║${C.rst}${inner}${' '.repeat(Math.max(0, IW - visLen(inner)))}${C.dim}║${C.rst}`)
     }
     out.push(THIN)
@@ -107,8 +124,8 @@ function headerLines(): string[] {
 
     out.push(rowLine(`  ${C.grn}N2 %${C.rst}               ${C.wht}N1 %${C.rst}               ${C.grn}N2 %${C.rst}`))
     {
-        const g1 = gauge(E1.n1, 100, 9)
-        const g2 = gauge(E2.n1, 100, 9)
+        const g1 = gauge(animatedValue(E1.n1, tSec, 2.5, 0.02, 1.6), 100, 9)
+        const g2 = gauge(animatedValue(E2.n1, tSec, 2.5, 0.02, 2.1), 100, 9)
         const inner = `  ${C.brt}${E1.n2}${C.rst}  ${g1} ${vbox(E1.n1)} ${g2}  ${C.brt}${E2.n2}${C.rst}  `
         out.push(`${C.dim}║${C.rst}${inner}${' '.repeat(Math.max(0, IW - visLen(inner)))}${C.dim}║${C.rst}`)
     }
@@ -192,7 +209,11 @@ function footerLine(failed: boolean): string {
 }
 
 export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React.JSX.Element {
-    const lines: string[] = [...headerLines()]
+    // Frame is included in deps via the parent re-render; reading Date.now() here
+    // is fine because the parent ticks setFrame every 80 ms.
+    void frame
+    const tSec = useTimeSinceMount()
+    const lines: string[] = [...headerLines(tSec)]
     for (const step of steps) {
         lines.push(stepRow(step, frame))
     }
@@ -208,4 +229,9 @@ export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React
             ))}
         </Box>
     )
+}
+
+function useTimeSinceMount(): number {
+    const startRef = React.useRef(Date.now())
+    return (Date.now() - startRef.current) / 1000
 }
