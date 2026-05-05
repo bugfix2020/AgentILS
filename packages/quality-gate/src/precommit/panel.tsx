@@ -49,91 +49,23 @@ function rowLine(content = ''): string {
 
 const TOP = `${C.dim}╔${'═'.repeat(IW)}╗${C.rst}`
 const MID = `${C.dim}╠${'═'.repeat(IW)}╣${C.rst}`
-const THIN = `${C.dim}╟${'─'.repeat(IW)}╢${C.rst}`
 const BOT = `${C.dim}╚${'═'.repeat(IW)}╝${C.rst}`
 
-function gauge(value: number, maxVal: number, width: number): string {
-    const pct = Math.min(1, Math.max(0, value / maxVal))
-    const pos = Math.round(pct * (width - 1))
-    const chars = Array.from({ length: width }, (_, i) => {
-        if (i === 0) return `${C.grn}╰`
-        if (i === width - 1) return `╯${C.rst}`
-        if (i === pos) return `${C.brt}▲${C.grn}`
-        return '─'
-    })
-    return `${C.grn}${chars.join('')}${C.rst}`
-}
-
-function easeOut(p: number): number {
-    return 1 - (1 - p) * (1 - p)
-}
-
-/**
- * Engine-style spool-up: ramp from 0 to `target` over `spoolSec` with ease-out,
- * then a small sinusoidal jitter to keep the needle alive.
- */
-function animatedValue(target: number, tSec: number, spoolSec = 2.5, jitterPct = 0.015, jitterHz = 1.7): number {
-    const p = Math.min(1, tSec / spoolSec)
-    const baseline = target * easeOut(p)
-    if (p >= 1) {
-        return baseline * (1 + jitterPct * Math.sin(tSec * jitterHz * 2 * Math.PI))
-    }
-    return baseline
-}
-
-function vbox(val: string | number, unit = ''): string {
-    return `${C.dim}[${C.rst}${C.brt}${String(val).padStart(5)}${C.rst}${C.amb}${unit}${C.rst}${C.dim}]${C.rst}`
-}
-
-function headerLines(tSec: number): string[] {
-    const E1 = { epr: 1.012, ff: 380, egt: 496, n1: 22.6, n2: 62.6 }
-    const E2 = { epr: 1.012, ff: 380, egt: 493, n1: 22.6, n2: 61.9 }
-
+function headerLines(): string[] {
     const out: string[] = []
     out.push(TOP)
 
     {
         const left = `  ${C.wht}AGENTILS${C.rst}  ${C.dim}A320 ECAM SYS${C.rst}`
-        const right = `${C.cyn}CLB${C.rst}`
-        const gap = IW - visLen(left) - visLen(right)
-        out.push(`${C.dim}║${C.rst}${left}${' '.repeat(Math.max(1, gap))}${right}${C.dim}║${C.rst}`)
+        out.push(rowLine(left))
     }
     {
         const left = `  ${C.dim}COMMIT GATE CHECK SYSTEM${C.rst}`
-        const right = `${C.amb}T.O${C.rst}`
-        const gap = IW - visLen(left) - visLen(right)
-        out.push(`${C.dim}║${C.rst}${left}${' '.repeat(Math.max(1, gap))}${right}${C.dim}║${C.rst}`)
+        out.push(rowLine(left))
     }
     out.push(MID)
 
-    out.push(rowLine(`              ${C.wht}EPR${C.rst}`))
-    {
-        const g1 = gauge(animatedValue(E1.epr * 100, tSec, 2.5, 0.012, 1.5), 200, 12)
-        const g2 = gauge(animatedValue(E2.epr * 100, tSec, 2.5, 0.012, 1.9), 200, 12)
-        const inner = `  ${g1}  ${vbox(E1.epr.toFixed(3))}    ${g2}  ${vbox(E2.epr.toFixed(3))}  `
-        out.push(`${C.dim}║${C.rst}${inner}${' '.repeat(Math.max(0, IW - visLen(inner)))}${C.dim}║${C.rst}`)
-    }
-    out.push(THIN)
-
-    out.push(rowLine(`  ${C.grn}FF KG/H${C.rst}          ${C.wht}EGT °C${C.rst}               ${C.grn}FF KG/H${C.rst}`))
-    {
-        const inner = `  ${C.brt}${E1.ff}${C.rst}     ${vbox(E1.egt, '°')}  ${vbox(E2.egt, '°')}    ${C.brt}${E2.ff}${C.rst}  `
-        out.push(`${C.dim}║${C.rst}${inner}${' '.repeat(Math.max(0, IW - visLen(inner)))}${C.dim}║${C.rst}`)
-    }
-    out.push(THIN)
-
-    out.push(rowLine(`  ${C.grn}N2 %${C.rst}               ${C.wht}N1 %${C.rst}               ${C.grn}N2 %${C.rst}`))
-    {
-        const g1 = gauge(animatedValue(E1.n1, tSec, 2.5, 0.02, 1.6), 100, 9)
-        const g2 = gauge(animatedValue(E2.n1, tSec, 2.5, 0.02, 2.1), 100, 9)
-        const inner = `  ${C.brt}${E1.n2}${C.rst}  ${g1} ${vbox(E1.n1)} ${g2}  ${C.brt}${E2.n2}${C.rst}  `
-        out.push(`${C.dim}║${C.rst}${inner}${' '.repeat(Math.max(0, IW - visLen(inner)))}${C.dim}║${C.rst}`)
-    }
-
-    out.push(MID)
-    out.push(rowLine(`  ${C.grn}FOB :${C.rst}  ${C.brt}8620${C.rst} ${C.grn}KG${C.rst}`))
-    out.push(MID)
-
+    // T.O MEMO
     const mL = [
         `${C.amb}T.O${C.rst}   ${C.grn}AUTO BRK MAX${C.rst}`,
         `      ${C.grn}SIGNS ON${C.rst}`,
@@ -158,15 +90,15 @@ function headerLines(tSec: number): string[] {
 function stepIndicator(status: StepStatus, frame: number): string {
     switch (status) {
         case 'pending':
-            return `${C.gry}·${C.rst}`
+            return `${C.gry}○${C.rst}`
         case 'running': {
             const f = SPIN_FRAMES[frame % SPIN_FRAMES.length] ?? SPIN_FRAMES[0]
             return `${C.amb}${f}${C.rst}`
         }
         case 'passed':
-            return `${C.brt}✓${C.rst}`
+            return `${C.brt}●${C.rst}`
         case 'failed':
-            return `${C.red}✕${C.rst}`
+            return `${C.red}●${C.rst}`
     }
 }
 
@@ -189,28 +121,45 @@ function revealedLabel(label: string, status: StepStatus, progress: 'idle' | 'do
 }
 
 function stepRow(step: StepState, frame: number): string {
+    if (typeof step.render === 'function') {
+        // User-provided renderer owns the row contents (between the borders).
+        // Catch throws so a buggy renderer can't kill the entire pre-commit
+        // run; fall back to the default layout with an [render error] marker.
+        try {
+            const raw = step.render(step)
+            if (typeof raw === 'string') {
+                return rowLine(raw)
+            }
+            return rowLine(`  ${C.red}[render error] ${step.label}: not a string${C.rst}`)
+        } catch (err) {
+            return rowLine(`  ${C.red}[render error] ${step.label}: ${(err as Error).message}${C.rst}`)
+        }
+    }
     const indicator = stepIndicator(step.status, frame)
     const label = revealedLabel(step.label, step.status, step.progress)
-    let inner = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
+    const left = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
+    let right = ''
     if (step.status === 'failed') {
-        inner += `  ${C.amb}AP DISCONNECT${C.rst}`
+        right = `${C.amb}AP DISCONNECT${C.rst}`
+    } else if (
+        (step.status === 'running' || step.status === 'passed') &&
+        typeof step.count === 'number' &&
+        typeof step.total === 'number'
+    ) {
+        const color = step.status === 'passed' ? C.brt : C.amb
+        right = `${color}${step.count}/${step.total}${C.rst}`
     }
-    return rowLine(inner)
+    if (!right) {
+        return rowLine(left)
+    }
+    const padded = `${right}  `
+    const gap = IW - visLen(left) - visLen(padded)
+    return `${C.dim}║${C.rst}${left}${' '.repeat(Math.max(1, gap))}${padded}${C.dim}║${C.rst}`
 }
 
 /**
- * Render a dimmed sub-row showing the step's latest output line. Truncates so
- * the trailing border stays aligned with the rest of the box.
+ * Render a footer line: green NORMAL on success, red FAULT on failure.
  */
-function stepDetailRow(line: string): string {
-    const prefix = `      ${C.gry}\u21b3 `
-    const suffix = C.rst
-    // Plain visible budget = IW - "      ↳ ".length (8) so the right border lines up.
-    const budget = IW - 8
-    const safe = line.length > budget ? `${line.slice(0, budget - 1)}\u2026` : line
-    return rowLine(`${prefix}${safe}${suffix}`)
-}
-
 function footerLine(failed: boolean): string {
     if (failed) {
         return rowLine(`  ${C.red}FAULT  ─  COMMIT BLOCKED${C.rst}`)
@@ -219,16 +168,9 @@ function footerLine(failed: boolean): string {
 }
 
 export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React.JSX.Element {
-    // Frame is included in deps via the parent re-render; reading Date.now() here
-    // is fine because the parent ticks setFrame every 80 ms.
-    void frame
-    const tSec = useTimeSinceMount()
-    const lines: string[] = [...headerLines(tSec)]
+    const lines: string[] = [...headerLines()]
     for (const step of steps) {
         lines.push(stepRow(step, frame))
-        if (step.status === 'running' && step.currentLine) {
-            lines.push(stepDetailRow(step.currentLine))
-        }
     }
     if (done) {
         lines.push(footerLine(failed))
@@ -242,9 +184,4 @@ export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React
             ))}
         </Box>
     )
-}
-
-function useTimeSinceMount(): number {
-    const startRef = React.useRef(Date.now())
-    return (Date.now() - startRef.current) / 1000
 }

@@ -218,3 +218,94 @@ Target project `devDependencies` added by default:
 ## Templates
 
 Configuration templates and help text live in source `templates/` instead of the CLI implementation. The build copies them into `dist/templates/`, so the minified CLI can run using only build output.
+
+## Precommit Pipeline (`agentils-precommit-gate`)
+
+The package also installs a second bin, `agentils-precommit-gate`, which renders an A320 ECAM-style TUI panel for your Husky `pre-commit` hook. Each pipeline step shows a live spinner, optional `[i/N]` progress, and a final pass/fail color block, so commit-time feedback is visual instead of an opaque scroll of subprocess logs.
+
+Wire it into Husky:
+
+```sh
+# .husky/pre-commit
+#!/bin/sh
+npx agentils-precommit-gate
+```
+
+or, when consuming this package directly from `node_modules`:
+
+```sh
+node node_modules/@agent-ils/quality-gate/dist/precommit.js
+```
+
+### Configuration discovery (ESLint flat-config style)
+
+`agentils-precommit-gate` walks upward from the current working directory and loads the first config file it finds in each directory, in this priority order:
+
+```
+agentils-gate.config.js
+agentils-gate.config.mjs
+agentils-gate.config.cjs
+agentils-gate.config.ts
+agentils-gate.config.mts
+agentils-gate.config.cts
+```
+
+- The nearest directory wins (a config in your project root takes precedence over one in your home directory).
+- `--config <path>` overrides discovery and loads the explicit path directly.
+- `--print-config` prints the resolved source path and the step list, then exits 0 — useful for CI debugging.
+- `.ts*` configs require [`jiti` ≥ 2.2](https://www.npmjs.com/package/jiti) installed in your project, or Node ≥ 22.13 with `--experimental-strip-types`. Without either, you get a clear error pointing to the missing loader.
+- When no config file is found, a built-in fallback runs a single `pnpm exec lint-staged` step. This fallback is intentionally minimal so the package works on a fresh install without any setup.
+
+### Schema
+
+```js
+// agentils-gate.config.mjs
+export default {
+    steps: [
+        {
+            label: 'LINT-STAGED',
+            cmd: 'pnpm exec lint-staged', // shell command, OR…
+        },
+        {
+            label: 'GENERATE FLOWCHARTS',
+            argv: { command: 'node', args: ['scripts/render.mjs'] }, // …direct argv form
+        },
+    ],
+}
+```
+
+Each step accepts:
+
+- `label` (required, non-empty string) — shown on the panel.
+- `cmd` **or** `argv` (mutually exclusive, exactly one) — `cmd` runs through the user shell; `argv` skips the shell.
+- `render(state) => string` (optional) — custom renderer for the row content (between the two `║` borders). When set, the panel uses your returned string verbatim and skips its default `[indicator] LABEL ... N/M` layout. Throwing inside `render` is safe: the panel falls back to a red `[render error] <label>: <message>` row instead of crashing.
+
+### `[i/N]` progress protocol
+
+Any step whose subprocess writes lines matching `^\[(\d+)/(\d+)\] .*$` to STDERR will have the latest `i/N` shown on the right edge of its row. The same line shape is what AgentILS' own scripts (`sync-agent-instructions.mjs`, `generate-all.mjs`, `run-lint-staged-with-progress.mjs`) emit, so they integrate without adapter code.
+
+### Custom renderer example
+
+```js
+export default {
+    steps: [
+        {
+            label: 'TYPE CHECK',
+            cmd: 'pnpm typecheck',
+            render(state) {
+                const dot =
+                    state.status === 'pending'
+                        ? '.'
+                        : state.status === 'running'
+                          ? '*'
+                          : state.status === 'passed'
+                            ? '#'
+                            : 'X'
+                return `  <${dot}> ${state.label} :: ${state.status}`
+            },
+        },
+    ],
+}
+```
+
+`state` exposes `{ label, status, indicator, progressCurrent, progressTotal, lastLine }`. See `packages/quality-gate/src/precommit/steps.ts` for the full `StepState` shape.

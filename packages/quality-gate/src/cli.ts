@@ -12,7 +12,8 @@ import {
 } from './index.js'
 import { doUninstall } from './uninstall.js'
 import { runPrecommit } from './precommit/runner.js'
-import { DEFAULT_STEPS, DRY_RUN_FAIL_STEPS, DRY_RUN_STEPS } from './precommit/steps.js'
+import { DRY_RUN_FAIL_STEPS, DRY_RUN_STEPS } from './precommit/steps.js'
+import { resolveConfig } from './precommit/config.js'
 
 interface InitFlags {
     cwd?: string
@@ -50,6 +51,8 @@ interface UninstallFlags {
 
 interface PrecommitFlags {
     cwd?: string
+    config?: string
+    printConfig?: boolean
     dryRun?: boolean
     dryRunFail?: boolean
 }
@@ -106,11 +109,33 @@ async function main(): Promise<void> {
         'Run the A320-ECAM-styled pre-commit pipeline (intended to be called from .husky/pre-commit)',
     )
         .option('-C, --cwd <dir>', 'Project root, defaults to cwd')
+        .option('-c, --config <file>', 'Use this config file instead of searching upward')
+        .option('--print-config', 'Print the resolved step list (and source path) and exit')
         .option('--dry-run', 'Run a fake 3-step pipeline that always passes (preview)')
         .option('--dry-run-fail', 'Run a fake pipeline where step 2 fails (preview FAULT)')
         .action(async (flags: PrecommitFlags) => {
             const cwd = resolve(flags.cwd ?? process.cwd())
-            const steps = flags.dryRunFail ? DRY_RUN_FAIL_STEPS : flags.dryRun ? DRY_RUN_STEPS : DEFAULT_STEPS
+            let steps
+            let source: string | null = null
+            if (flags.dryRunFail) {
+                steps = DRY_RUN_FAIL_STEPS
+                source = '<dry-run-fail>'
+            } else if (flags.dryRun) {
+                steps = DRY_RUN_STEPS
+                source = '<dry-run>'
+            } else {
+                const resolved = await resolveConfig(cwd, flags.config)
+                steps = resolved.steps
+                source = resolved.source
+            }
+            if (flags.printConfig) {
+                process.stdout.write(`source: ${source ?? '<builtin fallback>'}\n`)
+                for (const step of steps) {
+                    const cmd = step.cmd ?? `${step.argv?.command} ${step.argv?.args.join(' ')}`
+                    process.stdout.write(`  - ${step.label}: ${cmd}\n`)
+                }
+                return
+            }
             const code = await runPrecommit({ cwd, steps })
             process.exit(code)
         })
@@ -187,6 +212,6 @@ function stripTrailingNewline(value: string): string {
 }
 
 main().catch((error) => {
-    process.stderr.write(`agentils-quality-gate: ${(error as Error).message}\n`)
+    process.stderr.write(`\nagentils-quality-gate: ${(error as Error).message}\n`)
     process.exit(1)
 })

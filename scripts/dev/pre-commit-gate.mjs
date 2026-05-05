@@ -212,7 +212,7 @@ const STEPS = [
         cmd: 'pnpm run generate:flowcharts',
     },
     {
-        label: 'LINT-STAGED  STAGED FILES',
+        label: 'LINT-STAGED STAGED FILES',
         cmd: 'pnpm exec lint-staged',
     },
 ]

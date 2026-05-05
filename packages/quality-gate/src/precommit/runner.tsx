@@ -38,17 +38,22 @@ function App({ steps, cwd, onSettle }: AppProps): React.JSX.Element {
                         status: 'running',
                         runningStartedAt: Date.now(),
                         currentLine: undefined,
+                        count: undefined,
+                        total: undefined,
                         progress: 'idle',
                     }),
                 )
                 const result = await runStep(steps[i]!, cwd, (chunk) => {
                     if (cancelled) return
-                    const line = lastMeaningfulLine(chunk)
                     const isDone = looksDone(chunk)
-                    if (!line && !isDone) return
+                    const progress = parseProgress(chunk)
+                    if (!progress && !isDone) return
                     setState((cur) => {
                         const patch: Partial<StepState> = {}
-                        if (line) patch.currentLine = line
+                        if (progress) {
+                            patch.count = progress.count
+                            patch.total = progress.total
+                        }
                         if (isDone) patch.progress = 'done'
                         return updateAt(cur, i, patch)
                     })
@@ -90,27 +95,29 @@ function updateAt(list: StepState[], index: number, patch: Partial<StepState>): 
 const ANSI_RE = /\x1b\[[0-9;]*m/g
 
 /**
- * Pull the last non-empty line out of a chunk, after stripping ANSI codes.
- * Returns undefined if the chunk only contains whitespace / control sequences.
+ * Parse `[i/N] ...` progress markers emitted by step wrappers (sync /
+ * generate-flowcharts / lint-staged wrapper). Returns the latest match in the
+ * chunk so we converge on the most recent count.
  */
-function lastMeaningfulLine(chunk: string): string | undefined {
-    const lines = chunk.replace(ANSI_RE, '').split(/\r?\n/)
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const t = lines[i]!.trim()
-        if (t) return t
-    }
-    return undefined
+function parseProgress(chunk: string): { count: number; total: number } | undefined {
+    const stripped = chunk.replace(ANSI_RE, '')
+    const matches = [...stripped.matchAll(/\[(\d+)\/(\d+)\]/g)]
+    const last = matches[matches.length - 1]
+    if (!last) return undefined
+    const count = Number(last[1])
+    const total = Number(last[2])
+    if (!Number.isFinite(count) || !Number.isFinite(total) || total <= 0) return undefined
+    return { count, total }
 }
 
 /**
- * Sniff a chunk for a subprocess success / completion marker. We look for
- * lint-staged's [SUCCESS] / [COMPLETED] tags, the trailing 'Done' line that
- * many CLIs print, or a single trailing checkmark — without false-firing on
- * intermediate '✔ Backed up original state' style sub-status lines.
+ * Sniff a chunk for a subprocess success / completion marker. Only fires on
+ * explicit `[SUCCESS]` / `[COMPLETED]` / `[DONE]` tags so verbose intermediate
+ * lines such as `✔ eslint --fix` cannot prematurely flip the row to passed.
  */
 function looksDone(chunk: string): boolean {
     const stripped = chunk.replace(ANSI_RE, '')
-    return /\[(SUCCESS|COMPLETED|DONE)\]/i.test(stripped) || /\bdone\b/i.test(stripped)
+    return /\[(SUCCESS|COMPLETED|DONE)\]/i.test(stripped)
 }
 
 /**
@@ -120,16 +127,26 @@ function looksDone(chunk: string): boolean {
 export async function runPrecommit(options: RunPrecommitOptions): Promise<number> {
     const cwd = options.cwd ?? process.cwd()
     let exitCode = 0
+    let settled = false
     const { waitUntilExit } = render(
         <App
             steps={options.steps}
             cwd={cwd}
             onSettle={(failed) => {
+                settled = true
                 exitCode = failed ? 1 : 0
             }}
         />,
         { exitOnCtrlC: true },
     )
-    await waitUntilExit()
+    try {
+        await waitUntilExit()
+    } finally {
+        // If ink exited without onSettle (Ctrl+C, render error, kill signal),
+        // surface a non-zero status so callers don't silently treat the
+        // interruption as success.
+        if (!settled) exitCode = 130
+        process.stdout.write('\n')
+    }
     return exitCode
 }

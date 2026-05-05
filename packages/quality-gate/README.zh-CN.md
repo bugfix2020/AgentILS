@@ -218,3 +218,94 @@ Options:
 ## 模板目录
 
 配置模板和 help 文本位于源码 `templates/`，不会和 CLI 主逻辑混在一起。构建时会复制到 `dist/templates/`，因此压缩后的 CLI 只依赖构建产物也能运行。
+
+## Precommit 流水线（`agentils-precommit-gate`）
+
+本包同时安装第二个 bin —— `agentils-precommit-gate`，它会在 Husky `pre-commit` 阶段渲染一块 A320 ECAM 风格的 TUI 面板：每一步都有实时旋转指示、可选的 `[i/N]` 进度数字、以及最终的颜色块，把 commit 时的反馈从一坨灰色子进程日志变成可视化的检查清单。
+
+接到 Husky：
+
+```sh
+# .husky/pre-commit
+#!/bin/sh
+npx agentils-precommit-gate
+```
+
+或直接从 `node_modules` 调用：
+
+```sh
+node node_modules/@agent-ils/quality-gate/dist/precommit.js
+```
+
+### 配置文件发现（ESLint flat-config 风格）
+
+`agentils-precommit-gate` 会从当前目录逐层向上查找，每个目录内按以下顺序，命中第一个就停：
+
+```
+agentils-gate.config.js
+agentils-gate.config.mjs
+agentils-gate.config.cjs
+agentils-gate.config.ts
+agentils-gate.config.mts
+agentils-gate.config.cts
+```
+
+- 最近的目录优先（项目根的 config 覆盖 home 目录的）。
+- `--config <path>` 显式覆盖查找，直接加载该路径。
+- `--print-config` 打印命中的源路径和步骤列表后退出 0，CI debug 利器。
+- `.ts*` 配置要求项目里装了 [`jiti` ≥ 2.2](https://www.npmjs.com/package/jiti)，或 Node ≥ 22.13 加上 `--experimental-strip-types`。否则会报清晰错误指向缺失的加载器。
+- 找不到任何 config 时，落到内建 fallback：仅一步 `pnpm exec lint-staged`。这个 fallback 故意做得最小，让 npm 全新安装的用户开箱即用。
+
+### Schema
+
+```js
+// agentils-gate.config.mjs
+export default {
+    steps: [
+        {
+            label: 'LINT-STAGED',
+            cmd: 'pnpm exec lint-staged', // shell 命令，或者…
+        },
+        {
+            label: 'GENERATE FLOWCHARTS',
+            argv: { command: 'node', args: ['scripts/render.mjs'] }, // …直接 argv 形式
+        },
+    ],
+}
+```
+
+每个 step 接受：
+
+- `label`（必填，非空字符串）— 面板上显示的名字。
+- `cmd` 与 `argv` 二选一（互斥，必须有一个）— `cmd` 走用户 shell；`argv` 不经 shell。
+- `render(state) => string`（可选）— 自定义行内容渲染（两个 `║` 之间的部分）。设置后面板原样使用你返回的字符串，不再走默认的 `[indicator] LABEL ... N/M` 布局。`render` 抛错也安全：面板会改显示红色的 `[render error] <label>: <message>`，不会让整面板崩。
+
+### `[i/N]` 进度协议
+
+任何子进程在 STDERR 输出形如 `^\[(\d+)/(\d+)\] .*$` 的行，runner 都会解析最新一行并把 `i/N` 显示在面板右边。AgentILS 自己的 `sync-agent-instructions.mjs`、`generate-all.mjs`、`run-lint-staged-with-progress.mjs` 都是这个格式，所以零适配。
+
+### 自定义渲染示例
+
+```js
+export default {
+    steps: [
+        {
+            label: 'TYPE CHECK',
+            cmd: 'pnpm typecheck',
+            render(state) {
+                const dot =
+                    state.status === 'pending'
+                        ? '.'
+                        : state.status === 'running'
+                          ? '*'
+                          : state.status === 'passed'
+                            ? '#'
+                            : 'X'
+                return `  <${dot}> ${state.label} :: ${state.status}`
+            },
+        },
+    ],
+}
+```
+
+`state` 包含 `{ label, status, indicator, progressCurrent, progressTotal, lastLine }`。完整 `StepState` 形状见 `packages/quality-gate/src/precommit/steps.ts`。

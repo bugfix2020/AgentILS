@@ -23,6 +23,10 @@
         {
             "file": "webview-source-of-truth.instructions.md",
             "summary": "Webview 是产品真值源；protocol/host/mcp/cli 倒推改造规则"
+        },
+        {
+            "file": "quality-gate.instructions.md",
+            "summary": "@agent-ils/quality-gate ECAM panel + ESLint 风格 config 加载边界"
         }
     ],
     "skills": [

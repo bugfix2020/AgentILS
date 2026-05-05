@@ -12,6 +12,15 @@ export interface StepDefinition {
      * fixtures that would otherwise need shell-specific quoting.
      */
     argv?: { command: string; args: string[] }
+    /**
+     * Optional custom row renderer. When set, the panel uses the returned
+     * string verbatim as the row contents (between the two `║` borders) and
+     * skips its default `[indicator] LABEL ... N/M` layout. The string may
+     * contain ANSI color escapes; the panel will pad / truncate it to the
+     * fixed inner width. Receives the live `StepState` so the renderer can
+     * react to status / count / total / progress.
+     */
+    render?: (state: StepState) => string
 }
 
 export interface StepState extends StepDefinition {
@@ -26,6 +35,9 @@ export interface StepState extends StepDefinition {
     runningStartedAt?: number
     /** Last non-empty stripped output line; rendered live under the running step. */
     currentLine?: string
+    /** Sub-task counter parsed from `[i/N]` lines emitted by step subprocesses. */
+    count?: number
+    total?: number
     /**
      * Real subprocess progress derived from stdout sniffing. Stays at 'idle'
      * until the runner sees a completion signal (e.g. lint-staged '[SUCCESS]'),
@@ -36,20 +48,15 @@ export interface StepState extends StepDefinition {
 }
 
 /**
- * Default pre-commit pipeline. Mirrors the historical
- * `scripts/dev/pre-commit-gate.mjs` step list.
+ * Built-in fallback used when the user has no `agentils-gate.config.*` file
+ * anywhere up the directory tree. Kept intentionally minimal: just
+ * `lint-staged`, since that is the only step every consuming repo can be
+ * expected to have once `agentils-quality-gate init` ran. Anything richer
+ * (sync, flowcharts, typecheck, ...) goes into the user's config file.
  */
-export const DEFAULT_STEPS: StepDefinition[] = [
+export const BUILTIN_FALLBACK_STEPS: StepDefinition[] = [
     {
-        label: 'SYNC COPILOT INSTRUCTIONS',
-        cmd: 'node scripts/dev/sync-agent-instructions.mjs --stage',
-    },
-    {
-        label: 'GENERATE FLOWCHARTS',
-        cmd: 'pnpm run generate:flowcharts',
-    },
-    {
-        label: 'LINT-STAGED  STAGED FILES',
+        label: 'LINT-STAGED STAGED FILES',
         cmd: 'pnpm exec lint-staged',
     },
 ]
@@ -68,7 +75,7 @@ export const DRY_RUN_STEPS: StepDefinition[] = [
         argv: dryArgv(1100, 'flowcharts ok'),
     },
     {
-        label: 'LINT-STAGED  STAGED FILES',
+        label: 'LINT-STAGED STAGED FILES',
         argv: dryArgv(1700, 'lint-staged ok'),
     },
 ]
@@ -87,7 +94,7 @@ export const DRY_RUN_FAIL_STEPS: StepDefinition[] = [
         argv: dryArgv(1200, 'flowcharts FAIL', 1),
     },
     {
-        label: 'LINT-STAGED  STAGED FILES',
+        label: 'LINT-STAGED STAGED FILES',
         argv: dryArgv(1000, 'lint-staged ok'),
     },
 ]
@@ -111,9 +118,11 @@ function dryArgv(ms: number, message: string, exitCode = 0): { command: string; 
     const snippet = `
         const files = ${JSON.stringify(fakeFiles.slice(0, steps))};
         let i = 0;
+        const total = files.length;
         const tick = () => {
             if (i < files.length) {
-                console.log('  processing ' + files[i++]);
+                process.stderr.write('[' + (i + 1) + '/' + total + '] dry ' + files[i] + '\\n');
+                i++;
                 setTimeout(tick, ${interval});
                 return;
             }
