@@ -17,6 +17,7 @@
     - [`.github/instructions/impl-debug.instructions.md`](.github/instructions/impl-debug.instructions.md) — V1 实现层调试指引（按调用链定位问题）
     - [`.github/instructions/webview-source-of-truth.instructions.md`](.github/instructions/webview-source-of-truth.instructions.md) — Webview 是产品真值源；protocol/host/mcp/cli 倒推改造规则
     - [`.github/instructions/quality-gate.instructions.md`](.github/instructions/quality-gate.instructions.md) — @agent-ils/quality-gate ECAM panel + ESLint 风格 config 加载边界
+    - [`.github/instructions/logger.instructions.md`](.github/instructions/logger.instructions.md) — @agent-ils/logger 本地 JSONL 收集 + 查询；默认值/HTTP/CLI 边界
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex 读取。
 
