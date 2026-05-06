@@ -16,11 +16,11 @@
 
 如果你曾盯着一段 30 分钟前的 LLM 会话发问"agent 到底在哪一步偏离了计划？"——那就是你需要 ILS 的时刻。
 
-|                                               |                                                |
-| --------------------------------------------- | ---------------------------------------------- |
-| **场景 A — 标准进近**                         | ![在下滑道上](docs/assets/ils-on-slope.zh.gif) |
-| **场景 B — 高于下滑道**（超出跑道 · 复飞）    | ![过高](docs/assets/ils-too-high.zh.gif)       |
-| **场景 C — 低于下滑道**（撞地告警 · PULL UP） | ![过低](docs/assets/ils-too-low.zh.gif)        |
+|                                               |                                                                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **场景 A — 标准进近**                         | ![在下滑道上](https://raw.githubusercontent.com/bugfix2020/AgentILS/main/docs/assets/ils-on-slope.zh.gif) |
+| **场景 B — 高于下滑道**（超出跑道 · 复飞）    | ![过高](https://raw.githubusercontent.com/bugfix2020/AgentILS/main/docs/assets/ils-too-high.zh.gif)       |
+| **场景 C — 低于下滑道**（撞地告警 · PULL UP） | ![过低](https://raw.githubusercontent.com/bugfix2020/AgentILS/main/docs/assets/ils-too-low.zh.gif)        |
 
 > 绿色虚线 = 标准 3° 下滑道；实线（彩色）= 飞机实际航迹。跑道上的绿点 = 标准进近预测的接地位置，彩色点是飞机本次实际接地处。AgentILS 在 LLM 运行中扮演的就是那条"虚线"。
 

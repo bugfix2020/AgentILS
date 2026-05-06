@@ -16,11 +16,11 @@ The aviation ILS feeds a pilot two perpendicular guidance signals (localizer + g
 
 If you have ever stared at a 30-minute-old LLM session and asked "where exactly did the agent depart from the plan?", you wanted an ILS.
 
-|                                                        |                                                 |
-| ------------------------------------------------------ | ----------------------------------------------- |
-| **Case A — standard approach**                         | ![On glide slope](docs/assets/ils-on-slope.gif) |
-| **Case B — above glide slope** (overshoot · go around) | ![Too high](docs/assets/ils-too-high.gif)       |
-| **Case C — below glide slope** (terrain · pull up)     | ![Too low](docs/assets/ils-too-low.gif)         |
+|                                                        |                                                                                                            |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **Case A — standard approach**                         | ![On glide slope](https://raw.githubusercontent.com/bugfix2020/AgentILS/main/docs/assets/ils-on-slope.gif) |
+| **Case B — above glide slope** (overshoot · go around) | ![Too high](https://raw.githubusercontent.com/bugfix2020/AgentILS/main/docs/assets/ils-too-high.gif)       |
+| **Case C — below glide slope** (terrain · pull up)     | ![Too low](https://raw.githubusercontent.com/bugfix2020/AgentILS/main/docs/assets/ils-too-low.gif)         |
 
 > Dashed green = the standard 3° glide slope. Solid colored = the aircraft's actual flight path. Green dot on the runway = where the standard approach predicts touchdown; the colored dot is where the aircraft actually lands. AgentILS plays the role of the dashed line for an LLM run.
 
