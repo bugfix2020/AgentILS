@@ -102,7 +102,7 @@ runtime.disposeNotifier = registration.dispose
 ## 命名约定
 
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
-- npm 包名：`@agent-ils/mcp`、`@agent-ils/cli`；扩展 publisher：`bugfix2020`。
+- npm 包名（**仅 quality-gate 和 logger 实际发布**）：`@agent-ils/quality-gate`、`@agent-ils/logger`。`@agent-ils/mcp` / `@agent-ils/cli` 是仓库内部 workspace 包，标了 `"private": true`，**不发 npm**。扩展 publisher：`bugfix2020`。
 - HTTP MCP 端点：默认 `http://127.0.0.1:8788/mcp`，可通过 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖。
 
 ## 分支与 PR 流（Branch Flow，**强约束**）
@@ -134,7 +134,7 @@ runtime.disposeNotifier = registration.dispose
 
 - 每个 npm 包应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
 - **可发布到 npm 的包（2 个）**：`@agent-ils/quality-gate`、`@agent-ils/logger`。
-- **不发布到 npm 的包**：`@agent-ils/mcp`、`@agent-ils/cli`（保留在仓库内做集成与测试，不公开发版；在 [`.changeset/config.json`](.changeset/config.json) `ignore` 列表里，changesets 跳过它们的 version bump 与 publish）。
+- **不发布到 npm 的包**：`@agent-ils/mcp`、`@agent-ils/cli`（半成品，未来若要发先去掉 private）。**真正阻止 publish 的机制是 `package.json` `"private": true`**（changesets 官方文档明确：`ignore` 字段只影响 `version` 命令，**不影响 `publish`**）。`.changeset/config.json` 的 `ignore: ["@agent-ils/mcp", "@agent-ils/cli"]` 仅作冗余防护，不要依赖它单独生效。
 - **私有包（自动跳过）**：`packages/extensions/agentils-vscode`、`apps/webview`（`"private": true`）。
 - 工具：[`@changesets/cli`](https://github.com/changesets/changesets) 已在仓库落地，配置见 [`.changeset/config.json`](.changeset/config.json)（`baseBranch: main`、`access: public`、`fixed: []`、`ignore: ["@agent-ils/mcp", "@agent-ils/cli"]`）。
 - 工作流：
@@ -152,7 +152,16 @@ runtime.disposeNotifier = registration.dispose
 
 GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 
-- **`ci.yml`** — PR 与 `main` push 触发：install / typecheck / lint / build / test / `sync:instructions:check` / changeset 检查。所有 PR 必须全绿才能合并。
+- **`ci.yml`** — PR 与 `main` push 触发：install / **build → typecheck**（顺序固定，typecheck 必须在 build 后，因为 workspace 间类型解析依赖 d.ts；turbo `typecheck.dependsOn` 包含 `^build`）/ lint / `sync:instructions:check` / changeset 存在性检查。所有 PR 必须全绿才能合并。test 步骤当前**注释**，TODO 在 workflow 内（pre-existing mcp e2e drift：`packages/mcp/test/e2e/agentils-vsix-parity.test.ts`）。
 - **`release.yml`** — `main` push 触发：跑 `changesets/action`，自动管理 Version PR + npm publish + git tag。详见上方 changelog 章节。
+
+### CI 内部约束（**避免重新踩坑**）
+
+- **action 版本**：`actions/checkout@v6`、`actions/setup-node@v6`、`pnpm/action-setup@v6`（Node 24 native）。**不要降到 v4 / v5**，否则会出 "Node 20 deprecated" warning 或被强制提升到 Node 24 的过渡告警。
+- **Node runtime 分工**：`ci.yml` 用 Node 22 LTS（项目目标 runtime）；`release.yml` 单独用 **Node 24**，因为它自带 npm 11.5+，满足 OIDC Trusted Publisher 最低要求。**禁止**在 release job 写 `npm install -g npm@latest`：Node 22 + npm 11.5 self-replace 会撞 bundled-deps 解析 bug，报 `MODULE_NOT_FOUND 'promise-retry'`，`--force` 也救不了。
+- **OIDC Trusted Publisher**：`release.yml` 的 job 必须有 `permissions.id-token: write`；step env 用 `NPM_CONFIG_PROVENANCE: "true"` 自动签 provenance。**禁止使用 `NPM_TOKEN`** —— 已迁移到 OIDC，token 流是历史方案。
+- **ESLint v9 flat config 不读 `.gitignore`**：必须在 `eslint.config.mjs` 显式 `ignores`：`packages/*.back/**`、`.tmp/**`、`**/scripts/**/*.mjs`，新增构建产物或测试 fixture 路径同步加入。
+- **`.gitignore` 必须包含 `.agent-ils/`**：是 `@agent-ils/logger` 的本地 JSONL artifact，测试副作用产物，曾被误提交。
+- **`process.versions` 不含 `npm` key**：检查 npm 版本一律走 `npm --version` shell 命令，不要写 `process.versions.npm.split(...)` —— 会 TypeError。
 
 不要绕过 CI 直接 push 到 `main`（GitHub Flow 已经强制 PR 流程）。本地的 husky hook 是辅助防线，不是真值源 —— CI 才是。
