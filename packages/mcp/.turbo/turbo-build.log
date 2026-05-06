@@ -1,27 +1,27 @@
 
-
-> @agentils/mcp@0.1.0 build /Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/mcp
+> @agent-ils/mcp@0.1.0 build /Users/liuyuxuan/Desktop/Lenovo/AgentILS/packages/mcp
 > tsup
 
-[34mCLI[39m Building entry: {"index":"src/index.ts","client/index":"src/client/index.ts","types/index":"src/types/index.ts"}
-[34mCLI[39m Using tsconfig: tsconfig.json
-[34mCLI[39m tsup v8.5.1
-[34mCLI[39m Using tsup config: /Users/liuyuxuan/Desktop/Lenovo/agent-gate/packages/mcp/tsup.config.ts
-[34mCLI[39m Target: node20
-[34mCLI[39m Cleaning output folder
-[34mESM[39m Build start
+CLI Building entry: {"index":"src/index.ts","client/index":"src/client/index.ts","types/index":"src/types/index.ts"}
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /Users/liuyuxuan/Desktop/Lenovo/AgentILS/packages/mcp/tsup.config.ts
+CLI Target: node20
+CLI Cleaning output folder
+ESM Build start
 Generated an empty chunk: "index".
-[32mESM[39m [1mdist/types/index.js        [22m[32m87.00 B[39m
-[32mESM[39m [1mdist/chunk-AOL5MAND.js     [22m[32m1.60 KB[39m
-[32mESM[39m [1mdist/client/index.js       [22m[32m142.00 B[39m
-[32mESM[39m [1mdist/index.js              [22m[32m10.67 KB[39m
-[32mESM[39m [1mdist/types/index.js.map    [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/chunk-AOL5MAND.js.map [22m[32m3.98 KB[39m
-[32mESM[39m [1mdist/client/index.js.map   [22m[32m69.00 B[39m
-[32mESM[39m [1mdist/index.js.map          [22m[32m27.47 KB[39m
-[32mESM[39m ⚡️ Build success in 62ms
+"createChannelLogger", "defaultHttpLogEndpoint", "defaultLogDir" and "safeSerialize" are imported from external module "@agent-ils/logger" but never used in "dist/index.js".
+ESM dist/chunk-YUTNN6PE.js     1.74 KB
+ESM dist/client/index.js       142.00 B
+ESM dist/index.js              28.83 KB
+ESM dist/types/index.js        87.00 B
+ESM dist/chunk-YUTNN6PE.js.map 5.05 KB
+ESM dist/index.js.map          74.52 KB
+ESM dist/types/index.js.map    69.00 B
+ESM dist/client/index.js.map   69.00 B
+ESM ⚡️ Build success in 75ms
 DTS Build start
-DTS ⚡️ Build success in 1091ms
-DTS dist/index.d.ts        2.72 KB
-DTS dist/client/index.d.ts 1.17 KB
-DTS dist/types/index.d.ts  1.44 KB
+DTS ⚡️ Build success in 906ms
+DTS dist/index.d.ts        4.94 KB
+DTS dist/client/index.d.ts 1.23 KB
+DTS dist/types/index.d.ts  2.81 KB
