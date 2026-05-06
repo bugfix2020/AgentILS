@@ -132,17 +132,20 @@ runtime.disposeNotifier = registration.dispose
 
 **Changelog 由 release 流程驱动，不在 push 时生成。** 这是 monorepo 多 npm 包独立发版的正确边界。
 
-- 每个 npm 包（`@agent-ils/mcp` / `cli` / `quality-gate` / `logger`）应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
-- 工具：[`@changesets/cli`](https://github.com/changesets/changesets) 已在仓库落地，配置见 [`.changeset/config.json`](.changeset/config.json)（`baseBranch: main`、`access: public`、`fixed: []`）。
+- 每个 npm 包应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
+- **可发布到 npm 的包（2 个）**：`@agent-ils/quality-gate`、`@agent-ils/logger`。
+- **不发布到 npm 的包**：`@agent-ils/mcp`、`@agent-ils/cli`（保留在仓库内做集成与测试，不公开发版；在 [`.changeset/config.json`](.changeset/config.json) `ignore` 列表里，changesets 跳过它们的 version bump 与 publish）。
+- **私有包（自动跳过）**：`packages/extensions/agentils-vscode`、`apps/webview`（`"private": true`）。
+- 工具：[`@changesets/cli`](https://github.com/changesets/changesets) 已在仓库落地，配置见 [`.changeset/config.json`](.changeset/config.json)（`baseBranch: main`、`access: public`、`fixed: []`、`ignore: ["@agent-ils/mcp", "@agent-ils/cli"]`）。
 - 工作流：
-    - 每个改动了 `packages/*`（不含 `packages/extensions/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。**CI 会强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），缺失则 PR 红灯。
-    - 纯文档 / `apps/*` / `packages/extensions/*` / `scripts/*` / `.changeset/` 配置本身的改动可豁免（CI 自动跳过检查）。
+    - 每个改动了**可发布**包（`packages/quality-gate/*` 或 `packages/logger/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。**CI 会强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），缺失则 PR 红灯。
+    - 改动 `packages/mcp/*`、`packages/cli/*`、`packages/extensions/*`、`apps/*`、`scripts/*`、`docs/*` 或 `.changeset/` 配置本身可豁免（CI 自动跳过检查）。
     - Release **完全自动化**，不需要手动跑命令：
         - PR 合并到 `main` 后，[`.github/workflows/release.yml`](.github/workflows/release.yml) 触发 [`changesets/action`](https://github.com/changesets/action)：
             - 如果 `.changeset/*.md` 存在 → 自动开（或更新）一个 `chore(release): version packages` PR，PR 内容是 `pnpm changeset version` 的产物（bump version + 写 per-package CHANGELOG）。
             - 当那个 Version PR 被 merge 后（`.changeset/*.md` 全部消费完）→ action 自动跑 `pnpm changeset publish`：发布到 npm + 打 git tag + 推送。
         - 维护者**只需 review 并 merge Version PR**，不要在本地跑 `pnpm changeset version` / `publish`。
-    - 前置条件：每个 npm 包（`@agent-ils/mcp` / `cli` / `quality-gate` / `logger`）必须在 npm 注册 **Trusted Publisher（OIDC）**，指向本仓库 + workflow `release.yml`。配置入口：`https://www.npmjs.com/package/<pkg>/access` → Trusted Publisher → GitHub Actions。**不需要** `NPM_TOKEN` secret，OIDC 直接通过 GitHub Actions `id-token` 完成认证，并自动带 `--provenance` 签名。
+    - 前置条件：每个**可发布**包（`@agent-ils/quality-gate`、`@agent-ils/logger`）必须在 npm 注册 **Trusted Publisher（OIDC）**，指向本仓库 + workflow `release.yml`。配置入口：`https://www.npmjs.com/package/<pkg>/access` → Trusted Publisher → GitHub Actions。**不需要** `NPM_TOKEN` secret，OIDC 直接通过 GitHub Actions `id-token` 完成认证，并自动带 `--provenance` 签名。
 - **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。仓库根的 `.husky/pre-push` 和 `package.json` 里曾经的 `changelog` / `generate:changelog*` 脚本均已废弃删除，不要复活。
 
 ## CI（**强约束**）
