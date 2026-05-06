@@ -10,6 +10,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Opt into Node.js 24 runtime for JS actions (Node 20 is deprecated
+  # on GitHub Actions runners; will be the default 2026-06-02 and removed
+  # 2026-09-16). This only affects the JS actions themselves, not the Node
+  # version installed via actions/setup-node for our build.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 
