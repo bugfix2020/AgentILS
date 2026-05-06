@@ -8,6 +8,16 @@
 > 通过 `sync-manifest.json` 同步到 `.github/instructions/agentils.instructions.md` + `AGENTS.md`，供 Copilot/Codex 在开发 AgentILS 时读取。
 > **本文件不应被 `packages/cli` 读取或注入到外部用户项目。** CLI 有自己独立的模板体系（`packages/cli/templates/`），内容是面向用户的行为约束。
 
+## 术语表（Glossary）
+
+文档与代码反复出现的内部术语，**第一次接触请先读这里**，否则其它章节里的 "Plan C 单 server"、"V1 任务循环" 之类的引用会读不懂。
+
+- **Plan C** —— 部署拓扑决议：每个 workspace **只跑一个** HTTP MCP server，Copilot 与 VS Code 扩展共享同一份 `state://*`。完整图见 [`docs/flowcharts/01-plan-c-topology.md`](../flowcharts/01-plan-c-topology.md)。Plan A（每个客户端独立 stdio MCP）和 Plan B（stdio + IPC bridge）已被否决，文档里不再出现。
+- **V1** —— 当前架构代号：所有任务推进收敛到**一个** task loop（`collect → plan → execute → test → summarize`）+ **3 个** MCP tool（`state_get` / `request_user_clarification` / `run_task_loop`）。V0 是早期散点架构（chat-participant、LM tool 散点、多个状态源、`new_task_request` / `approval_request` / `feedback_gate` / `verify_run` / `ui_session_*` 等旧 tool），**已全部移除**，调试时不要假设它们存在。
+- **ECAM panel** —— `@agent-ils/quality-gate` 的 pre-commit TUI 渲染层，借自 A320 ECAM（Electronic Centralized Aircraft Monitor）面板形态，给 husky pre-commit 一块带旋转指示与颜色块的可视化检查清单。详见 [`docs/instructions/quality-gate.instructions.md`](quality-gate.instructions.md)。
+- **TCAS / ECAM 法则**（webview 语境）—— TCAS 是 webview 端的相邻冲突检测；ECAM 是控制模式（normal/alternate/direct）降级追踪器，写入 `vm.task.controlModeHistory[]`。详见 [`docs/instructions/webview-source-of-truth.instructions.md`](webview-source-of-truth.instructions.md) `## TCAS / ECAM 法则`。
+- **Control modes** `normal / alternate / direct` —— 借自 Airbus fly-by-wire 法则降级阶梯，描述 task loop 的三档执行严格度：`normal`（全约束）→ `alternate`（部分约束放宽）→ `direct`（最低约束、用户全权接管）。
+
 ## 仓库结构（Plan C / V1）
 
 | 包               | 路径                         | 角色                                                                       |
@@ -169,3 +179,27 @@ GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 - **`process.versions` 不含 `npm` key**：检查 npm 版本一律走 `npm --version` shell 命令，不要写 `process.versions.npm.split(...)` —— 会 TypeError。
 
 不要绕过 CI 直接 push 到 `main`（GitHub Flow 已经强制 PR 流程）。本地的 husky hook 是辅助防线，不是真值源 —— CI 才是。
+
+## 文档语言规范（**强约束**）
+
+为什么放在 instruction：这是 always-on 硬规则（任何改 `.md` 都触发），不是按需调用的工作流，所以走 instruction，不做 skill。
+
+**核心原则**：
+
+1. **面向开发者的文档（`docs/instructions/`、`docs/skills/`、`docs/flowcharts/`、`docs/agentils/` 等）默认中文**。代码标识符、CLI 名、错误关键字保留英文。
+2. **面向外部用户的文档（root `README.md`、各 `packages/*/README.md`）必须中英双语**：`README.md`（英文） + `README.zh-CN.md`（中文）成对出现，文件顶部互相链接。
+3. **当面向用户的文档（如 root `README.md`）引入了一份 `docs/` 下文档，那份 `docs/` 文档也必须是双语对**：`xxx.md`（英文） + `xxx.zh-CN.md`（中文），顶部互链。
+4. **同步规则**：改 `xxx.md` 的同时必须改 `xxx.zh-CN.md`（反之亦然）。新加段落必须在两份里都加。**禁止只改一份就提交**。
+
+**触发判断**：
+
+- 新建 `docs/` 下文档 → 默认中文单文件。如果它会被 root `README.md` 或外部包 `README.md` 链接 → 升级为双语对。
+- 改 root `README.md` 或包 `README.md` → 必须同步改对应 `README.zh-CN.md`。
+- 改双语对中的任一文件 → 必须同步改另一份。
+- commit message：subject + body 必须**全英文**（受 commitlint conventional commits 约束 + 跨地域 reviewer 友好），禁止中文出现在任何 commit message 字段。
+
+**举例**：
+
+- root `README.md` 引入了 `docs/developer/ci-release-pipeline.md` → 必须有 `docs/developer/ci-release-pipeline.zh-CN.md`，root 必须有 `README.zh-CN.md`，且 `README.zh-CN.md` 链接的是 `ci-release-pipeline.zh-CN.md`。
+- `docs/instructions/agentils.instructions.md`（开发者向）→ 单文件中文即可。
+- `packages/quality-gate/README.md` 是 npm 包 README → 必须配 `README.zh-CN.md`。

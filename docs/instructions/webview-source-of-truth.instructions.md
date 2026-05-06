@@ -4,9 +4,6 @@ applyTo: 'extensions/agentils-vscode/**,packages/mcp/**,packages/cli/**'
 
 # Webview Source-of-Truth 真值源约束
 
-> 真值源文档: [docs/agentils/webview-source-of-truth-cascade-plan.md](../agentils/webview-source-of-truth-cascade-plan.md)
-> 派生方案: [step3-mcp](../agentils/step3-mcp-state-machine-changes.md) · [step4-cli](../agentils/step4-cli-template-changes.md)
-
 ## 核心原则
 
 **Webview 是产品行为的唯一真值源**。protocol / extension host / MCP state machine / CLI 模板全部按 webview 的展示需求倒推。

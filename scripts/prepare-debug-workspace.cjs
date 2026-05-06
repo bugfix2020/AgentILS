@@ -117,8 +117,9 @@ function ensureWelcomeFile() {
         '',
         "## What's wired",
         '',
-        'See [docs/USER-WALKTHROUGH.md](../../docs/USER-WALKTHROUGH.md) for the full',
-        'flow including curl probes and 30 automated regression tests.',
+        'See [docs/developer/ci-release-pipeline.md](../../docs/developer/ci-release-pipeline.md)',
+        'for the CI/release walkthrough. A user-facing onboarding doc will replace',
+        'the old USER-WALKTHROUGH.md soon.',
         '',
     ].join('\n')
     fs.writeFileSync(welcome, body)
