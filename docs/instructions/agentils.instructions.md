@@ -182,7 +182,7 @@ GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 - 新建 `docs/` 下文档 → 默认中文单文件。如果它会被 root `README.md` 或外部包 `README.md` 链接 → 升级为双语对。
 - 改 root `README.md` 或包 `README.md` → 必须同步改对应 `README.zh-CN.md`。
 - 改双语对中的任一文件 → 必须同步改另一份。
-- commit message：subject 用英文（受 commitlint conventional commits 约束），body 中文/英文皆可。
+- commit message：subject + body 必须**全英文**（受 commitlint conventional commits 约束 + 跨地域 reviewer 友好），禁止中文出现在任何 commit message 字段。
 
 **举例**：
 
