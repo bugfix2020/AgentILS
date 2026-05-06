@@ -20,22 +20,26 @@ case "$HEAD_SUBJECT" in
 esac
 
 TMP_BEFORE="$(mktemp)"
-TMP_AFTER="$(mktemp)"
 cp CHANGELOG.md "$TMP_BEFORE"
 
 # Full regenerate (-r 0) since the repo has no release tags yet.
 pnpm exec conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0 >/dev/null
-cp CHANGELOG.md "$TMP_AFTER"
-cp "$TMP_BEFORE" CHANGELOG.md
 
-if ! diff -q "$TMP_BEFORE" "$TMP_AFTER" >/dev/null; then
-  echo ""
-  echo "[pre-push] ✗ CHANGELOG.md is stale — new commits since the last update were detected."
-  echo "[pre-push]   Run: pnpm changelog:all && git add CHANGELOG.md && git commit -m 'chore(changelog): sync'"
-  echo "[pre-push]   Then re-push."
-  rm -f "$TMP_BEFORE" "$TMP_AFTER"
-  exit 1
+if diff -q "$TMP_BEFORE" CHANGELOG.md >/dev/null; then
+  rm -f "$TMP_BEFORE"
+  echo "[pre-push] ✓ CHANGELOG.md is up to date"
+  exit 0
 fi
 
-rm -f "$TMP_BEFORE" "$TMP_AFTER"
-echo "[pre-push] ✓ CHANGELOG.md is up to date"
+# Drift detected — auto-commit the regenerated CHANGELOG. The new commit is NOT
+# part of the in-flight push (git already captured the refs to push before this
+# hook ran), so we abort to force a clean re-push that carries the sync commit.
+# The next pre-push run will see HEAD = chore(changelog) and skip the check
+# (case branch above), preventing infinite loops.
+rm -f "$TMP_BEFORE"
+echo "[pre-push] ✱ CHANGELOG.md was stale"
+git add CHANGELOG.md
+git -c core.hooksPath=/dev/null commit -m "chore(changelog): sync" >/dev/null
+echo "[pre-push] ✓ auto-committed 'chore(changelog): sync' on top of HEAD"
+echo "[pre-push] ✗ aborting this push — please run 'git push' again to include the sync commit"
+exit 1

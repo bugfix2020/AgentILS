@@ -125,8 +125,9 @@ runtime.disposeNotifier = registration.dispose
     git checkout main && git pull --ff-only      # 总是从最新 main 出发
     git checkout -b <type>/<short-kebab>         # 遵守 branch-name-standard skill
     # ...编码 + commit...
-    pnpm changelog:all && git add CHANGELOG.md && git commit -m "chore(changelog): sync"  # push 前必做
-    git push -u origin <branch>                  # 开 PR target = main
+    git push -u origin <branch>                  # 第一次 push 若 CHANGELOG 落后，
+                                                  # pre-push hook 会自动 commit "chore(changelog): sync"
+                                                  # 并中止；再 push 一次即可，target = main
     ```
 
 - 历史背景：早期试过 `feat → dev → main` 的线性流，结果：(a) PR 合并时 dev 上的修改没同步进 main，导致后续 push 丢失；(b) 单人/双人开发下 dev 没有真实 staging 验证场景，只是制造同步负担。已统一收敛到 GitHub Flow。
@@ -136,8 +137,9 @@ runtime.disposeNotifier = registration.dispose
 每次 `git push` 之前**必须**重新生成并提交 CHANGELOG.md，让 main 上的 CHANGELOG 始终与最新 commit 保持一致。
 
 - 命令：`pnpm changelog:all`（仓库尚无 release tag，全量重建避免 incremental 模式产生重复段落）。
-- 自动化：`.husky/pre-push` 会在 push 前用相同命令在内存中重新生成并和工作区比对：
+- 自动化：`.husky/pre-push` 是**半自动**模式：
     - 一致 → 放行 push。
-    - 有差异 → 阻止 push 并提示开发者运行 `pnpm changelog:all && git commit -am "chore(changelog): sync"`。
-    - 例外：HEAD 提交本身是 `chore(changelog)` 时跳过检查（避免 self-reference 死循环）。
+    - 有差异 → hook **自动**执行 `pnpm changelog:all` 并 `git commit -m "chore(changelog): sync"`（追加在 HEAD 之上），然后**中止当前 push**；开发者只需再 `git push` 一次即可（git 在 hook 触发前就已经确定要推送的 refs，新 commit 不会进当前推送，必须重推一次）。
+    - 第二次 push 时 HEAD 已是 `chore(changelog): sync`，命中 case 分支跳过检查，直接放行（避免 self-reference 死循环）。
 - 不要在 PR 描述里手写 changelog；以 CHANGELOG.md 为唯一真值源。
+- **不要**把 changelog 生成放进 pre-commit：commit 太频繁、消耗高、commit 范畴会被 CHANGELOG 改动污染、产生噪音 chore(changelog) commit 爆炸。push 是合适的边界。
