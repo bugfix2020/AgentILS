@@ -5,6 +5,7 @@ dist/
 .DS_Store
 .env
 .agentils-logs/
+.agent-ils/
 
 .tmp/
 

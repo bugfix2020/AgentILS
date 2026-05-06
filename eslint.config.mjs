@@ -10,8 +10,10 @@ export default tseslint.config(
             '**/build/**',
             '**/node_modules/**',
             '**/*.min.js',
+            '.tmp/**',
             'packages/extensions/*/webview/**',
-            'scripts/**/*.mjs',
+            'packages/*.back/**',
+            '**/scripts/**/*.mjs',
         ],
     },
     {
