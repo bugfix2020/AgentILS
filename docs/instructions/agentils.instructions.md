@@ -107,20 +107,33 @@ runtime.disposeNotifier = registration.dispose
 
 ## 分支与 PR 流（Branch Flow，**强约束**）
 
-> 这条规则的违反代价极高（直接污染 main / 跳过 staging 验证），任何 agent 在开 PR 前**必须**确认。
+> 这条规则的违反代价极高，任何 agent 在开 PR 前**必须**确认 base 分支。
 
-- **`main`** 是发布线 / 公开 README 的稳定来源。**只接受**来自 `dev` 的合并 PR。
-- **`dev`** 是 staging 主线。所有 feature / fix / chore / docs 分支都从 `dev` 切出，PR 也**只能**回到 `dev`。
-- **绝不**从 feature 分支直接 PR 到 `main`；上一次发生这种事时把"中文 README + GIF + 绝对 URL 修正"这三组本应一起进 main 的内容拆成了两轮 PR，并出现 "PR #6 在第二/三次 push 之前就被合并" 的事故。
+本仓库采用 **GitHub Flow**（不使用 staging 分支）：
+
+- **`main`** 是唯一长期分支，也是 npm/README 的发布源。
+- 所有 feature / fix / chore / docs 分支都从 `main` 切出，PR 也**只能**回到 `main`。
+- **不**使用 `dev` / `develop` / `staging` 等中间分支；如果需要分阶段发布或灰度，临时拉 `release/v0.x` 分支挑 commit 即可，不要常驻。
+- 任何工具自动开 PR 时（如 `mcp_gitkraken_pull_request_create`），`target_branch` **默认且必须是 `main`**。
 - 推荐工作流：
 
     ```
-    git checkout dev && git pull --ff-only       # 总是从 dev 出发
+    git checkout main && git pull --ff-only      # 总是从最新 main 出发
     git checkout -b <type>/<short-kebab>         # 遵守 branch-name-standard skill
-    # ...编码...
-    git push -u origin <branch>                  # 开 PR target = dev
-    # dev 上验证通过后，由维护者另开一条 dev → main 的合并 PR 发布到 main
+    # ...编码 + commit...
+    pnpm changelog && git add CHANGELOG.md && git commit -m "chore(changelog): update"  # push 前必做
+    git push -u origin <branch>                  # 开 PR target = main
     ```
 
-- 任何工具自动开 PR 时（如 `mcp_gitkraken_pull_request_create`），`target_branch` **默认必须是 `dev`**，除非用户明确说"发布到 main"。
-- 如果误操作把 PR 提到 `main`，立刻在 PR 描述里说明，并征求用户决定（关闭重开 / 转 base / 接受发布）。
+- 历史背景：早期试过 `feat → dev → main` 的线性流，结果：(a) PR 合并时 dev 上的修改没同步进 main，导致后续 push 丢失；(b) 单人/双人开发下 dev 没有真实 staging 验证场景，只是制造同步负担。已统一收敛到 GitHub Flow。
+
+## 发布前 Changelog 同步（**强约束**）
+
+每次 `git push` 之前**必须**重新生成并提交 CHANGELOG.md，让 main 上的 CHANGELOG 始终与最新 commit 保持一致。
+
+- 命令：`pnpm changelog`（增量追加，基于 conventional commits 解析自上一个 git tag）。
+- 首次：`pnpm changelog:first`（从仓库历史开头重建整个文件）。
+- 自动化：`.husky/pre-push` 会在 push 前运行 `pnpm changelog --dry-run` 并比对工作区 CHANGELOG.md：
+    - 一致 → 放行 push。
+    - 有差异 → 阻止 push 并提示开发者运行 `pnpm changelog && git commit -am "chore(changelog): update"`。
+- 不要在 PR 描述里手写 changelog；以 CHANGELOG.md 为唯一真值源。

@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+# Pre-push gate: refuse the push if CHANGELOG.md is stale relative to current HEAD.
+# Authoritative rule: docs/instructions/agentils.instructions.md → "发布前 Changelog 同步".
+
+set -eu
+
+# Skip when there is no CHANGELOG.md yet (first-time bootstrap).
+if [ ! -f CHANGELOG.md ]; then
+  echo "[pre-push] CHANGELOG.md missing — run: pnpm changelog:all && git add CHANGELOG.md && git commit"
+  exit 1
+fi
+
+TMP_BEFORE="$(mktemp)"
+TMP_AFTER="$(mktemp)"
+cp CHANGELOG.md "$TMP_BEFORE"
+
+# Regenerate into a copy (do not touch working tree on success).
+pnpm exec conventional-changelog -p conventionalcommits -i CHANGELOG.md -s >/dev/null
+cp CHANGELOG.md "$TMP_AFTER"
+# Restore the original (we only wanted to detect drift).
+cp "$TMP_BEFORE" CHANGELOG.md
+
+if ! diff -q "$TMP_BEFORE" "$TMP_AFTER" >/dev/null; then
+  echo ""
+  echo "[pre-push] ✗ CHANGELOG.md is stale — new commits since the last update were detected."
+  echo "[pre-push]   Run: pnpm changelog && git add CHANGELOG.md && git commit -m 'chore(changelog): update'"
+  echo "[pre-push]   Then re-push."
+  rm -f "$TMP_BEFORE" "$TMP_AFTER"
+  exit 1
+fi
+
+rm -f "$TMP_BEFORE" "$TMP_AFTER"
+echo "[pre-push] ✓ CHANGELOG.md is up to date"
