@@ -12,16 +12,16 @@ ESM Build start
 Generated an empty chunk: "index".
 "createChannelLogger", "defaultHttpLogEndpoint", "defaultLogDir" and "safeSerialize" are imported from external module "@agent-ils/logger" but never used in "dist/index.js".
 ESM dist/chunk-YUTNN6PE.js     1.74 KB
-ESM dist/client/index.js       142.00 B
-ESM dist/index.js              28.83 KB
 ESM dist/types/index.js        87.00 B
+ESM dist/index.js              28.83 KB
+ESM dist/client/index.js       142.00 B
 ESM dist/chunk-YUTNN6PE.js.map 5.05 KB
 ESM dist/index.js.map          74.52 KB
-ESM dist/types/index.js.map    69.00 B
 ESM dist/client/index.js.map   69.00 B
-ESM ⚡️ Build success in 75ms
+ESM dist/types/index.js.map    69.00 B
+ESM ⚡️ Build success in 86ms
 DTS Build start
-DTS ⚡️ Build success in 906ms
+DTS ⚡️ Build success in 1023ms
 DTS dist/index.d.ts        4.94 KB
 DTS dist/client/index.d.ts 1.23 KB
 DTS dist/types/index.d.ts  2.81 KB
