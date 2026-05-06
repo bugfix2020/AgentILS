@@ -4,26 +4,34 @@
 
 set -eu
 
-# Skip when there is no CHANGELOG.md yet (first-time bootstrap).
 if [ ! -f CHANGELOG.md ]; then
   echo "[pre-push] CHANGELOG.md missing — run: pnpm changelog:all && git add CHANGELOG.md && git commit"
   exit 1
 fi
 
+# If HEAD itself is a "chore(changelog)" commit, the changelog cannot include
+# its own hash without an infinite loop. Accept it as already-up-to-date.
+HEAD_SUBJECT="$(git log -1 --pretty=%s)"
+case "$HEAD_SUBJECT" in
+  "chore(changelog)"*)
+    echo "[pre-push] ✓ HEAD is chore(changelog) — skipping drift check"
+    exit 0
+    ;;
+esac
+
 TMP_BEFORE="$(mktemp)"
 TMP_AFTER="$(mktemp)"
 cp CHANGELOG.md "$TMP_BEFORE"
 
-# Regenerate into a copy (do not touch working tree on success).
-pnpm exec conventional-changelog -p conventionalcommits -i CHANGELOG.md -s >/dev/null
+# Full regenerate (-r 0) since the repo has no release tags yet.
+pnpm exec conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0 >/dev/null
 cp CHANGELOG.md "$TMP_AFTER"
-# Restore the original (we only wanted to detect drift).
 cp "$TMP_BEFORE" CHANGELOG.md
 
 if ! diff -q "$TMP_BEFORE" "$TMP_AFTER" >/dev/null; then
   echo ""
   echo "[pre-push] ✗ CHANGELOG.md is stale — new commits since the last update were detected."
-  echo "[pre-push]   Run: pnpm changelog && git add CHANGELOG.md && git commit -m 'chore(changelog): update'"
+  echo "[pre-push]   Run: pnpm changelog:all && git add CHANGELOG.md && git commit -m 'chore(changelog): sync'"
   echo "[pre-push]   Then re-push."
   rm -f "$TMP_BEFORE" "$TMP_AFTER"
   exit 1

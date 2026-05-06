@@ -4,6 +4,7 @@
 - docs: restore root README with ILS metaphor + current monorepo layout ([704fe41](https://github.com/bugfix2020/AgentILS/commit/704fe41))
 - docs(agentils): add debug workflow handoff ([e4e900c](https://github.com/bugfix2020/AgentILS/commit/e4e900c))
 - docs(instructions): add hard branch-flow rule (PRs target dev, not main) ([9c62db6](https://github.com/bugfix2020/AgentILS/commit/9c62db6)), closes [#6](https://github.com/bugfix2020/AgentILS/issues/6) [#7](https://github.com/bugfix2020/AgentILS/issues/7)
+- docs(instructions): switch to GitHub Flow + add CHANGELOG pre-push gate ([f98ce84](https://github.com/bugfix2020/AgentILS/commit/f98ce84))
 - docs(logger): bilingual README + LLM_USAGE + recall skill + publish metadata ([eb76a1d](https://github.com/bugfix2020/AgentILS/commit/eb76a1d))
 - docs(quality-gate): add npm package metadata and absolute README links ([cf279e2](https://github.com/bugfix2020/AgentILS/commit/cf279e2))
 - docs(quality-gate): add precommit pipeline GIF previews ([a5bc1aa](https://github.com/bugfix2020/AgentILS/commit/a5bc1aa))

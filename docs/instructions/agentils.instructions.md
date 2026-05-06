@@ -121,7 +121,7 @@ runtime.disposeNotifier = registration.dispose
     git checkout main && git pull --ff-only      # 总是从最新 main 出发
     git checkout -b <type>/<short-kebab>         # 遵守 branch-name-standard skill
     # ...编码 + commit...
-    pnpm changelog && git add CHANGELOG.md && git commit -m "chore(changelog): update"  # push 前必做
+    pnpm changelog:all && git add CHANGELOG.md && git commit -m "chore(changelog): sync"  # push 前必做
     git push -u origin <branch>                  # 开 PR target = main
     ```
 
@@ -131,9 +131,9 @@ runtime.disposeNotifier = registration.dispose
 
 每次 `git push` 之前**必须**重新生成并提交 CHANGELOG.md，让 main 上的 CHANGELOG 始终与最新 commit 保持一致。
 
-- 命令：`pnpm changelog`（增量追加，基于 conventional commits 解析自上一个 git tag）。
-- 首次：`pnpm changelog:first`（从仓库历史开头重建整个文件）。
-- 自动化：`.husky/pre-push` 会在 push 前运行 `pnpm changelog --dry-run` 并比对工作区 CHANGELOG.md：
+- 命令：`pnpm changelog:all`（仓库尚无 release tag，全量重建避免 incremental 模式产生重复段落）。
+- 自动化：`.husky/pre-push` 会在 push 前用相同命令在内存中重新生成并和工作区比对：
     - 一致 → 放行 push。
-    - 有差异 → 阻止 push 并提示开发者运行 `pnpm changelog && git commit -am "chore(changelog): update"`。
+    - 有差异 → 阻止 push 并提示开发者运行 `pnpm changelog:all && git commit -am "chore(changelog): sync"`。
+    - 例外：HEAD 提交本身是 `chore(changelog)` 时跳过检查（避免 self-reference 死循环）。
 - 不要在 PR 描述里手写 changelog；以 CHANGELOG.md 为唯一真值源。
