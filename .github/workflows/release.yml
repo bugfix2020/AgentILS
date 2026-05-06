@@ -35,20 +35,22 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          # Node 24 ships with npm >= 11.5 out of the box, which is the
+          # minimum for npm Trusted Publisher (OIDC). Avoids `npm install -g
+          # npm@latest`, which on Node 22 crashes with MODULE_NOT_FOUND
+          # 'promise-retry' (npm 11.5 bundled-deps resolver bug under
+          # /opt/hostedtoolcache/node/22.x/...). The CI workflow keeps
+          # Node 22 LTS for build/typecheck — only release uses Node 24.
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
           # always-auth + registry-url ensures npm/pnpm publish uses
           # the registry that issues OIDC trusted-publisher tokens.
 
-      # npm >= 11.5.1 is required for OIDC trusted publisher support.
-      # Node 22 LTS ships with npm 10.x; upgrade explicitly.
-      # --force avoids a known race where npm's self-replace corrupts
-      #   /opt/hostedtoolcache/node/22.x/lib/node_modules/npm
-      #   (symptom: MODULE_NOT_FOUND 'promise-retry' on next invocation).
-      # Pin to ^11.5 (avoid @latest drift onto an occasionally broken release).
-      - name: Upgrade npm for OIDC publish
-        run: npm install -g --force "npm@^11.5.2"
+      - name: Verify npm version supports OIDC
+        run: |
+          npm --version
+          node -e "const v=process.versions.npm.split('.').map(Number); if(v[0]<11 || (v[0]===11 && v[1]<5)){console.error('npm >= 11.5 required for OIDC');process.exit(1)}"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
