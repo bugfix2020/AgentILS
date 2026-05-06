@@ -102,6 +102,15 @@ pnpm run sync:instructions
 
 A failing step blocks the commit. Do not bypass with `--no-verify` without discussion.
 
+## CI / Release Pipeline
+
+Two GitHub Actions workflows automate quality gating and npm publishing:
+
+- **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — runs on every PR and push to `main`. Build → typecheck → lint → instruction sync check → changeset presence check. Must be green to merge.
+- **[`.github/workflows/release.yml`](.github/workflows/release.yml)** — runs on push to `main`. Uses [`changesets/action`](https://github.com/changesets/action) to either open a "Version Packages" PR (when changesets are pending) or publish to npm via OIDC Trusted Publisher (when none are pending). No `NPM_TOKEN` needed.
+
+For the full walkthrough — branch model, why `build` precedes `typecheck`, why release uses Node 24 while CI uses Node 22, why `private: true` (not `.changeset` `ignore`) is what stops publishing, OIDC setup, end-to-end release narrative, and a table of historical traps — see [`docs/developer/ci-release-pipeline.md`](docs/developer/ci-release-pipeline.md).
+
 ## License
 
 MIT © liuyuxuan
