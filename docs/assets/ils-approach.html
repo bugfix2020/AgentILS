@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AgentILS — Glide slope cases</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        --bg: #06121e;
+        --panel: #0d2236;
+        --grid: #1c3a55;
+        --text: #d8e4ef;
+        --muted: #6a8aa8;
+        --good: #36d399;
+        --warn: #f59e0b;
+        --bad: #ef4444;
+        --runway: #94a3b8;
+        --beam: #36d39922;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        background: radial-gradient(circle at 30% 20%, #0d2236, var(--bg));
+        color: var(--text);
+        font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, Menlo, Consolas, monospace;
+        min-height: 100vh;
+      }
+      .wrap { max-width: 1100px; margin: 32px auto; padding: 24px; }
+      h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.04em; }
+      h1 .sub { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 8px; }
+      .lede { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--grid);
+        border-radius: 10px;
+        padding: 14px 16px 12px;
+        position: relative;
+        margin-bottom: 16px;
+      }
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--muted); font-weight: 600;
+      }
+      .panel h2 .tag {
+        display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 3px;
+        background: var(--grid); color: var(--text); font-size: 11px;
+      }
+      .panel .case {
+        position: absolute; top: 12px; right: 16px;
+        font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+        padding: 2px 8px; border-radius: 3px;
+      }
+      .case.good { color: var(--good); border: 1px solid var(--good); }
+      .case.warn { color: var(--warn); border: 1px solid var(--warn); }
+      .case.bad { color: var(--bad); border: 1px solid var(--bad); }
+      .panel .footer {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 12px; color: var(--muted); margin-top: 6px;
+      }
+      .panel .footer .verdict {
+        font-weight: 700; letter-spacing: 0.06em;
+      }
+      .panel .footer .verdict.good { color: var(--good); }
+      .panel .footer .verdict.warn { color: var(--warn); }
+      .panel .footer .verdict.bad { color: var(--bad); animation: blink 0.7s infinite alternate; }
+      @keyframes blink { from { opacity: 1; } to { opacity: 0.4; } }
+      svg { display: block; width: 100%; height: auto; background: #061626; border-radius: 6px; }
+      .legend {
+        background: var(--panel); border: 1px solid var(--grid); border-radius: 10px;
+        padding: 14px 16px; font-size: 12px; color: var(--muted); line-height: 1.65;
+      }
+      .legend .swatch { display: inline-block; width: 28px; height: 0; vertical-align: middle; margin: 0 6px; }
+      .legend .swatch.dashed { border-top: 2px dashed var(--good); }
+      .legend .swatch.solid-good { border-top: 2px solid var(--good); }
+      .legend .swatch.solid-warn { border-top: 2px solid var(--warn); }
+      .legend .swatch.solid-bad { border-top: 2px solid var(--bad); }
+      .legend .dot {
+        display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+        vertical-align: middle; margin: 0 6px;
+      }
+      .legend .dot.good { background: var(--good); }
+      .legend .dot.warn { background: var(--warn); }
+      .legend .dot.bad { background: var(--bad); }
+      .recordHint {
+        margin-top: 14px; font-size: 11px; color: var(--muted);
+        background: #061626; border-left: 3px solid var(--grid);
+        padding: 8px 12px; border-radius: 4px;
+      }
+      .langSwitch {
+        position: fixed; top: 16px; right: 24px;
+        display: flex; gap: 0; background: var(--panel);
+        border: 1px solid var(--grid); border-radius: 6px; overflow: hidden;
+        font-size: 12px; z-index: 10;
+      }
+      .langSwitch button {
+        background: transparent; color: var(--muted); border: none;
+        padding: 6px 12px; cursor: pointer; font-family: inherit;
+      }
+      .langSwitch button.active { background: var(--grid); color: var(--text); }
+      .langSwitch button:hover:not(.active) { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div class="langSwitch">
+      <button data-lang="en" class="active">EN</button>
+      <button data-lang="zh">中</button>
+    </div>
+    <div class="wrap">
+      <!-- shared airliner side-view symbol -->
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+          <symbol id="planeSideSym" viewBox="-32 -14 64 28" overflow="visible">
+            <g stroke="#1f2a36" stroke-width="0.6" stroke-linejoin="round">
+              <path d="M -28 0 C -26 -2 -22 -3 -16 -3.4 L 18 -3.4 C 24 -3.2 28 -2 30 0 C 28 2 24 3.2 18 3.4 L -16 3.4 C -22 3 -26 2 -28 0 Z" fill="#eef2f7" />
+              <path d="M 22 -1.6 L 28 -0.4 L 26 0.6 L 22 -0.2 Z" fill="#1c2c3a" />
+              <path d="M 4 1 L -4 1 L -16 6 L -10 6 L 0 2.5 L 6 2.5 Z" fill="#cdd6e0" />
+              <ellipse cx="-3" cy="5" rx="4" ry="1.6" fill="#9aa6b2" />
+              <path d="M -22 -3 L -18 -10 L -14 -10 L -16 -3 Z" fill="#cdd6e0" />
+              <path d="M -28 -1 L -22 -4 L -18 -4 L -22 -1 Z" fill="#cdd6e0" />
+              <line x1="4" y1="3.4" x2="4" y2="6" stroke="#9aa6b2" stroke-width="0.8" />
+              <line x1="-12" y1="3.4" x2="-12" y2="6" stroke="#9aa6b2" stroke-width="0.8" />
+            </g>
+          </symbol>
+        </defs>
+      </svg>
+
+      <h1 data-i18n="title">AgentILS <span class="sub" data-i18n="subtitle">— Glide slope · 3 cases</span></h1>
+      <p class="lede" data-i18n="lede">
+        Three independent loops. Each case shows the same runway and the same standard 3° glide slope (dashed green); the difference is the aircraft's actual flight path (solid). The green dot on the runway is where the standard glide slope predicts touchdown — the colored dot is where the aircraft actually lands.
+      </p>
+
+      <!-- ─── CASE A : ON SLOPE ─── -->
+      <div class="panel" id="panelGood">
+        <h2><span data-i18n="caseA_title">Case A</span> <span class="tag" data-i18n="caseA_tag">standard approach</span></h2>
+        <span class="case good" data-i18n="caseA_badge">ON SLOPE</span>
+        <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg" data-case="good"></svg>
+        <div class="footer">
+          <span><span data-i18n="td_label">Touchdown distance:</span> <span data-tdoffset data-i18n="caseA_offset">0 ft from target</span></span>
+          <span class="verdict good" data-verdict data-i18n="caseA_verdict">SAFE TOUCHDOWN</span>
+        </div>
+      </div>
+
+      <!-- ─── CASE B : TOO HIGH ─── -->
+      <div class="panel" id="panelWarn">
+        <h2><span data-i18n="caseB_title">Case B</span> <span class="tag" data-i18n="caseB_tag">above glide slope</span></h2>
+        <span class="case warn" data-i18n="caseB_badge">TOO HIGH</span>
+        <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg" data-case="warn"></svg>
+        <div class="footer">
+          <span><span data-i18n="td_label">Touchdown distance:</span> <span data-tdoffset data-i18n="caseB_offset">+1800 ft past target (long landing)</span></span>
+          <span class="verdict warn" data-verdict data-i18n="caseB_verdict">OVERSHOOT · GO AROUND</span>
+        </div>
+      </div>
+
+      <!-- ─── CASE C : TOO LOW ─── -->
+      <div class="panel" id="panelBad">
+        <h2><span data-i18n="caseC_title">Case C</span> <span class="tag" data-i18n="caseC_tag">below glide slope</span></h2>
+        <span class="case bad" data-i18n="caseC_badge">TOO LOW</span>
+        <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg" data-case="bad"></svg>
+        <div class="footer">
+          <span><span data-i18n="td_label">Touchdown distance:</span> <span data-tdoffset data-i18n="caseC_offset">-1500 ft short of target (terrain impact)</span></span>
+          <span class="verdict bad" data-verdict data-i18n="caseC_verdict">TERRAIN — PULL UP</span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span data-i18n="legend_line1">
+          <span class="swatch dashed"></span> standard 3° glide slope (reference) ·
+          <span class="swatch solid-good"></span> actual flight path (safe) ·
+          <span class="swatch solid-warn"></span> actual (too high) ·
+          <span class="swatch solid-bad"></span> actual (too low)
+        </span><br />
+        <span data-i18n="legend_line2">
+          <span class="dot good"></span> standard touchdown target ·
+          <span class="dot warn"></span> actual touchdown (overshoot) ·
+          <span class="dot bad"></span> actual touchdown (undershoot / terrain)
+        </span>
+        <div class="recordHint" data-i18n="record_hint">
+          To export each panel as its own GIF: capture the SVG element with <code>data-case="good"</code> / <code>"warn"</code> / <code>"bad"</code> over one full cycle (~5s).
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ─── geometry (per-panel SVG) ──────────────────────────────────────
+      // viewBox 800 x 220
+      // Runway: x ∈ [60, 200], y = 190 (top), 196 (bottom). Threshold at x=60.
+      // Standard touchdown target: x = 130 (a bit into the runway, typical 1000 ft markers)
+      // Glide slope dashed line: from (130, 190) up at 3° to right edge ⇒ at x=780 → y=190 - (780-130)*tan(3°) ≈ 190-34 = 156
+      const RWY_X0 = 60, RWY_X1 = 200, RWY_Y = 190;
+      const TD_X = 175; // standard touchdown target ~1000 ft inside threshold
+      const GS_X1 = 780, GS_Y1 = 156;
+
+      function gsY(x) {
+        // dashed glide slope: passes (TD_X,190) and (GS_X1,GS_Y1)
+        const t = (x - TD_X) / (GS_X1 - TD_X);
+        return RWY_Y + (GS_Y1 - RWY_Y) * t;
+      }
+
+      // Case definitions — each returns aircraft (x,y) for given t in [0..1+overrun]
+      // and the actual touchdown x.
+      const cases = {
+        good: {
+          color: 'var(--good)',
+          // follows GS exactly until touchdown at TD_X then rolls along runway
+          path: (t) => {
+            // t=0 starts at right edge (x=780, y=GS_Y1)
+            // touchdown at t=1: x=TD_X, y=190; then roll-out 0..0.3 extra
+            if (t <= 1) {
+              const x = 780 - (780 - TD_X) * t;
+              return { x, y: gsY(x), grounded: t === 1 };
+            }
+            // roll on ground after touchdown (continues right→left along runway)
+            const tt = (t - 1) / 0.3;
+            const x = TD_X - (TD_X - (RWY_X0 + 15)) * Math.min(tt, 1);
+            return { x, y: 190, grounded: true };
+          },
+          touchdownX: TD_X,
+          tdLabel: '0 ft',
+          tdColor: 'var(--good)',
+          verdict: 'SAFE TOUCHDOWN',
+        },
+        warn: {
+          color: 'var(--warn)',
+          // shallower descent, stays above GS, touches down PAST runway
+          path: (t) => {
+            // start higher (y0 = 130) and descend to RWY_Y at x ≈ 30 (PAST the runway, off left side)
+            // i.e., overshoots the runway entirely
+            if (t <= 1) {
+              const x = 780 - (780 - 25) * t;
+              const y0 = 130;
+              const y = y0 + (RWY_Y - y0) * t; // linear, shallower than GS
+              return { x, y, grounded: false };
+            }
+            const x = 25;
+            return { x, y: 190, grounded: true };
+          },
+          touchdownX: 25, // past runway start (off-screen left of threshold) — overshoot
+          tdLabel: '+1800 ft past target',
+          tdColor: 'var(--warn)',
+          verdict: 'OVERSHOOT · GO AROUND',
+        },
+        bad: {
+          color: 'var(--bad)',
+          // steeper descent, hits ground SHORT of runway threshold
+          path: (t) => {
+            // start at (780, GS_Y1), descend faster; reaches ground at x ≈ 350 (well before runway threshold at 60)
+            const xImpact = 350;
+            const xRange = 780 - xImpact;
+            if (t <= 1) {
+              const x = 780 - xRange * t;
+              const y = GS_Y1 + (RWY_Y - GS_Y1) * t;
+              return { x, y, grounded: t >= 1 };
+            }
+            return { x: xImpact, y: 190, grounded: true };
+          },
+          touchdownX: 350, // way short of runway
+          tdLabel: '-1500 ft short of target',
+          tdColor: 'var(--bad)',
+          verdict: 'TERRAIN — PULL UP',
+        },
+      };
+
+      // ─── render each panel ─────────────────────────────────────────────
+      function buildPanel(svg, key) {
+        const cfg = cases[key];
+        const NS = 'http://www.w3.org/2000/svg';
+
+        // ground & runway
+        const ground = document.createElementNS(NS, 'rect');
+        ground.setAttribute('x', 0); ground.setAttribute('y', 190);
+        ground.setAttribute('width', 800); ground.setAttribute('height', 30);
+        ground.setAttribute('fill', '#0a1d30');
+        svg.appendChild(ground);
+
+        const groundLine = document.createElementNS(NS, 'line');
+        groundLine.setAttribute('x1', 0); groundLine.setAttribute('y1', 190);
+        groundLine.setAttribute('x2', 800); groundLine.setAttribute('y2', 190);
+        groundLine.setAttribute('stroke', 'var(--runway)');
+        groundLine.setAttribute('stroke-opacity', 0.4);
+        svg.appendChild(groundLine);
+
+        const rwy = document.createElementNS(NS, 'rect');
+        rwy.setAttribute('x', RWY_X0); rwy.setAttribute('y', 187);
+        rwy.setAttribute('width', RWY_X1 - RWY_X0); rwy.setAttribute('height', 6);
+        rwy.setAttribute('fill', 'var(--runway)');
+        svg.appendChild(rwy);
+
+        // runway threshold marker (aircraft flies right→left, so threshold is on the right)
+        const thLabel = document.createElementNS(NS, 'text');
+        thLabel.setAttribute('x', RWY_X1); thLabel.setAttribute('y', 208);
+        thLabel.setAttribute('text-anchor', 'end');
+        thLabel.setAttribute('fill', 'var(--muted)');
+        thLabel.setAttribute('font-size', 10);
+        thLabel.setAttribute('data-i18n-svg', 'rwy_threshold');
+        thLabel.textContent = 'RWY threshold ←';
+        svg.appendChild(thLabel);
+        const endLabel = document.createElementNS(NS, 'text');
+        endLabel.setAttribute('x', RWY_X0); endLabel.setAttribute('y', 208);
+        endLabel.setAttribute('fill', 'var(--muted)');
+        endLabel.setAttribute('font-size', 10);
+        endLabel.setAttribute('data-i18n-svg', 'rwy_end');
+        endLabel.textContent = 'end';
+        svg.appendChild(endLabel);
+
+        // altitude grid
+        [80, 120, 160].forEach((y, i) => {
+          const ln = document.createElementNS(NS, 'line');
+          ln.setAttribute('x1', 0); ln.setAttribute('y1', y);
+          ln.setAttribute('x2', 800); ln.setAttribute('y2', y);
+          ln.setAttribute('stroke', 'var(--grid)');
+          ln.setAttribute('stroke-dasharray', '2 6');
+          svg.appendChild(ln);
+          const t = document.createElementNS(NS, 'text');
+          t.setAttribute('x', 780); t.setAttribute('y', y - 2);
+          t.setAttribute('text-anchor', 'end'); t.setAttribute('fill', 'var(--muted)');
+          t.setAttribute('font-size', 9);
+          t.textContent = ['900 ft', '600 ft', '300 ft'][i];
+          svg.appendChild(t);
+        });
+
+        // standard glide slope dashed line
+        const gs = document.createElementNS(NS, 'line');
+        gs.setAttribute('x1', TD_X); gs.setAttribute('y1', RWY_Y);
+        gs.setAttribute('x2', GS_X1); gs.setAttribute('y2', GS_Y1);
+        gs.setAttribute('stroke', 'var(--good)');
+        gs.setAttribute('stroke-dasharray', '4 6');
+        gs.setAttribute('stroke-width', 1.4);
+        gs.setAttribute('stroke-opacity', 0.85);
+        svg.appendChild(gs);
+
+        const gsLabel = document.createElementNS(NS, 'text');
+        gsLabel.setAttribute('x', 700); gsLabel.setAttribute('y', gsY(700) - 6);
+        gsLabel.setAttribute('fill', 'var(--good)'); gsLabel.setAttribute('font-size', 10);
+        gsLabel.setAttribute('data-i18n-svg', 'gs_label');
+        gsLabel.textContent = 'standard 3° glide slope';
+        svg.appendChild(gsLabel);
+
+        // standard touchdown target dot (always green)
+        const tdRing = document.createElementNS(NS, 'circle');
+        tdRing.setAttribute('cx', TD_X); tdRing.setAttribute('cy', 190);
+        tdRing.setAttribute('r', 6); tdRing.setAttribute('fill', 'none');
+        tdRing.setAttribute('stroke', 'var(--good)'); tdRing.setAttribute('stroke-width', 1.5);
+        tdRing.setAttribute('opacity', 0.9);
+        svg.appendChild(tdRing);
+        const tdDot = document.createElementNS(NS, 'circle');
+        tdDot.setAttribute('cx', TD_X); tdDot.setAttribute('cy', 190);
+        tdDot.setAttribute('r', 2.5); tdDot.setAttribute('fill', 'var(--good)');
+        svg.appendChild(tdDot);
+        const tdLabel = document.createElementNS(NS, 'text');
+        tdLabel.setAttribute('x', TD_X); tdLabel.setAttribute('y', 175);
+        tdLabel.setAttribute('text-anchor', 'middle'); tdLabel.setAttribute('fill', 'var(--good)');
+        tdLabel.setAttribute('font-size', 9);
+        tdLabel.setAttribute('data-i18n-svg', 'target_label');
+        tdLabel.textContent = 'TARGET';
+        svg.appendChild(tdLabel);
+
+        // trail (solid, in case color)
+        const trail = document.createElementNS(NS, 'polyline');
+        trail.setAttribute('fill', 'none');
+        trail.setAttribute('stroke', cfg.color);
+        trail.setAttribute('stroke-width', 2.2);
+        trail.setAttribute('stroke-linejoin', 'round');
+        trail.setAttribute('opacity', 0.95);
+        svg.appendChild(trail);
+
+        // actual touchdown marker (revealed at touchdown)
+        const actualMarker = document.createElementNS(NS, 'g');
+        actualMarker.setAttribute('opacity', 0);
+        const actualDot = document.createElementNS(NS, 'circle');
+        actualDot.setAttribute('cx', cfg.touchdownX);
+        actualDot.setAttribute('cy', 190);
+        actualDot.setAttribute('r', 4);
+        actualDot.setAttribute('fill', cfg.tdColor);
+        actualMarker.appendChild(actualDot);
+        const actualPulse = document.createElementNS(NS, 'circle');
+        actualPulse.setAttribute('cx', cfg.touchdownX);
+        actualPulse.setAttribute('cy', 190);
+        actualPulse.setAttribute('r', 9);
+        actualPulse.setAttribute('fill', 'none');
+        actualPulse.setAttribute('stroke', cfg.tdColor);
+        actualPulse.setAttribute('stroke-width', 1.5);
+        actualPulse.setAttribute('opacity', 0.7);
+        actualMarker.appendChild(actualPulse);
+        // arrow from TARGET → actual touchdown to show offset (only if not on slope)
+        if (key !== 'good') {
+          const arrow = document.createElementNS(NS, 'path');
+          const dx = cfg.touchdownX - TD_X;
+          const yLine = 175;
+          const x1 = TD_X + (dx > 0 ? 8 : -8);
+          const x2 = cfg.touchdownX - (dx > 0 ? 6 : -6);
+          arrow.setAttribute('d', `M ${x1} ${yLine} L ${x2} ${yLine}`);
+          arrow.setAttribute('stroke', cfg.tdColor);
+          arrow.setAttribute('stroke-width', 1.2);
+          arrow.setAttribute('stroke-dasharray', '2 3');
+          arrow.setAttribute('marker-end', 'url(#arrowhead-' + key + ')');
+          actualMarker.appendChild(arrow);
+
+          // arrowhead marker
+          const defs = document.createElementNS(NS, 'defs');
+          defs.innerHTML = `<marker id="arrowhead-${key}" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="${key === 'warn' ? '#f59e0b' : '#ef4444'}"/></marker>`;
+          svg.appendChild(defs);
+
+          const offLabel = document.createElementNS(NS, 'text');
+          offLabel.setAttribute('x', (TD_X + cfg.touchdownX) / 2);
+          offLabel.setAttribute('y', 170);
+          offLabel.setAttribute('text-anchor', 'middle');
+          offLabel.setAttribute('fill', cfg.tdColor);
+          offLabel.setAttribute('font-size', 9);
+          offLabel.setAttribute('data-i18n-svg', key === 'warn' ? 'offset_overshoot' : 'offset_undershoot');
+          offLabel.textContent = key === 'warn' ? 'overshoot →' : '← undershoot';
+          actualMarker.appendChild(offLabel);
+        }
+        svg.appendChild(actualMarker);
+
+        // aircraft (mirrored horizontally so nose points left, matching flight direction right→left)
+        const plane = document.createElementNS(NS, 'use');
+        plane.setAttribute('href', '#planeSideSym');
+        plane.setAttribute('width', 60); plane.setAttribute('height', 28);
+        svg.appendChild(plane);
+
+        return { trail, plane, actualMarker, cfg };
+      }
+
+      const panels = ['good', 'warn', 'bad'].map((key) => {
+        const svg = document.querySelector(`svg[data-case="${key}"]`);
+        return { key, svg, ...buildPanel(svg, key) };
+      });
+
+      // ─── i18n ────────────────────────────────────────────
+      const i18n = {
+        en: {
+          title: 'AgentILS <span class="sub">— Glide slope · 3 cases</span>',
+          subtitle: '— Glide slope · 3 cases',
+          lede: "Three independent loops. Each case shows the same runway and the same standard 3° glide slope (dashed green); the difference is the aircraft's actual flight path (solid). The green dot on the runway is where the standard glide slope predicts touchdown — the colored dot is where the aircraft actually lands.",
+          caseA_title: 'Case A',
+          caseA_tag: 'standard approach',
+          caseA_badge: 'ON SLOPE',
+          caseA_offset: '0 ft from target',
+          caseA_verdict: 'SAFE TOUCHDOWN',
+          caseB_title: 'Case B',
+          caseB_tag: 'above glide slope',
+          caseB_badge: 'TOO HIGH',
+          caseB_offset: '+1800 ft past target (long landing)',
+          caseB_verdict: 'OVERSHOOT · GO AROUND',
+          caseC_title: 'Case C',
+          caseC_tag: 'below glide slope',
+          caseC_badge: 'TOO LOW',
+          caseC_offset: '-1500 ft short of target (terrain impact)',
+          caseC_verdict: 'TERRAIN — PULL UP',
+          td_label: 'Touchdown distance:',
+          legend_line1:
+            '<span class="swatch dashed"></span> standard 3° glide slope (reference) · ' +
+            '<span class="swatch solid-good"></span> actual flight path (safe) · ' +
+            '<span class="swatch solid-warn"></span> actual (too high) · ' +
+            '<span class="swatch solid-bad"></span> actual (too low)',
+          legend_line2:
+            '<span class="dot good"></span> standard touchdown target · ' +
+            '<span class="dot warn"></span> actual touchdown (overshoot) · ' +
+            '<span class="dot bad"></span> actual touchdown (undershoot / terrain)',
+          record_hint:
+            'To export each panel as its own GIF: capture the SVG element with <code>data-case="good"</code> / <code>"warn"</code> / <code>"bad"</code> over one full cycle (~5s).',
+          rwy_threshold: 'RWY threshold ←',
+          rwy_end: 'end',
+          gs_label: 'standard 3° glide slope',
+          target_label: 'TARGET',
+          offset_overshoot: 'overshoot →',
+          offset_undershoot: '← undershoot',
+        },
+        zh: {
+          title: 'AgentILS <span class="sub">— 下滑道 · 三种场景</span>',
+          subtitle: '— 下滑道 · 三种场景',
+          lede: '三个独立循环。同一条跑道、同一条标准 3° 下滑道（绿色虚线）；不同的是飞机实际航迹（实线）。跑道上的绿点是标准下滑道预计的接地点——彩色点是飞机本次实际接地位置。',
+          caseA_title: '场景 A',
+          caseA_tag: '标准进近',
+          caseA_badge: '在下滑道上',
+          caseA_offset: '距 target 0 英尺',
+          caseA_verdict: '安全接地',
+          caseB_title: '场景 B',
+          caseB_tag: '高于下滑道',
+          caseB_badge: '过高',
+          caseB_offset: '超过 target +1800 英尺（长距离着陆）',
+          caseB_verdict: '超出跑道 · 复飞',
+          caseC_title: '场景 C',
+          caseC_tag: '低于下滑道',
+          caseC_badge: '过低',
+          caseC_offset: '距 target -1500 英尺（提前撞地）',
+          caseC_verdict: '撞地告警 — PULL UP',
+          td_label: '接地偏移：',
+          legend_line1:
+            '<span class="swatch dashed"></span> 标准 3° 下滑道（参考） · ' +
+            '<span class="swatch solid-good"></span> 实际航迹（安全） · ' +
+            '<span class="swatch solid-warn"></span> 实际（过高） · ' +
+            '<span class="swatch solid-bad"></span> 实际（过低）',
+          legend_line2:
+            '<span class="dot good"></span> 标准接地 target · ' +
+            '<span class="dot warn"></span> 实际接地（超出） · ' +
+            '<span class="dot bad"></span> 实际接地（提前 / 撞地）',
+          record_hint:
+            '如需将三个面板分别导出为独立 GIF：抓取带 <code>data-case="good"</code> / <code>"warn"</code> / <code>"bad"</code> 的 SVG，录一个完整循环（约 5 秒）。',
+          rwy_threshold: '跑道入口 ←',
+          rwy_end: '末端',
+          gs_label: '标准 3° 下滑道',
+          target_label: '标准 TARGET',
+          offset_overshoot: '超出 →',
+          offset_undershoot: '← 提前',
+        },
+      };
+
+      function applyLang(lang) {
+        const dict = i18n[lang];
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-i18n');
+          if (dict[key] !== undefined) el.innerHTML = dict[key];
+        });
+        document.querySelectorAll('[data-i18n-svg]').forEach((el) => {
+          const key = el.getAttribute('data-i18n-svg');
+          if (dict[key] !== undefined) el.textContent = dict[key];
+        });
+        document.documentElement.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+        document.querySelectorAll('.langSwitch button').forEach((btn) => {
+          btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+        });
+      }
+      document.querySelectorAll('.langSwitch button').forEach((btn) => {
+        btn.addEventListener('click', () => applyLang(btn.getAttribute('data-lang')));
+      });
+      window.applyLang = applyLang;
+      applyLang('en');
+
+      // ─── animation loop (each panel has its own timeline) ──────────────
+      const CASE_DURATION = 4500;
+      const HOLD = 1200;
+
+      const timelines = panels.map((p) => ({
+        ...p,
+        start: performance.now() + Math.random() * 200,
+        pts: [],
+      }));
+
+      function frame(now) {
+        timelines.forEach((p) => {
+          const elapsedFull = now - p.start;
+          let t = elapsedFull / CASE_DURATION;
+
+          if (t > 1 + 0.3) {
+            // restart after extended hold
+            if (elapsedFull > CASE_DURATION + HOLD) {
+              p.start = now;
+              p.pts = [];
+              p.trail.setAttribute('points', '');
+              p.actualMarker.setAttribute('opacity', 0);
+              return;
+            }
+            t = 1.3;
+          }
+
+          const r = p.cfg.path(t);
+          // record point
+          p.pts.push(`${r.x.toFixed(1)},${r.y.toFixed(1)}`);
+          p.trail.setAttribute('points', p.pts.join(' '));
+
+          // plane (mirror around its center so nose points left)
+          p.plane.setAttribute('transform', `translate(${r.x},${r.y}) scale(-1,1) translate(-30,-14)`);
+          p.plane.removeAttribute('x'); p.plane.removeAttribute('y');
+
+          // reveal actual touchdown marker once grounded
+          if (r.grounded) {
+            p.actualMarker.setAttribute('opacity', 1);
+          }
+        });
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>

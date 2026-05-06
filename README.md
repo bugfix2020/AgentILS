@@ -1,5 +1,7 @@
 # AgentILS
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 > **A**gent **I**nstrument **L**anding **S**ystem — borrowing the aviation ILS metaphor: an LLM agent is a pilot, the IDE is the cockpit, and this monorepo is the runway-side beacon stack that keeps the agent's approach stable, observable, and abortable.
 
 The aviation ILS feeds a pilot two perpendicular guidance signals (localizer + glide slope) plus a marker chain telling the cockpit "you are X km out, on path / off path". AgentILS does the analogous thing for an LLM agent driving a real codebase:
@@ -13,6 +15,14 @@ The aviation ILS feeds a pilot two perpendicular guidance signals (localizer + g
 | Tower comm                    | `packages/extensions/agentils-vscode` webview — pilot ↔ tower channel               |
 
 If you have ever stared at a 30-minute-old LLM session and asked "where exactly did the agent depart from the plan?", you wanted an ILS.
+
+|                                                        |                                                 |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| **Case A — standard approach**                         | ![On glide slope](docs/assets/ils-on-slope.gif) |
+| **Case B — above glide slope** (overshoot · go around) | ![Too high](docs/assets/ils-too-high.gif)       |
+| **Case C — below glide slope** (terrain · pull up)     | ![Too low](docs/assets/ils-too-low.gif)         |
+
+> Dashed green = the standard 3° glide slope. Solid colored = the aircraft's actual flight path. Green dot on the runway = where the standard approach predicts touchdown; the colored dot is where the aircraft actually lands. AgentILS plays the role of the dashed line for an LLM run.
 
 ## Hard Constraint
 
