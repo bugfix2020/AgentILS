@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build / typecheck / lint / test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Verify instruction sync (no drift)
+        run: pnpm sync:instructions:check
+
+      - name: Verify changeset present (PR only, when packages/* changed)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -e
+          # If a PR touches packages/* but adds no .changeset/*.md, fail.
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_PKG=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'packages/**' | grep -v '^packages/extensions/' || true)
+          if [ -z "$CHANGED_PKG" ]; then
+            echo "No publishable package files touched. Skipping changeset check."
+            exit 0
+          fi
+          ADDED_CHANGESET=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" -- '.changeset/*.md' | grep -v 'README.md' || true)
+          if [ -z "$ADDED_CHANGESET" ]; then
+            echo "::error::This PR modifies packages/** but adds no .changeset/*.md. Run: pnpm changeset"
+            exit 1
+          fi
+          echo "Found changeset: $ADDED_CHANGESET"
