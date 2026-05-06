@@ -6,7 +6,10 @@ export type Level = 'debug' | 'info' | 'warn' | 'error'
 
 const DEFAULT_HTTP_LOG_HOST = '127.0.0.1'
 const DEFAULT_HTTP_LOG_PORT = 12138
-const DEFAULT_LOG_FILE_PREFIX = 'agentils'
+// Keep these defaults in sync with packages/logger/src/query.ts so direct SDK
+// callers and CLI users land in the same log directory and file naming scheme.
+const DEFAULT_LOG_FILE_PREFIX = 'agent-ils'
+const DEFAULT_LOG_DIR_REL = '.agent-ils/logger/logs'
 const MAX_BODY_BYTES = 1024 * 1024
 const LEVELS = new Set<Level>(['debug', 'info', 'warn', 'error'])
 
@@ -145,7 +148,7 @@ export function defaultHttpLogEndpoint(): string {
 }
 
 export function defaultLogDir(): string {
-    return process.env.AGENTILS_LOG_DIR ?? join(process.cwd(), '.hc', 'logs')
+    return process.env.AGENTILS_LOG_DIR ?? join(process.cwd(), DEFAULT_LOG_DIR_REL)
 }
 
 export function createHttpLogger(options: HttpLoggerOptions): Logger {
