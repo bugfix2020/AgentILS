@@ -121,21 +121,22 @@ runtime.disposeNotifier = registration.dispose
     git checkout main && git pull --ff-only      # 总是从最新 main 出发
     git checkout -b <type>/<short-kebab>         # 遵守 branch-name-standard skill
     # ...编码 + commit...
-    git push -u origin <branch>                  # 第一次 push 若 CHANGELOG 落后，
-                                                  # pre-push hook 会自动 commit "chore(changelog): sync"
-                                                  # 并中止；再 push 一次即可，target = main
+    pnpm changeset                                # 改动了 packages/* → 生成一个 .changeset/<name>.md
+    git add .changeset && git commit -m "chore(changeset): <pkg> <bump>"
+    git push -u origin <branch>                  # 开 PR target = main
     ```
 
 - 历史背景：早期试过 `feat → dev → main` 的线性流，结果：(a) PR 合并时 dev 上的修改没同步进 main，导致后续 push 丢失；(b) 单人/双人开发下 dev 没有真实 staging 验证场景，只是制造同步负担。已统一收敛到 GitHub Flow。
 
 ## 发布前 Changelog 同步（**强约束**）
 
-每次 `git push` 之前**必须**重新生成并提交 CHANGELOG.md，让 main 上的 CHANGELOG 始终与最新 commit 保持一致。
+**Changelog 由 release 流程驱动，不在 push 时生成。** 这是 monorepo 多 npm 包独立发版的正确边界。
 
-- 命令：`pnpm changelog:all`（仓库尚无 release tag，全量重建避免 incremental 模式产生重复段落）。
-- 自动化：`.husky/pre-push` 是**半自动**模式：
-    - 一致 → 放行 push。
-    - 有差异 → hook **自动**执行 `pnpm changelog:all` 并 `git commit -m "chore(changelog): sync"`（追加在 HEAD 之上），然后**中止当前 push**；开发者只需再 `git push` 一次即可（git 在 hook 触发前就已经确定要推送的 refs，新 commit 不会进当前推送，必须重推一次）。
-    - 第二次 push 时 HEAD 已是 `chore(changelog): sync`，命中 case 分支跳过检查，直接放行（避免 self-reference 死循环）。
-- 不要在 PR 描述里手写 changelog；以 CHANGELOG.md 为唯一真值源。
-- **不要**把 changelog 生成放进 pre-commit：commit 太频繁、消耗高、commit 范畴会被 CHANGELOG 改动污染、产生噪音 chore(changelog) commit 爆炸。push 是合适的边界。
+- 每个 npm 包（`@agent-ils/mcp` / `cli` / `quality-gate` / `logger`）应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
+- 工具：使用 [`@changesets/cli`](https://github.com/changesets/changesets)（在另一个 PR `chore/setup-changesets` 中引入和落地配置）。
+- 工作流（落地后）：
+    - 每个改动了 `packages/*` 的 PR 必须配套运行 `pnpm changeset`，生成一个 `.changeset/<name>.md` 描述受影响的包和 bump 类型（patch / minor / major）。
+    - PR review 检查 `.changeset/` 是否存在；纯文档 / `apps/*` / `extensions/*` / `scripts/*` 改动可豁免。
+    - Release：`pnpm changeset version`（自动 bump version + 写 per-package CHANGELOG）→ 提交 → `pnpm changeset publish`（自动 npm publish + 打 git tag）→ `git push --follow-tags`。
+- **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。
+- 在 changesets 落地前，临时手动维护 per-package `CHANGELOG.md`：`packages/<pkg>` 目录运行 `npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0 --commit-path .` 然后 commit。
