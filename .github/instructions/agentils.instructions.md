@@ -137,10 +137,15 @@ runtime.disposeNotifier = registration.dispose
 **Changelog 由 release 流程驱动，不在 push 时生成。** 这是 monorepo 多 npm 包独立发版的正确边界。
 
 - 每个 npm 包（`@agent-ils/mcp` / `cli` / `quality-gate` / `logger`）应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
-- 工具：使用 [`@changesets/cli`](https://github.com/changesets/changesets)（在另一个 PR `chore/setup-changesets` 中引入和落地配置）。
-- 工作流（落地后）：
-    - 每个改动了 `packages/*` 的 PR 必须配套运行 `pnpm changeset`，生成一个 `.changeset/<name>.md` 描述受影响的包和 bump 类型（patch / minor / major）。
-    - PR review 检查 `.changeset/` 是否存在；纯文档 / `apps/*` / `extensions/*` / `scripts/*` 改动可豁免。
-    - Release：`pnpm changeset version`（自动 bump version + 写 per-package CHANGELOG）→ 提交 → `pnpm changeset publish`（自动 npm publish + 打 git tag）→ `git push --follow-tags`。
-- **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。
-- 在 changesets 落地前，临时手动维护 per-package `CHANGELOG.md`：`packages/<pkg>` 目录运行 `npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0 --commit-path .` 然后 commit。
+- 工具：[`@changesets/cli`](https://github.com/changesets/changesets) 已在仓库落地，配置见 [`.changeset/config.json`](.changeset/config.json)（`baseBranch: main`、`access: public`、`fixed: []`）。
+- 工作流：
+    - 每个改动了 `packages/*` 的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。
+    - PR review 检查 `.changeset/` 是否存在新文件；纯文档 / `apps/*` / `extensions/*` / `scripts/*` / `.changeset/` 配置本身的改动可豁免。
+    - Release（在 `main` 分支或 release 分支上执行）：
+        ```bash
+        pnpm changeset version          # 消费 .changeset/*.md，bump version + 写 per-package CHANGELOG
+        git add . && git commit -m "chore(release): version packages"
+        pnpm changeset publish          # 自动 npm publish + 打 git tag
+        git push --follow-tags
+        ```
+- **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。仓库根的 `.husky/pre-push` 和 `package.json` 里曾经的 `changelog` / `generate:changelog*` 脚本均已废弃删除，不要复活。
