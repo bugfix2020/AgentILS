@@ -1,6 +1,7 @@
 {
     "name": "@agent-ils/mcp",
     "version": "0.1.0",
+    "private": true,
     "description": "AgentILS core MCP server (stdio + HTTP dual transport, persisted state machine)",
     "type": "module",
     "main": "dist/index.js",
