@@ -11,6 +11,8 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # Required for npm Trusted Publisher (OIDC). The release job exchanges
+  # this token with npm to publish without a long-lived NPM_TOKEN.
   id-token: write
 
 jobs:
@@ -23,7 +25,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Required so changesets/action can push the Version Packages PR.
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install pnpm
@@ -37,6 +38,13 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+          # always-auth + registry-url ensures npm/pnpm publish uses
+          # the registry that issues OIDC trusted-publisher tokens.
+
+      # npm >= 11.5.1 is required for OIDC trusted publisher support.
+      # Node 22 LTS ships with an older npm; upgrade explicitly.
+      - name: Upgrade npm for OIDC publish
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -56,4 +64,9 @@ jobs:
           title: "chore(release): version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # No NPM_TOKEN: this repo uses npm Trusted Publisher (OIDC).
+          # Each package (@agent-ils/mcp / cli / quality-gate / logger)
+          # must register this repo + release.yml as a trusted publisher
+          # at https://www.npmjs.com/package/<name>/access (Trusted Publisher).
+          NPM_CONFIG_PROVENANCE: "true"
+

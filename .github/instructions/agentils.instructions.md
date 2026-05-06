@@ -146,7 +146,7 @@ runtime.disposeNotifier = registration.dispose
             - 如果 `.changeset/*.md` 存在 → 自动开（或更新）一个 `chore(release): version packages` PR，PR 内容是 `pnpm changeset version` 的产物（bump version + 写 per-package CHANGELOG）。
             - 当那个 Version PR 被 merge 后（`.changeset/*.md` 全部消费完）→ action 自动跑 `pnpm changeset publish`：发布到 npm + 打 git tag + 推送。
         - 维护者**只需 review 并 merge Version PR**，不要在本地跑 `pnpm changeset version` / `publish`。
-    - 前置条件：`NPM_TOKEN`（npm Automation token）必须配置在 GitHub repo Secrets。
+    - 前置条件：每个 npm 包（`@agent-ils/mcp` / `cli` / `quality-gate` / `logger`）必须在 npm 注册 **Trusted Publisher（OIDC）**，指向本仓库 + workflow `release.yml`。配置入口：`https://www.npmjs.com/package/<pkg>/access` → Trusted Publisher → GitHub Actions。**不需要** `NPM_TOKEN` secret，OIDC 直接通过 GitHub Actions `id-token` 完成认证，并自动带 `--provenance` 签名。
 - **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。仓库根的 `.husky/pre-push` 和 `package.json` 里曾经的 `changelog` / `generate:changelog*` 脚本均已废弃删除，不要复活。
 
 ## CI（**强约束**）
