@@ -104,3 +104,39 @@ runtime.disposeNotifier = registration.dispose
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
 - npm 包名：`@agent-ils/mcp`、`@agent-ils/cli`；扩展 publisher：`bugfix2020`。
 - HTTP MCP 端点：默认 `http://127.0.0.1:8788/mcp`，可通过 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖。
+
+## 分支与 PR 流（Branch Flow，**强约束**）
+
+> 这条规则的违反代价极高，任何 agent 在开 PR 前**必须**确认 base 分支。
+
+本仓库采用 **GitHub Flow**（不使用 staging 分支）：
+
+- **`main`** 是唯一长期分支，也是 npm/README 的发布源。
+- 所有 feature / fix / chore / docs 分支都从 `main` 切出，PR 也**只能**回到 `main`。
+- **不**使用 `dev` / `develop` / `staging` 等中间分支；如果需要分阶段发布或灰度，临时拉 `release/v0.x` 分支挑 commit 即可，不要常驻。
+- 任何工具自动开 PR 时（如 `mcp_gitkraken_pull_request_create`），`target_branch` **默认且必须是 `main`**。
+- 推荐工作流：
+
+    ```
+    git checkout main && git pull --ff-only      # 总是从最新 main 出发
+    git checkout -b <type>/<short-kebab>         # 遵守 branch-name-standard skill
+    # ...编码 + commit...
+    pnpm changeset                                # 改动了 packages/* → 生成一个 .changeset/<name>.md
+    git add .changeset && git commit -m "chore(changeset): <pkg> <bump>"
+    git push -u origin <branch>                  # 开 PR target = main
+    ```
+
+- 历史背景：早期试过 `feat → dev → main` 的线性流，结果：(a) PR 合并时 dev 上的修改没同步进 main，导致后续 push 丢失；(b) 单人/双人开发下 dev 没有真实 staging 验证场景，只是制造同步负担。已统一收敛到 GitHub Flow。
+
+## 发布前 Changelog 同步（**强约束**）
+
+**Changelog 由 release 流程驱动，不在 push 时生成。** 这是 monorepo 多 npm 包独立发版的正确边界。
+
+- 每个 npm 包（`@agent-ils/mcp` / `cli` / `quality-gate` / `logger`）应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
+- 工具：使用 [`@changesets/cli`](https://github.com/changesets/changesets)（在另一个 PR `chore/setup-changesets` 中引入和落地配置）。
+- 工作流（落地后）：
+    - 每个改动了 `packages/*` 的 PR 必须配套运行 `pnpm changeset`，生成一个 `.changeset/<name>.md` 描述受影响的包和 bump 类型（patch / minor / major）。
+    - PR review 检查 `.changeset/` 是否存在；纯文档 / `apps/*` / `extensions/*` / `scripts/*` 改动可豁免。
+    - Release：`pnpm changeset version`（自动 bump version + 写 per-package CHANGELOG）→ 提交 → `pnpm changeset publish`（自动 npm publish + 打 git tag）→ `git push --follow-tags`。
+- **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。
+- 在 changesets 落地前，临时手动维护 per-package `CHANGELOG.md`：`packages/<pkg>` 目录运行 `npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0 --commit-path .` 然后 commit。
