@@ -48,7 +48,7 @@
 
 - [`packages/quality-gate/src/precommit/`](../../packages/quality-gate/src/precommit/) 整个目录是 untracked（上一轮 ECAM 工作未提交且 panel.tsx 缺失）。本次仅写最小 stub。**v2 需要决定**：
     - A. 完整重做 ECAM panel（继续 ink + Braille 路线）
-    - B. 拉回 [`scripts/dev/pre-commit-gate.mjs`](../../scripts/dev/pre-commit-gate.mjs) 的简单 list 风格
+    - B. ~~拉回 `scripts/dev/pre-commit-gate.mjs` 的简单 list 风格~~（已弃用：该脚本已在后续 chore 中删除）
     - C. 直接删 src/precommit 目录（precommit 子命令独立移到新包）
 
 ---
