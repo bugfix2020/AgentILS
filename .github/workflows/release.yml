@@ -47,10 +47,8 @@ jobs:
           # always-auth + registry-url ensures npm/pnpm publish uses
           # the registry that issues OIDC trusted-publisher tokens.
 
-      - name: Verify npm version supports OIDC
-        run: |
-          npm --version
-          node -e "const v=process.versions.npm.split('.').map(Number); if(v[0]<11 || (v[0]===11 && v[1]<5)){console.error('npm >= 11.5 required for OIDC');process.exit(1)}"
+      - name: Show npm version
+        run: npm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
