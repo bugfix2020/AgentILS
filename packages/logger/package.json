@@ -2,6 +2,29 @@
     "name": "@agent-ils/logger",
     "version": "0.0.1",
     "description": "Local JSONL logger for AI-assisted debugging, with browser writes and CLI reads.",
+    "keywords": [
+        "agentils",
+        "logger",
+        "jsonl",
+        "logging",
+        "debug",
+        "agent",
+        "llm",
+        "cli",
+        "browser",
+        "http"
+    ],
+    "homepage": "https://github.com/bugfix2020/AgentILS/tree/main/packages/logger#readme",
+    "bugs": {
+        "url": "https://github.com/bugfix2020/AgentILS/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bugfix2020/AgentILS.git",
+        "directory": "packages/logger"
+    },
+    "license": "MIT",
+    "author": "liuyuxuan <ts02315607@gmail.com>",
     "type": "module",
     "main": "./dist/index.cjs",
     "module": "./dist/index.js",
@@ -31,14 +54,17 @@
     },
     "files": [
         "dist",
-        "README.md"
+        "README.md",
+        "README.zh-CN.md",
+        "LLM_USAGE.md",
+        "templates"
     ],
     "publishConfig": {
         "access": "public",
         "registry": "https://registry.npmjs.org/"
     },
     "scripts": {
-        "build": "tsup",
+        "build": "tsup && node scripts/copy-templates.mjs",
         "dev": "tsup --watch",
         "typecheck": "tsc --noEmit"
     },

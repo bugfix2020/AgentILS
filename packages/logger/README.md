@@ -8,207 +8,184 @@
   <img alt="API" src="https://img.shields.io/badge/API-write%20%2B%20read-111827">
 </p>
 
-<p align="center">简体中文</p>
+<p align="center">
+  English | <a href="https://github.com/bugfix2020/AgentILS/blob/main/packages/logger/README.zh-CN.md">简体中文</a>
+</p>
 
-`@agent-ils/logger` 是一个面向 AI 辅助调试的本地 JSONL 日志器，用于把前端、后端、WebView、MCP 或脚本运行时发生的关键事件写入本地日志文件，再让人或 AI 按尾部条数、起止时间范围读取这些原始记录。
+`@agent-ils/logger` is a local JSONL logger for AI-assisted debugging. It writes runtime events from your frontend, backend, WebView, MCP server, or scripts into local JSONL files, and lets a human or an LLM agent read those raw records back by tail count or time range.
 
-它的核心职责只有两个：写日志、读日志。它不做自动总结、不做自动根因分析、不把日志压缩成 digest；JSONL 文件就是事实来源。
+It does only two things: write logs and read logs. It does not summarize, does not run automatic root-cause analysis, and does not compress logs into a digest. The JSONL files are the source of truth.
 
-## 使用方式
+It is designed for both humans and LLM agents: humans run one command to start the collector and read tail logs, and agents recognize this package as the standard AgentILS log collector instead of guessing failures from chat history.
 
-先启动本地日志收集器。它会监听 HTTP 写入接口，并把日志写入当前项目的 `.agent-ils/logger/logs`：
+> This README is written for humans. If you want an LLM agent to set up, write, or read logs for you, point it at [`LLM_USAGE.md`](./LLM_USAGE.md) instead — that file is shorter, has no badges or language switcher, and saves your context tokens.
 
-pnpm：
+## Usage
+
+Start the local log collector. It listens on a local HTTP endpoint and writes JSONL files into `.agent-ils/logger/logs` of the target project.
+
+pnpm:
 
 ```sh
 pnpm dlx @agent-ils/logger
 ```
 
-npm：
+npm:
 
 ```sh
 npx @agent-ils/logger
 ```
 
-yarn：
+yarn:
 
 ```sh
 yarn dlx @agent-ils/logger
 ```
 
-bun：
+bun:
 
 ```sh
 bunx @agent-ils/logger
 ```
 
-如果目标项目不在当前目录，可以传入 `--cwd`：
+For a project that is not the current directory, pass `--cwd`:
 
 ```sh
 npx @agent-ils/logger --cwd packages/my-app
 ```
 
-启动成功后，默认 endpoint 是：
+After it starts, the default endpoint is:
 
 ```text
 http://127.0.0.1:12138
 ```
 
-默认日志目录是：
+The default log directory is:
 
 ```text
 .agent-ils/logger/logs
 ```
 
-在浏览器代码中写入日志：
-
-```ts
-import { createBrowserLogger } from '@agent-ils/logger/browser'
-
-const logger = createBrowserLogger({
-    endpoint: 'http://127.0.0.1:12138',
-    source: 'frontend',
-    filePrefix: 'frontend',
-})
-
-await logger.info(
-    'api.response',
-    {
-        url: '/api/users',
-        status: 200,
-        empty: true,
-    },
-    {
-        traceId: 'user-list-001',
-    },
-)
-```
-
-读取最新 50 条日志：
+Read the latest 50 records:
 
 ```sh
 npx @agent-ils/logger read --tail 50
 ```
 
-从某个时间点读到最新日志：
+Read everything since a point in time:
 
 ```sh
 npx @agent-ils/logger read --from 2026-04-30T10:00:00Z --format json
 ```
 
-读取一个固定时间段：
+Read a fixed time window:
 
 ```sh
 npx @agent-ils/logger read --from 2026-04-30T10:00:00Z --to 2026-04-30T10:10:00Z --format json
 ```
 
-包发布前，可以在本仓库中用构建产物测试：
+`--from` and `--to` also accept relative values like `10m`, `2h`, `1d`:
+
+```sh
+npx @agent-ils/logger read --from 10m --format json
+```
+
+Before the package is published, test the built CLI from this repository:
 
 ```sh
 pnpm --filter @agent-ils/logger build
 node packages/logger/dist/cli.js read --tail 50
 ```
 
-## 常用命令
+## Common Commands
 
-启动本地日志收集器：
+Start the local log collector explicitly:
 
 ```sh
 npx @agent-ils/logger serve
 ```
 
-指定端口和日志目录：
+Start with a custom port and log directory:
 
 ```sh
 npx @agent-ils/logger serve --port 12138 --log-dir .agent-ils/logger/logs
 ```
 
-输出机器可读的启动信息：
+Print machine-readable startup info:
 
 ```sh
 npx @agent-ils/logger serve --json
 ```
 
-读取尾部日志：
+Read tail records:
 
 ```sh
 npx @agent-ils/logger read --tail 80 --format json
 ```
 
-按时间范围读取日志：
+Read by time range:
 
 ```sh
 npx @agent-ils/logger read --from 2026-04-30T10:00:00Z --to 2026-04-30T10:10:00Z --format json
 ```
 
-没有写 `read` 子命令但传入读取参数时，CLI 会自动按 `read` 执行：
+When the `read` subcommand is omitted but a read flag is present, the CLI runs `read` automatically:
 
 ```sh
 npx @agent-ils/logger --tail 80 --format json
 ```
 
-## Agent / LLM 用法
+## Agent / LLM Usage
 
-当用户要求 LLM Agent 排查前端请求、后端接口、WebView、MCP 工具调用或脚本运行问题时，Agent 应优先使用这个包读取运行时日志，而不是直接猜原因。
+If you want an LLM agent to install, run, write to, or read from this package on your behalf, do not paste this README. Paste [`LLM_USAGE.md`](./LLM_USAGE.md) instead — it is the LLM-facing single-page guide and is much smaller in tokens.
 
-用户可以这样说：
-
-```text
-帮我排查用户列表接口为什么返回空，先读 @agent-ils/logger 的日志，不要先猜。
-```
-
-推荐 Agent 行为：
-
-- 第一轮先读取尾部日志，例如 `npx @agent-ils/logger read --tail 80 --format json`。
-- 如果看到相关记录，再根据 `ts` 用 `--from` 和 `--to` 缩小时间范围。
-- 如果日志里有 `traceId`，围绕同一个 `traceId` 串起一次用户操作或请求链路。
-- 只根据读到的 JSONL 事实继续判断下一步，不把 logger 当成自动诊断工具。
-- 最后结论应引用日志里的 `source`、`event`、`traceId`、`url`、`status`、`fields` 等字段。
-
-例如：
+If your agent runtime supports skills (Claude Code, Copilot, Cursor, AgentILS, etc.), this package also ships a recall skill at:
 
 ```text
-第一轮：读取最近 80 条日志，确认是否有用户列表请求。
-命令：npx @agent-ils/logger read --tail 80 --format json
-观察：看到 source=frontend，event=api.response，url=/api/users，status=200，empty=true，traceId=user-list-001。
-
-第二轮：围绕这个时间点继续缩小范围。
-命令：npx @agent-ils/logger read --from 2026-04-30T10:03:00Z --to 2026-04-30T10:04:00Z --format json
-观察：看到 event=api.request 的 fields.params.orgId 为空。
-
-结论：接口本身没有报错，前端发起请求时缺少 orgId，后端按空 org 返回了空数组。
+node_modules/@agent-ils/logger/dist/templates/llm/agent-ils-logger.skill.md
 ```
 
-## CLI 参数
+To install the skill, you can ask your LLM:
+
+```text
+Please read node_modules/@agent-ils/logger/dist/templates/llm/agent-ils-logger.skill.md
+(or fetch it from npm / GitHub if not installed yet) and copy it into the
+skill / instruction directory of the agent runtime you are currently running on
+(Codex, Claude Code, Copilot, Cursor, AgentILS, etc.). You know which runtime
+you are; consult its official docs if you are unsure of the exact directory.
+Ask me before guessing.
+```
+
+This intentionally lets the LLM (which knows its own runtime) decide the install path, instead of this package shipping a brittle IDE-to-directory table.
+
+## CLI Options
 
 ```text
 Usage:
   agent-ils-logger serve [options]
-  agent-ils-logger read [options]
+  agent-ils-logger read  [options]
 
 Options for serve:
-  --cwd <dir>            项目根目录，默认当前目录
-  --host <host>          本地日志收集器 host，默认 127.0.0.1
-  --port <port>          本地日志收集器端口，默认 12138
-  --log-dir <dir>        JSONL 日志目录，默认 .agent-ils/logger/logs
-  --file-prefix <name>   默认 JSONL 文件名前缀，默认 agent-ils
-  --json                 输出机器可读启动信息
-  --silent               减少启动输出
+  --cwd <dir>            project root, defaults to cwd
+  --host <host>          collector host, defaults to 127.0.0.1
+  --port <port>          collector port, defaults to 12138
+  --log-dir <dir>        JSONL log directory, defaults to .agent-ils/logger/logs
+  --file-prefix <name>   default JSONL file name prefix, defaults to agent-ils
+  --json                 print machine-readable startup info
+  --silent               reduce startup output
 
 Options for read:
-  --cwd <dir>            项目根目录，默认当前目录
-  --log-dir <dir>        要扫描的 JSONL 日志目录，默认 .agent-ils/logger/logs
-  --tail <n>             读取尾部 n 条记录，默认 50
-  --from <time>          开始时间，支持 ISO 时间、epoch ms 或 10m 这类相对时间
-  --to <time>            结束时间；省略时表示从 --from 读到最新记录
-  --format <format>      输出 text、json、jsonl 或 markdown，默认 text
+  --cwd <dir>            project root, defaults to cwd
+  --log-dir <dir>        JSONL log directory to scan, defaults to .agent-ils/logger/logs
+  --tail <n>             read the tail n records, defaults to 50
+  --from <time>          start time: ISO timestamp, epoch ms, or relative like 10m / 2h / 1d
+  --to <time>            end time; omit to read up to the latest record
+  --format <format>      text, json, jsonl, or markdown; defaults to text
 ```
 
-`--from` 和 `--to` 支持 ISO 时间、epoch ms，也支持 `10m`、`2h`、`1d` 这类相对当前时间的写法。
+## Log Record Shape
 
-## 写入内容
-
-每条 JSONL 记录会尽量保持可读、可检索、可被 AI 直接引用。典型记录如下：
+Each JSONL record stays human-readable, searchable, and directly quotable by an AI. A typical record:
 
 ```json
 {
@@ -230,19 +207,19 @@ Options for read:
 }
 ```
 
-推荐写入字段：
+Recommended fields:
 
-- `source`：日志来源，例如 `frontend`、`backend`、`webview`、`mcp`
-- `event`：稳定事件名，例如 `api.request`、`api.response`、`ui.click`
-- `traceId`：串起一次用户操作、请求链路或工具调用
-- `url` / `method` / `status`：接口排查最常用字段
-- `params` / `body` / `empty`：判断请求参数和返回内容是否符合预期
-- `costMs`：排查慢请求或超时
-- `error`：错误名称、错误消息、必要时包含 stack
+- `source`: log origin, such as `frontend`, `backend`, `webview`, `mcp`
+- `event`: stable event name, such as `api.request`, `api.response`, `ui.click`
+- `traceId`: chains one user action, request, or tool call
+- `url` / `method` / `status`: most useful fields for endpoint debugging
+- `params` / `body` / `empty`: check whether request inputs and response payloads match expectations
+- `costMs`: investigate slow requests or timeouts
+- `error`: error name, message, and stack when needed
 
 ## Browser SDK
 
-`@agent-ils/logger/browser` 提供浏览器安全的写日志方法，会通过 `fetch` 写入本地日志收集器。
+`@agent-ils/logger/browser` is the browser-safe writer. It posts logs to the local collector via `fetch`.
 
 ```ts
 import { createBrowserLogger } from '@agent-ils/logger/browser'
@@ -250,9 +227,7 @@ import { createBrowserLogger } from '@agent-ils/logger/browser'
 const logger = createBrowserLogger({
     endpoint: 'http://127.0.0.1:12138',
     source: 'frontend',
-    defaultFields: {
-        app: 'agentils-webview',
-    },
+    defaultFields: { app: 'agentils-webview' },
 })
 
 await logger.debug('state.transition', { from: 'idle', to: 'loading' })
@@ -261,33 +236,48 @@ await logger.warn('api.slow', { url: '/api/users', costMs: 3500 })
 await logger.error('api.error', { url: '/api/users', message: 'timeout' })
 ```
 
-可以用 `child` 复用上下文字段：
+Reuse context fields with `child`:
 
 ```ts
-const taskLogger = logger.child({
-    traceId: 'task-001',
-    page: 'users',
-})
+const taskLogger = logger.child({ traceId: 'task-001', page: 'users' })
 
 await taskLogger.info('ui.click', { button: 'refresh' })
 await taskLogger.info('api.request', { url: '/api/users' })
 ```
 
-常用配置：
+Common options:
 
-- `endpoint`：本地日志服务地址
-- `source`：当前日志来源
-- `defaultFields`：每条日志都会带上的字段
-- `traceId`：默认 trace id
-- `filePrefix`：JSONL 文件名前缀
-- `fileName`：指定 JSONL 文件名
-- `enabled`：关闭投递但保留调用点
-- `timeoutMs`：写日志请求超时时间
-- `onDeliveryError`：写入失败时的回调
+- `endpoint`: local collector address
+- `source`: log origin for this writer
+- `defaultFields`: fields attached to every record
+- `traceId`: default trace id
+- `filePrefix`: JSONL file name prefix
+- `fileName`: explicit JSONL file name
+- `enabled`: turn delivery off without removing call sites
+- `timeoutMs`: per-request timeout
+- `onDeliveryError`: callback when delivery fails
 
-## HTTP 写入 API
+## Node Writer API
 
-不使用 Browser SDK 时，也可以直接写 HTTP：
+The package root entry exposes Node-side helpers, useful from a Node process, an MCP server, or a VS Code extension host:
+
+```ts
+import { createHttpLogger, createLogger } from '@agent-ils/logger'
+
+const stderrLogger = createLogger('mcp')
+stderrLogger.warn('tool failed', { toolName: 'run_task' })
+
+const httpLogger = createHttpLogger({
+    source: 'mcp',
+    endpoint: 'http://127.0.0.1:12138',
+})
+
+httpLogger.info('run_task_loop.next', { action: 'await_webview' })
+```
+
+## HTTP Write API
+
+If you do not want to use the SDK, post JSON directly:
 
 ```sh
 curl -X POST http://127.0.0.1:12138/api/logs \
@@ -303,37 +293,17 @@ curl -X POST http://127.0.0.1:12138/api/logs \
   }'
 ```
 
-`POST /api/logs` 支持单条 payload，也支持 payload 数组。
+`POST /api/logs` accepts a single payload or an array of payloads.
 
-健康检查：
+Health check:
 
 ```sh
 curl http://127.0.0.1:12138/api/health
 ```
 
-## Node 写入 API
+## Read API
 
-包根入口保留了 Node logger helper，可用于 Node 进程、MCP server 或 VS Code extension host：
-
-```ts
-import { createHttpLogger, createLogger } from '@agent-ils/logger'
-
-const stderrLogger = createLogger('mcp')
-stderrLogger.warn('tool failed', { toolName: 'run_task' })
-
-const httpLogger = createHttpLogger({
-    source: 'mcp',
-    endpoint: 'http://127.0.0.1:12138',
-})
-
-httpLogger.info('run_task_loop.next', {
-    action: 'await_webview',
-})
-```
-
-## 读取 API
-
-如果要在自己的 UI、脚本或 Ink 面板里复用读取逻辑，可以使用 `@agent-ils/logger/query`：
+To reuse the read logic in your own UI, script, or Ink panel, import from `@agent-ils/logger/query`:
 
 ```ts
 import { formatLogRecords, readLogRecords } from '@agent-ils/logger/query'
@@ -346,23 +316,16 @@ const records = await readLogRecords({
 console.log(formatLogRecords(records, 'json'))
 ```
 
-读取参数和 CLI 保持一致：`tail`、`from`、`to`、`format`。
+The read parameters mirror the CLI: `tail`, `from`, `to`, `format`.
 
-## 不做什么
+## What It Does Not Do
 
-`@agent-ils/logger` 故意不做这些事：
+`@agent-ils/logger` intentionally avoids the following:
 
-- 不做自动 digest
-- 不做自动根因分析
-- 不做日志数据库
-- 不提供复杂查询语言
-- 不替人或 AI 下结论
+- No automatic digest
+- No automatic root-cause analysis
+- No log database
+- No complex query language
+- No conclusions on behalf of a human or an AI
 
-它是观察工具，不是判断工具。
-
-## 开发
-
-```sh
-pnpm --filter @agent-ils/logger typecheck
-pnpm --filter @agent-ils/logger build
-```
+It is an observation tool, not a judgement tool.

@@ -110,7 +110,7 @@ export async function readLogRecords(options: ReadLogOptions = {}): Promise<Read
             const trimmed = line.trim()
             if (!trimmed) continue
             const record = parseLogLine(trimmed, fileName)
-            if (!record || !matchesRecord(record, options, range)) continue
+            if (!record || !matchesRecord(record, range)) continue
             records.push(record)
         }
     }
@@ -172,7 +172,7 @@ function parseLogLine(line: string, fileName: string): ReadableLogRecord | undef
     }
 }
 
-function matchesRecord(record: ReadableLogRecord, options: ReadLogOptions, range: LogTimeRange): boolean {
+function matchesRecord(record: ReadableLogRecord, range: LogTimeRange): boolean {
     const ts = timestampMs(record.ts)
     if (range.from && ts < range.from.getTime()) return false
     if (range.to && ts > range.to.getTime()) return false
