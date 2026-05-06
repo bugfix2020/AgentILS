@@ -42,9 +42,13 @@ jobs:
           # the registry that issues OIDC trusted-publisher tokens.
 
       # npm >= 11.5.1 is required for OIDC trusted publisher support.
-      # Node 22 LTS ships with an older npm; upgrade explicitly.
+      # Node 22 LTS ships with npm 10.x; upgrade explicitly.
+      # --force avoids a known race where npm's self-replace corrupts
+      #   /opt/hostedtoolcache/node/22.x/lib/node_modules/npm
+      #   (symptom: MODULE_NOT_FOUND 'promise-retry' on next invocation).
+      # Pin to ^11.5 (avoid @latest drift onto an occasionally broken release).
       - name: Upgrade npm for OIDC publish
-        run: npm install -g npm@latest
+        run: npm install -g --force "npm@^11.5.2"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
