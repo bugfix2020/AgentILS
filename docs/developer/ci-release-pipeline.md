@@ -1,5 +1,7 @@
 # CI / Release Pipeline Walkthrough
 
+> English · [简体中文](ci-release-pipeline.zh-CN.md)
+>
 > **Audience:** maintainers and contributors who need to understand how AgentILS
 > builds, tests, versions, and publishes packages.
 > **Last updated:** 2026-05-06 (post PR #10 + OIDC release pipeline rollout)

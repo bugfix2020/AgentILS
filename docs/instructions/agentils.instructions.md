@@ -165,3 +165,28 @@ GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 - **`process.versions` 不含 `npm` key**：检查 npm 版本一律走 `npm --version` shell 命令，不要写 `process.versions.npm.split(...)` —— 会 TypeError。
 
 不要绕过 CI 直接 push 到 `main`（GitHub Flow 已经强制 PR 流程）。本地的 husky hook 是辅助防线，不是真值源 —— CI 才是。
+
+## 文档语言规范（**强约束**）
+
+为什么放在 instruction：这是 always-on 硬规则（任何改 `.md` 都触发），不是按需调用的工作流，所以走 instruction，不做 skill。
+
+**核心原则**：
+
+1. **面向开发者的文档（`docs/instructions/`、`docs/skills/`、`docs/flowcharts/`、`docs/agentils/` 等）默认中文**。代码标识符、CLI 名、错误关键字保留英文。
+2. **面向外部用户的文档（root `README.md`、各 `packages/*/README.md`）必须中英双语**：`README.md`（英文） + `README.zh-CN.md`（中文）成对出现，文件顶部互相链接。
+3. **当面向用户的文档（如 root `README.md`）引入了一份 `docs/` 下文档，那份 `docs/` 文档也必须是双语对**：`xxx.md`（英文） + `xxx.zh-CN.md`（中文），顶部互链。
+4. **同步规则**：改 `xxx.md` 的同时必须改 `xxx.zh-CN.md`（反之亦然）。新加段落必须在两份里都加。**禁止只改一份就提交**。
+
+**触发判断**：
+
+- 新建 `docs/` 下文档 → 默认中文单文件。如果它会被 root `README.md` 或外部包 `README.md` 链接 → 升级为双语对。
+- 改 root `README.md` 或包 `README.md` → 必须同步改对应 `README.zh-CN.md`。
+- 改双语对中的任一文件 → 必须同步改另一份。
+- commit message：subject 用英文（受 commitlint conventional commits 约束），body 中文/英文皆可。
+
+**举例**：
+
+- root `README.md` 引入了 `docs/developer/ci-release-pipeline.md` → 必须有 `docs/developer/ci-release-pipeline.zh-CN.md`，root 必须有 `README.zh-CN.md`，且 `README.zh-CN.md` 链接的是 `ci-release-pipeline.zh-CN.md`。
+- `docs/instructions/agentils.instructions.md`（开发者向）→ 单文件中文即可。
+- `packages/quality-gate/README.md` 是 npm 包 README → 必须配 `README.zh-CN.md`。
+

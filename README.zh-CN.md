@@ -102,6 +102,15 @@ pnpm run sync:instructions
 
 任何一步失败都会拦下 commit。不要在没讨论的情况下用 `--no-verify` 绕过。
 
+## CI / 发布流水线
+
+两个 GitHub Actions workflow 负责质量门禁与 npm 发布：
+
+- **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** —— 每个 PR 与 push 到 `main` 时触发。Build → typecheck → lint → instruction 同步检查 → changeset 存在性检查。必须全绿才能合。
+- **[`.github/workflows/release.yml`](.github/workflows/release.yml)** —— push 到 `main` 时触发。用 [`changesets/action`](https://github.com/changesets/action) 在有待消费 changeset 时开 "Version Packages" PR；没有时通过 OIDC Trusted Publisher 直接发到 npm。**不需要 `NPM_TOKEN`**。
+
+完整走读（分支模型、为什么 `build` 先于 `typecheck`、为什么 release 用 Node 24 而 CI 用 Node 22、为什么是 `private: true` 而不是 `.changeset` `ignore` 阻止发布、OIDC 配置、端到端发布叙事、踩坑表）见 [`docs/developer/ci-release-pipeline.zh-CN.md`](docs/developer/ci-release-pipeline.zh-CN.md)。
+
 ## 许可证
 
 MIT © liuyuxuan
