@@ -3,11 +3,11 @@ import React from 'react'
 import type { StepState, StepStatus } from './steps.js'
 
 /**
- * 1:1 port of `scripts/dev/pre-commit-gate.mjs` ECAM panel.
+ * A320-style ECAM panel for the AgentILS pre-commit pipeline.
  *
- * The mjs version prints a static A320 ECAM SYS header once, then mutates a
- * single spinner row in place per step. We render the same layout in ink with
- * `<Text>` rows that carry raw ANSI escapes — ink passes them through unchanged.
+ * Prints a static A320 ECAM SYS header once, then mutates a single spinner row
+ * in place per step. We render the layout in ink with `<Text>` rows that carry
+ * raw ANSI escapes — ink passes them through unchanged.
  */
 
 export interface EcamPanelProps {

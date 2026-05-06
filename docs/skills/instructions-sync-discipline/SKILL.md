@@ -69,7 +69,7 @@ When adding or modifying instructions / skills:
 ## Why
 
 - Copilot reads `.github/`. Codex reads `AGENTS.md` and `.agents/`. Without a generator they drift, and the two agents will be told different rules.
-- The `--check` mode runs in pre-commit (`pre-commit-gate`) so CI / commits fail fast on drift.
+- The `--check` mode runs in pre-commit (via `agentils-quality-gate precommit`) so CI / commits fail fast on drift.
 - The banner + manifest make it trivial for reviewers to confirm a PR did not bypass the generator.
 
 ## Quick Reference
