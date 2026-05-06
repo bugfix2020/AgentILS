@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, ConfigProvider, Tag, theme, Typography } from 'antd'
+import { Alert, Avatar, Button, ConfigProvider, Flex, Space, Tag, theme, Typography } from 'antd'
 import { Bubble, Prompts, Sender, Suggestion, Welcome, XProvider } from '@ant-design/x'
-import type { PromptProps } from '@ant-design/x/es/prompts'
+import type { PromptsItemType } from '@ant-design/x/es/prompts'
 import type { SuggestionItem } from '@ant-design/x/es/suggestion'
+import { createStyles } from 'antd-style'
+import {
+    EllipsisOutlined,
+    PaperClipOutlined,
+    QuestionCircleOutlined,
+    ShareAltOutlined,
+} from '@ant-design/icons'
 import {
     type InteractionImage,
     type PromptFileView,
@@ -14,6 +21,140 @@ import {
 } from './protocol'
 import { createProtocolBridge } from './protocol-bridge'
 import './App.css'
+
+const useStyle = createStyles(({ token, css }) => ({
+    layout: css`
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        background: ${token.colorBgContainer};
+        font-family: Inter, ${token.fontFamily}, sans-serif;
+    `,
+    sider: css`
+        background: ${token.colorBgLayout}cc;
+        width: 280px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        padding: 0 12px;
+        box-sizing: border-box;
+        border-right: 1px solid ${token.colorBorderSecondary};
+    `,
+    logo: css`
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 0 12px;
+        gap: 10px;
+        margin: 24px 0 16px;
+        .agentils-logo-mark {
+            display: grid;
+            width: 32px;
+            height: 32px;
+            place-items: center;
+            color: #ffffff;
+            font-weight: 800;
+            background: linear-gradient(135deg, #23283a 0%, #4f8cff 54%, #36cfc9 100%);
+            border-radius: 50%;
+            box-shadow: 0 6px 14px rgba(79, 140, 255, 0.28);
+        }
+        span {
+            font-weight: 600;
+            color: ${token.colorText};
+            font-size: 15px;
+        }
+    `,
+    sideStatus: css`
+        flex: 1;
+        overflow-y: auto;
+        margin-top: 4px;
+        padding: 0 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    `,
+    sideStatusCard: css`
+        background: ${token.colorBgContainer};
+        border: 1px solid ${token.colorBorderSecondary};
+        border-radius: 10px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+    `,
+    sideFooter: css`
+        border-top: 1px solid ${token.colorBorderSecondary};
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 6px;
+    `,
+    chat: css`
+        flex: 1;
+        height: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        padding-block: ${token.paddingLG}px;
+        justify-content: space-between;
+        min-width: 0;
+        .ant-bubble-content-updating {
+            background-image: linear-gradient(90deg, #ff6b23 0%, #af3cb8 31%, #53b6ff 89%);
+            background-size: 100% 2px;
+            background-repeat: no-repeat;
+            background-position: bottom;
+        }
+    `,
+    chatList: css`
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        padding: 0 ${token.paddingLG}px;
+        box-sizing: border-box;
+    `,
+    placeholder: css`
+        padding-top: 32px;
+        width: 100%;
+        max-width: 840px;
+        box-sizing: border-box;
+    `,
+    welcomePrompt: css`
+        .ant-prompts-item {
+            background-image: linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%) !important;
+            border-radius: 12px !important;
+            border: none !important;
+        }
+        .ant-prompts-label {
+            color: #000000e0 !important;
+        }
+        .ant-prompts-desc {
+            color: #000000a6 !important;
+        }
+    `,
+    bubbles: css`
+        width: 100%;
+        max-width: 940px;
+        padding-top: 16px;
+    `,
+    senderZone: css`
+        width: 100%;
+        max-width: 840px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0 ${token.paddingLG}px;
+        box-sizing: border-box;
+    `,
+    senderPrompts: css`
+        width: 100%;
+    `,
+}))
 
 const HEARTBEAT_MS = 10_000
 const IMAGE_MIME_PREFIX = 'image/'
@@ -215,7 +356,7 @@ export function App(): React.ReactElement {
         ]
     }, [active])
 
-    const bubbleRoles: React.ComponentProps<typeof Bubble.List>['roles'] = useMemo(
+    const bubbleRoles: React.ComponentProps<typeof Bubble.List>['role'] = useMemo(
         () => ({
             assistant: {
                 placement: 'start' as const,
@@ -240,7 +381,7 @@ export function App(): React.ReactElement {
         [images.length, promptFiles, replyTemplates, reportContent, tools],
     )
 
-    const quickPrompts: PromptProps[] = useMemo(
+    const quickPrompts: PromptsItemType[] = useMemo(
         () => createQuickPrompts(replyTemplates, promptFiles, tools),
         [promptFiles, replyTemplates, tools],
     )
@@ -253,6 +394,196 @@ export function App(): React.ReactElement {
               : 'warning'
 
     const attachmentCount = images.length + (reportContent ? 1 : 0)
+    const { styles } = useStyle()
+
+    const sider = (
+        <div className={styles.sider}>
+            <div className={styles.logo}>
+                <span className="agentils-logo-mark">AI</span>
+                <span>AgentILS</span>
+            </div>
+            <div className={styles.sideStatus}>
+                <div className={styles.sideStatusCard}>
+                    <Typography.Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.4 }}>
+                        STATUS
+                    </Typography.Text>
+                    <Flex gap={6} wrap>
+                        <Tag color={pending.length > 0 ? 'processing' : 'default'}>
+                            {pending.length} pending
+                        </Tag>
+                        {viewModel?.connection.status && (
+                            <Tag color={connectionColor}>{viewModel.connection.status}</Tag>
+                        )}
+                    </Flex>
+                </div>
+                {active && (
+                    <div className={styles.sideStatusCard}>
+                        <Typography.Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.4 }}>
+                            ACTIVE INTERACTION
+                        </Typography.Text>
+                        {active.toolName && <Tag color="blue">{active.toolName}</Tag>}
+                        <Typography.Text style={{ fontSize: 12 }} ellipsis={{ tooltip: active.question }}>
+                            {active.question}
+                        </Typography.Text>
+                        {pending.length > 1 && (
+                            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                                +{pending.length - 1} more queued
+                            </Typography.Text>
+                        )}
+                    </div>
+                )}
+            </div>
+            <div className={styles.sideFooter}>
+                <Avatar size={28} style={{ background: '#4f8cff' }}>
+                    U
+                </Avatar>
+                <Button type="text" icon={<QuestionCircleOutlined />} />
+            </div>
+        </div>
+    )
+
+    const chatListNode = (
+        <div className={styles.chatList}>
+            {!active ? (
+                <Flex vertical gap={16} align="center" className={styles.placeholder}>
+                    <Welcome
+                        variant="borderless"
+                        icon={<div className="agentils-logo-mark agentils-logo-mark-lg">AI</div>}
+                        title="AgentILS"
+                        description="Human clarification workspace — 等待代理请求"
+                        extra={
+                            <Space>
+                                <Button icon={<ShareAltOutlined />} />
+                                <Button icon={<EllipsisOutlined />} />
+                            </Space>
+                        }
+                    />
+                    <Prompts
+                        items={createWelcomePrompts(viewModel?.connection.status ?? 'connecting')}
+                        onItemClick={(info) =>
+                            setDraft(String(info.data.description ?? info.data.label ?? ''))
+                        }
+                        className={styles.welcomePrompt}
+                        styles={{ list: { width: '100%' }, item: { flex: 1 } }}
+                    />
+                </Flex>
+            ) : (
+                <Bubble.List
+                    className={styles.bubbles}
+                    items={bubbleItems}
+                    role={bubbleRoles}
+                    autoScroll
+                />
+            )}
+        </div>
+    )
+
+    const senderNode = (
+        <div className={styles.senderZone}>
+            {quickPrompts.length > 0 && (
+                <Prompts
+                    className={styles.senderPrompts}
+                    items={quickPrompts}
+                    wrap
+                    onItemClick={(info) => {
+                        const value = String(info.data.key)
+                        if (value.startsWith('template:')) applyTemplate(value.slice('template:'.length))
+                        if (value.startsWith('prompt:')) addWorkspaceFile(value.slice('prompt:'.length))
+                        if (value.startsWith('tool:')) addToolReference(value.slice('tool:'.length))
+                    }}
+                    styles={{ item: { padding: '6px 12px' } }}
+                />
+            )}
+
+            {uiError && (
+                <Alert
+                    type="warning"
+                    showIcon
+                    message={uiError}
+                    closable
+                    onClose={() => setUiError(null)}
+                />
+            )}
+
+            {attachmentCount > 0 && (
+                <Flex gap={6} wrap>
+                    {images.map((image, index) => (
+                        <Tag
+                            key={`${image.filename ?? 'image'}-${index}`}
+                            closable
+                            onClose={() => removeImage(index)}
+                        >
+                            {image.filename ?? `image-${index + 1}`}
+                        </Tag>
+                    ))}
+                    {reportContent && (
+                        <Tag closable onClose={() => setReportContent('')}>
+                            workspace context
+                        </Tag>
+                    )}
+                </Flex>
+            )}
+
+            <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="agentils-file-input"
+                onChange={(event) => {
+                    if (event.target.files) void handleFiles(event.target.files)
+                    event.currentTarget.value = ''
+                }}
+            />
+
+            <Suggestion<SuggestionInfo>
+                items={(info) => filterCommandItems(commandItems, info?.query ?? '')}
+                onSelect={handleSuggestionSelect}
+            >
+                {({ onTrigger, onKeyDown }) => (
+                    <Sender
+                        value={draft}
+                        disabled={!active}
+                        autoSize={{ minRows: 2, maxRows: 6 }}
+                        prefix={
+                            <Button
+                                type="text"
+                                size="small"
+                                icon={<PaperClipOutlined />}
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={!active}
+                            />
+                        }
+                        onChange={(value) => {
+                            setDraft(value)
+                            const query = getActiveMentionQuery(value)
+                            onTrigger(query === null ? false : { query })
+                        }}
+                        onKeyDown={onKeyDown}
+                        onSubmit={(message) => void handleSubmit(message)}
+                        onCancel={() => active && bridge.cancelInteraction(active.id)}
+                        onPasteFile={(files) => void handleFiles(files)}
+                        placeholder={active?.placeholder ?? '向我提问吧'}
+                    />
+                )}
+            </Suggestion>
+
+            {active && (
+                <Flex justify="space-between" align="center">
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        @ for instructions · + to attach
+                    </Typography.Text>
+                    <Button
+                        type="link"
+                        size="small"
+                        danger
+                        onClick={() => bridge.cancelInteraction(active.id)}
+                    >
+                        Cancel request
+                    </Button>
+                </Flex>
+            )}
+        </div>
+    )
 
     return (
         <ConfigProvider
@@ -285,155 +616,13 @@ export function App(): React.ReactElement {
                         if (event.clipboardData.files.length > 0) void handleFiles(event.clipboardData.files)
                     }}
                 >
-                    <div className="agentils-status-float">
-                        <Tag color={pending.length > 0 ? 'processing' : 'default'}>{pending.length} pending</Tag>
-                        {viewModel?.connection.status && (
-                            <Tag color={connectionColor}>{viewModel.connection.status}</Tag>
-                        )}
-                        {active?.toolName && <Tag color="blue">{active.toolName}</Tag>}
+                    <div className={styles.layout}>
+                        {sider}
+                        <div className={styles.chat}>
+                            {chatListNode}
+                            {senderNode}
+                        </div>
                     </div>
-
-                    <main className="agentils-chat">
-                        <section className="agentils-chat-list">
-                            {!active ? (
-                                <div className="agentils-placeholder">
-                                    <Welcome
-                                        variant="borderless"
-                                        icon={<div className="agentils-logo-mark">AI</div>}
-                                        title="AgentILS"
-                                        description="Human clarification workspace"
-                                    />
-                                    <div className="agentils-welcome-prompts">
-                                        <Prompts
-                                            items={createWelcomePrompts(viewModel?.connection.status ?? 'connecting')}
-                                            onItemClick={(info) =>
-                                                setDraft(String(info.data.description ?? info.data.label ?? ''))
-                                            }
-                                            styles={{
-                                                item: { border: 'none' },
-                                                subItem: { background: 'rgba(255, 255, 255, 0.72)' },
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                <Bubble.List
-                                    className="agentils-bubbles"
-                                    items={bubbleItems}
-                                    roles={bubbleRoles}
-                                    autoScroll
-                                />
-                            )}
-                        </section>
-
-                        <section className="agentils-sender-zone">
-                            {quickPrompts.length > 0 && (
-                                <Prompts
-                                    className="agentils-sender-prompts"
-                                    items={quickPrompts}
-                                    wrap
-                                    onItemClick={(info) => {
-                                        const value = String(info.data.key)
-                                        if (value.startsWith('template:'))
-                                            applyTemplate(value.slice('template:'.length))
-                                        if (value.startsWith('prompt:')) addWorkspaceFile(value.slice('prompt:'.length))
-                                        if (value.startsWith('tool:')) addToolReference(value.slice('tool:'.length))
-                                    }}
-                                    styles={{ item: { padding: '7px 13px' } }}
-                                />
-                            )}
-
-                            {uiError && (
-                                <Alert
-                                    className="agentils-error"
-                                    type="warning"
-                                    showIcon
-                                    message={uiError}
-                                    closable
-                                    onClose={() => setUiError(null)}
-                                />
-                            )}
-
-                            {attachmentCount > 0 && (
-                                <div className="agentils-attachment-strip">
-                                    {images.map((image, index) => (
-                                        <Tag
-                                            key={`${image.filename ?? 'image'}-${index}`}
-                                            closable
-                                            onClose={() => removeImage(index)}
-                                        >
-                                            {image.filename ?? `image-${index + 1}`}
-                                        </Tag>
-                                    ))}
-                                    {reportContent && (
-                                        <Tag closable onClose={() => setReportContent('')}>
-                                            workspace context
-                                        </Tag>
-                                    )}
-                                </div>
-                            )}
-
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                multiple
-                                className="agentils-file-input"
-                                onChange={(event) => {
-                                    if (event.target.files) void handleFiles(event.target.files)
-                                    event.currentTarget.value = ''
-                                }}
-                            />
-
-                            <Suggestion<SuggestionInfo>
-                                items={(info) => filterCommandItems(commandItems, info?.query ?? '')}
-                                onSelect={handleSuggestionSelect}
-                            >
-                                {({ onTrigger, onKeyDown }) => (
-                                    <Sender
-                                        className="agentils-sender"
-                                        value={draft}
-                                        disabled={!active}
-                                        autoSize={{ minRows: 2, maxRows: 6 }}
-                                        prefix={
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                className="agentils-attach-button"
-                                                onClick={() => fileInputRef.current?.click()}
-                                                disabled={!active}
-                                            >
-                                                +
-                                            </Button>
-                                        }
-                                        onChange={(value) => {
-                                            setDraft(value)
-                                            const query = getActiveMentionQuery(value)
-                                            onTrigger(query === null ? false : { query })
-                                        }}
-                                        onKeyDown={onKeyDown}
-                                        onSubmit={(message) => void handleSubmit(message)}
-                                        onCancel={() => active && bridge.cancelInteraction(active.id)}
-                                        onPasteFile={(_firstFile, files) => void handleFiles(files)}
-                                        placeholder={active?.placeholder ?? '向我提问吧'}
-                                    />
-                                )}
-                            </Suggestion>
-
-                            {active && (
-                                <div className="agentils-sender-footer">
-                                    <Typography.Text type="secondary">@ for instructions</Typography.Text>
-                                    <Button
-                                        type="link"
-                                        size="small"
-                                        danger
-                                        onClick={() => bridge.cancelInteraction(active.id)}
-                                    >
-                                        Cancel request
-                                    </Button>
-                                </div>
-                            )}
-                        </section>
-                    </main>
                 </div>
             </XProvider>
         </ConfigProvider>
@@ -556,8 +745,8 @@ function createQuickPrompts(
     replyTemplates: ReplyTemplate[],
     promptFiles: PromptFileView[],
     tools: ToolView[],
-): PromptProps[] {
-    const prompts: PromptProps[] = []
+): PromptsItemType[] {
+    const prompts: PromptsItemType[] = []
     for (const item of replyTemplates.slice(0, 2)) {
         prompts.push({ key: commandValue('template', item.name), description: item.name })
     }
@@ -570,7 +759,7 @@ function createQuickPrompts(
     return prompts
 }
 
-function createWelcomePrompts(status: string): PromptProps[] {
+function createWelcomePrompts(status: string): PromptsItemType[] {
     return [
         {
             key: 'status',
