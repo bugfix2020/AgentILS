@@ -27,6 +27,10 @@
         {
             "file": "quality-gate.instructions.md",
             "summary": "@agent-ils/quality-gate ECAM panel + ESLint 风格 config 加载边界"
+        },
+        {
+            "file": "logger.instructions.md",
+            "summary": "@agent-ils/logger 本地 JSONL 收集 + 查询；默认值/HTTP/CLI 边界"
         }
     ],
     "skills": [
@@ -41,6 +45,10 @@
         {
             "dir": "instructions-sync-discipline",
             "summary": "instructions / skills / AGENTS.md 必须改源 + 跑 sync 脚本"
+        },
+        {
+            "dir": "package-readme-and-instruction-sync",
+            "summary": "每个 package 改动前必须同步 README + <pkg>.instructions.md，且 sandbox 验证 README 跑得通"
         }
     ]
 }
