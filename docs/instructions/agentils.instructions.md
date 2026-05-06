@@ -104,3 +104,23 @@ runtime.disposeNotifier = registration.dispose
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
 - npm 包名：`@agent-ils/mcp`、`@agent-ils/cli`；扩展 publisher：`bugfix2020`。
 - HTTP MCP 端点：默认 `http://127.0.0.1:8788/mcp`，可通过 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖。
+
+## 分支与 PR 流（Branch Flow，**强约束**）
+
+> 这条规则的违反代价极高（直接污染 main / 跳过 staging 验证），任何 agent 在开 PR 前**必须**确认。
+
+- **`main`** 是发布线 / 公开 README 的稳定来源。**只接受**来自 `dev` 的合并 PR。
+- **`dev`** 是 staging 主线。所有 feature / fix / chore / docs 分支都从 `dev` 切出，PR 也**只能**回到 `dev`。
+- **绝不**从 feature 分支直接 PR 到 `main`；上一次发生这种事时把"中文 README + GIF + 绝对 URL 修正"这三组本应一起进 main 的内容拆成了两轮 PR，并出现 "PR #6 在第二/三次 push 之前就被合并" 的事故。
+- 推荐工作流：
+
+    ```
+    git checkout dev && git pull --ff-only       # 总是从 dev 出发
+    git checkout -b <type>/<short-kebab>         # 遵守 branch-name-standard skill
+    # ...编码...
+    git push -u origin <branch>                  # 开 PR target = dev
+    # dev 上验证通过后，由维护者另开一条 dev → main 的合并 PR 发布到 main
+    ```
+
+- 任何工具自动开 PR 时（如 `mcp_gitkraken_pull_request_create`），`target_branch` **默认必须是 `dev`**，除非用户明确说"发布到 main"。
+- 如果误操作把 PR 提到 `main`，立刻在 PR 描述里说明，并征求用户决定（关闭重开 / 转 base / 接受发布）。
