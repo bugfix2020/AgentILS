@@ -1,5 +1,7 @@
 # @agent-ils/mcp
 
+> English | [简体中文](./README.zh-CN.md)
+
 **AgentILS** = _Intelligent Logical System_ (acronym borrowed from aviation
 _Instrument Landing System_).
 
