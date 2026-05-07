@@ -1,14 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Avatar, Button, ConfigProvider, Flex, Space, Tag, theme, Typography } from 'antd'
-import { Bubble, Prompts, Sender, Suggestion, Welcome, XProvider } from '@ant-design/x'
+import { Alert, Avatar, Button, ConfigProvider, Flex, Space, Tag, theme, Typography, message } from 'antd'
+import { Bubble, Conversations, Prompts, Sender, Suggestion, Welcome, XProvider } from '@ant-design/x'
 import type { PromptsItemType } from '@ant-design/x/es/prompts'
 import type { SuggestionItem } from '@ant-design/x/es/suggestion'
 import { createStyles } from 'antd-style'
 import {
+    AppstoreAddOutlined,
     EllipsisOutlined,
+    FileSearchOutlined,
+    HeartOutlined,
     PaperClipOutlined,
+    PlusOutlined,
+    ProductOutlined,
     QuestionCircleOutlined,
+    ScheduleOutlined,
     ShareAltOutlined,
+    SmileOutlined,
 } from '@ant-design/icons'
 import {
     type InteractionImage,
@@ -64,20 +71,27 @@ const useStyle = createStyles(({ token, css }) => ({
             font-size: 15px;
         }
     `,
-    sideStatus: css`
+    newChatBtn: css`
+        margin: 0 4px 8px;
+        background-color: #1677ff14;
+        border: none;
+        color: ${token.colorText};
+        font-weight: 500;
+        &:hover { background-color: #1677ff22 !important; color: ${token.colorPrimary} !important; }
+    `,
+    conversations: css`
         flex: 1;
         overflow-y: auto;
         margin-top: 4px;
-        padding: 0 6px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+        padding: 0;
+        .ant-conversations-list { padding-inline-start: 0; }
     `,
     sideStatusCard: css`
         background: ${token.colorBgContainer};
         border: 1px solid ${token.colorBorderSecondary};
         border-radius: 10px;
         padding: 12px;
+        margin: 8px 0;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -122,19 +136,12 @@ const useStyle = createStyles(({ token, css }) => ({
         width: 100%;
         max-width: 840px;
         box-sizing: border-box;
+        padding: ${token.paddingLG}px;
     `,
-    welcomePrompt: css`
-        .ant-prompts-item {
-            background-image: linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%) !important;
-            border-radius: 12px !important;
-            border: none !important;
-        }
-        .ant-prompts-label {
-            color: #000000e0 !important;
-        }
-        .ant-prompts-desc {
-            color: #000000a6 !important;
-        }
+    chatPrompt: css`
+        .ant-prompts-label { color: #000000e0 !important; }
+        .ant-prompts-desc { color: #000000a6 !important; width: 100%; }
+        .ant-prompts-icon { color: #000000a6 !important; }
     `,
     bubbles: css`
         width: 100%;
@@ -395,6 +402,20 @@ export function App(): React.ReactElement {
 
     const attachmentCount = images.length + (reportContent ? 1 : 0)
     const { styles } = useStyle()
+    const [messageApi, messageHolder] = message.useMessage()
+
+    const conversationItems = useMemo(
+        () =>
+            pending.map((item) => ({
+                key: item.id,
+                label:
+                    item.id === activeId
+                        ? `[当前] ${truncate(item.question, 32)}`
+                        : truncate(item.question, 36),
+                group: item.toolName,
+            })),
+        [activeId, pending],
+    )
 
     const sider = (
         <div className={styles.sider}>
@@ -402,37 +423,43 @@ export function App(): React.ReactElement {
                 <span className="agentils-logo-mark">AI</span>
                 <span>AgentILS</span>
             </div>
-            <div className={styles.sideStatus}>
+            <Button
+                className={styles.newChatBtn}
+                icon={<PlusOutlined />}
+                block
+                onClick={() => {
+                    if (pending.length === 0) {
+                        messageApi.info('暂无待处理请求，等待代理触发。')
+                        return
+                    }
+                    setFocusedId(pending[0].id)
+                    messageApi.success('已切换到队列首条请求。')
+                }}
+            >
+                新对话
+            </Button>
+            {conversationItems.length > 0 ? (
+                <Conversations
+                    items={conversationItems}
+                    activeKey={activeId ?? undefined}
+                    onActiveChange={(key) => setFocusedId(String(key))}
+                    groupable
+                    className={styles.conversations}
+                    styles={{ item: { padding: '0 8px' } }}
+                />
+            ) : (
                 <div className={styles.sideStatusCard}>
                     <Typography.Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.4 }}>
                         STATUS
                     </Typography.Text>
-                    <Flex gap={6} wrap>
-                        <Tag color={pending.length > 0 ? 'processing' : 'default'}>
-                            {pending.length} pending
-                        </Tag>
-                        {viewModel?.connection.status && (
-                            <Tag color={connectionColor}>{viewModel.connection.status}</Tag>
-                        )}
-                    </Flex>
+                    {viewModel?.connection.status && (
+                        <Tag color={connectionColor}>{viewModel.connection.status}</Tag>
+                    )}
+                    <Typography.Text style={{ fontSize: 12 }} type="secondary">
+                        等待代理请求…
+                    </Typography.Text>
                 </div>
-                {active && (
-                    <div className={styles.sideStatusCard}>
-                        <Typography.Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.4 }}>
-                            ACTIVE INTERACTION
-                        </Typography.Text>
-                        {active.toolName && <Tag color="blue">{active.toolName}</Tag>}
-                        <Typography.Text style={{ fontSize: 12 }} ellipsis={{ tooltip: active.question }}>
-                            {active.question}
-                        </Typography.Text>
-                        {pending.length > 1 && (
-                            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                                +{pending.length - 1} more queued
-                            </Typography.Text>
-                        )}
-                    </div>
-                )}
-            </div>
+            )}
             <div className={styles.sideFooter}>
                 <Avatar size={28} style={{ background: '#4f8cff' }}>
                     U
@@ -449,8 +476,8 @@ export function App(): React.ReactElement {
                     <Welcome
                         variant="borderless"
                         icon={<div className="agentils-logo-mark agentils-logo-mark-lg">AI</div>}
-                        title="AgentILS"
-                        description="Human clarification workspace — 等待代理请求"
+                        title="你好，我是 AgentILS Human Clarification Agent"
+                        description="基于 mcp 控制平面的人类介入工作台 — 等待代理请求并提供上下文澄清。"
                         extra={
                             <Space>
                                 <Button icon={<ShareAltOutlined />} />
@@ -458,14 +485,46 @@ export function App(): React.ReactElement {
                             </Space>
                         }
                     />
-                    <Prompts
-                        items={createWelcomePrompts(viewModel?.connection.status ?? 'connecting')}
-                        onItemClick={(info) =>
-                            setDraft(String(info.data.description ?? info.data.label ?? ''))
-                        }
-                        className={styles.welcomePrompt}
-                        styles={{ list: { width: '100%' }, item: { flex: 1 } }}
-                    />
+                    <Flex gap={16} style={{ width: '100%' }}>
+                        <Prompts
+                            items={[buildHotTopicsItem(replyTemplates)]}
+                            styles={{
+                                list: { height: '100%' },
+                                item: {
+                                    flex: 1,
+                                    backgroundImage:
+                                        'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
+                                    borderRadius: 12,
+                                    border: 'none',
+                                },
+                                subItem: { padding: 0, background: 'transparent' },
+                            }}
+                            onItemClick={(info) => {
+                                const name = String(info.data.description ?? '')
+                                if (name) applyTemplate(name)
+                            }}
+                            className={styles.chatPrompt}
+                        />
+                        <Prompts
+                            items={[buildDesignGuideItem(promptFiles, tools)]}
+                            styles={{
+                                item: {
+                                    flex: 1,
+                                    backgroundImage:
+                                        'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
+                                    borderRadius: 12,
+                                    border: 'none',
+                                },
+                                subItem: { background: '#ffffffa6' },
+                            }}
+                            onItemClick={(info) => {
+                                const key = String(info.data.key ?? '')
+                                if (key.startsWith('prompt:')) addWorkspaceFile(key.slice('prompt:'.length))
+                                else if (key.startsWith('tool:')) addToolReference(key.slice('tool:'.length))
+                            }}
+                            className={styles.chatPrompt}
+                        />
+                    </Flex>
                 </Flex>
             ) : (
                 <Bubble.List
@@ -480,6 +539,19 @@ export function App(): React.ReactElement {
 
     const senderNode = (
         <div className={styles.senderZone}>
+            <Prompts
+                className={styles.senderPrompts}
+                items={SENDER_PROMPTS}
+                onItemClick={(info) => {
+                    const key = String(info.data.key)
+                    if (key === 'attach') fileInputRef.current?.click()
+                    else if (key === 'tools' && tools[0]) addToolReference(tools[0].value)
+                    else if (key === 'prompts' && promptFiles[0]) addWorkspaceFile(promptFiles[0].value)
+                    else if (key === 'templates' && replyTemplates[0]) applyTemplate(replyTemplates[0].name)
+                }}
+                styles={{ item: { padding: '6px 12px' } }}
+            />
+
             {quickPrompts.length > 0 && (
                 <Prompts
                     className={styles.senderPrompts}
@@ -600,6 +672,7 @@ export function App(): React.ReactElement {
             }}
         >
             <XProvider>
+                {messageHolder}
                 <div
                     className={`agentils-shell${isDragging ? ' agentils-shell-dragging' : ''}`}
                     onDragOver={(event) => {
@@ -759,25 +832,62 @@ function createQuickPrompts(
     return prompts
 }
 
-function createWelcomePrompts(status: string): PromptsItemType[] {
-    return [
-        {
-            key: 'status',
-            label: 'Connection',
-            children: [
-                { key: 'status-1', description: status },
-                { key: 'status-2', description: '等待代理请求' },
-            ],
-        },
-        {
-            key: 'guide',
-            label: 'Actions',
-            children: [
-                { key: 'guide-1', description: '@ 插入指令' },
-                { key: 'guide-2', description: '+ 添加附件' },
-            ],
-        },
-    ]
+const SENDER_PROMPTS: PromptsItemType[] = [
+    { key: 'attach', description: '附件', icon: <PaperClipOutlined /> },
+    { key: 'tools', description: '组件', icon: <ProductOutlined /> },
+    { key: 'prompts', description: '指南', icon: <FileSearchOutlined /> },
+    { key: 'templates', description: '教程', icon: <ScheduleOutlined /> },
+]
+
+function truncate(value: string, max: number): string {
+    if (!value) return ''
+    return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
+function buildHotTopicsItem(replyTemplates: ReplyTemplate[]): PromptsItemType {
+    const palette = ['#f93a4a', '#ff6565', '#ff8a3d', '#ffaa00']
+    const children = replyTemplates.slice(0, 4).map((item, idx) => ({
+        key: `hot-${idx}`,
+        description: item.name,
+        icon: (
+            <span style={{ color: palette[idx] ?? palette[0], fontWeight: 700 }}>{idx + 1}</span>
+        ),
+    }))
+    if (children.length === 0) {
+        children.push({
+            key: 'hot-empty',
+            description: '等待代理同步回复模板…',
+            icon: <span style={{ color: palette[0], fontWeight: 700 }}>—</span>,
+        })
+    }
+    return { key: 'hot', label: '最热话题', children }
+}
+
+function buildDesignGuideItem(promptFiles: PromptFileView[], tools: ToolView[]): PromptsItemType {
+    const children: PromptsItemType[] = []
+    if (promptFiles[0]) {
+        children.push({
+            key: `prompt:${promptFiles[0].value}`,
+            label: promptFiles[0].label,
+            description: promptFiles[0].description ?? `${promptFiles[0].source} prompt`,
+            icon: <HeartOutlined />,
+        })
+    }
+    if (tools[0]) {
+        children.push({
+            key: `tool:${tools[0].value}`,
+            label: tools[0].displayName ?? tools[0].label,
+            description: tools[0].description ?? 'Tool reference',
+            icon: <SmileOutlined />,
+        })
+    }
+    if (children.length === 0) {
+        children.push(
+            { key: 'guide-1', label: '意图', description: '等待 prompt 文件…', icon: <HeartOutlined /> },
+            { key: 'guide-2', label: '角色', description: '等待 tool 列表…', icon: <SmileOutlined /> },
+        )
+    }
+    return { key: 'guide', label: '设计指南', children }
 }
 
 function CommandLabel(props: { title: React.ReactNode; description: React.ReactNode }): React.ReactElement {
