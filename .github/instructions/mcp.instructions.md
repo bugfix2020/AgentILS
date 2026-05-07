@@ -4,166 +4,183 @@
 
 # packages/mcp 开发规则
 
-定义 `packages/mcp`（AgentILS V1 控制平面）的边界、模块职责、调用链路和约束。
+定义 `packages/mcp`（AgentILS 控制平面）的边界、模块职责、调用链路和约束。本文件是 mcp 实现细节的真值源；任何引用 mcp tool / endpoint / type 的下游文档以本文为准。
+
+> 跨包总则参见 [`agentils.instructions.md`](agentils.instructions.md)。本文件**只描述 mcp 包内部**，不重复总则。
 
 ## 核心定位
 
-`packages/mcp` 是 AgentILS 的**唯一状态机真值源**和**业务逻辑控制平面**。完全独立于 IDE，由 HTTP MCP 协议对外暴露，可被任何声明了 elicitation capability 的 MCP 客户端共享使用。
+`packages/mcp` 是 AgentILS 的**唯一状态机真值源**和**业务逻辑控制平面**。完全独立于 IDE，对外通过 MCP elicitation tool + HTTP bridge + SSE 暴露状态与交互能力。
 
 **禁止事项**：
 
 - 引入任何 IDE 特定 API（`vscode.*` 等）
 - 在此包内处理 UI 渲染或交互展示逻辑
 - 在多个模块重复计算核心状态（违反单向数据流）
-- 用自然语言摘要替代 V1 结构化状态（`TaskRecord` / `TaskInteraction` / `TaskSummaryDocument`）
-- 假设 `state_get` / `request_user_clarification` / `run_task_loop` 之外有其它 tool 存在（V1 移除了所有旧 tool）
+- 假设当前 4 个 tool 之外有其它 tool 名存在（V0 / V1 早期 `state_get` / `run_task_loop` / `new_task_request` / `approval_request` / `feedback_gate` / `verify_run` / `ui_session_*` 全部已移除）
+- 假设存在 `state://*` MCP resource、`ResourceNotifier`、`gateway/`、`addNotifier/setNotifier/fanout`、`acquireRuntimeLock`、`TaskRecord/TaskInteraction/TaskSummaryDocument` 这些 V1 中间形态——它们仅在 `packages/mcp.back/` 备份里残留
 
-## 模块职责
-
-### Gateway（协议入口）
-
-| 文件                        | 职责                                                                                                                                                                                      |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/gateway/server.ts`     | `createAgentGateServer()`：创建 runtime（含 `notifier`、`disposeNotifier` 占位）、注册 tools/resources、用 `orchestrator.addNotifier()` 替换旧的单值 `setNotifier()`                      |
-| `src/gateway/transports.ts` | `startStreamableHttpServer()`（HTTP，默认）+ `startStdioServer()`（仅 `--stdio`）+ `startIfEntrypoint()`：与 `runtime/lock.ts` 配合做 EADDRINUSE 回退 + `updateLockPort()` 改写 lock      |
-| `src/gateway/context.ts`    | `AgentGateServerRuntime`、`ResourceNotifier`、`AgentGateRequestContext`、`ctx.elicitUser()`                                                                                               |
-| `src/gateway/tools.ts`      | **仅 3 个 V1 tool**：`state_get` / `request_user_clarification` / `run_task_loop`                                                                                                         |
-| `src/gateway/resources.ts`  | **仅 5 个 `state://` resource**：`state://current`、`state://{taskId}`、`state://controlMode/{taskId}`、`state://timeline/{taskId}`、`state://interaction/pending`；维护 per-URI 订阅计数 |
-| `src/gateway/shared.ts`     | `textResult()`、`resolveRun()`、snapshot helper                                                                                                                                           |
-
-**Gateway 边界**：
-
-- 只做：解析输入 → 创建 request context → `ctx.elicitUser()` → 委托 orchestrator → `textResult()` 返回
-- 禁止直接写 store / 跨过 orchestrator 修改 task 状态
-
-### Orchestrator（业务逻辑聚合）
-
-| 文件                               | 关键方法                                                                                                                    |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `src/orchestrator/orchestrator.ts` | `runTaskLoop(input)`、`stateGet(taskId?)`、`addNotifier(notifier): { dispose }`、`setNotifier()`（兼容）、私有 `fanout(fn)` |
-| `conversation-orchestrator.ts`     | conversation start / read / end                                                                                             |
-| `task-orchestrator.ts`             | V1 `TaskRecord` 生命周期：阶段推进、`TaskInteraction` 发起与回收、控制模式转换、`TaskSummaryDocument` 写入                  |
-| `control-mode-orchestrator.ts`     | `normal` / `alternate` / `direct` 法则切换、`OverrideState` 维护                                                            |
-| `verification-orchestrator.ts`     | V1 测试阶段所需的最小验证（`tests_passed` / `tests_failed`）与 summary 拼装                                                 |
-
-`orchestrator.notifiers: Set<ResourceNotifier>` —— 多 HTTP client 共享，每客户端 `addNotifier()` 一次，断开 `dispose` 一次。
-
-### Store（状态层）
-
-| 文件                                                    | 角色                                                                                                                          |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/store/memory-store.ts`                             | **runtime 真值源（纯内存）**：sessions、tasks                                                                                 |
-| `conversation-store.ts`                                 | conversation 投影（首选）                                                                                                     |
-| `task-store.ts` / `summary-store.ts` / `audit-store.ts` | 投影层                                                                                                                        |
-| `persistence/json-store.ts`                             | **已实现，0 引用**。`loadPersistentStore` / `resolveStateFilePath` / `AGENTILS_STATE_FILE` 环境变量；进程退出当前会丢全部状态 |
-
-### Runtime（lock + port）
-
-| 文件                  | 职责                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `src/runtime/lock.ts` | `acquireRuntimeLock()`（PID 存活探测、preferredPort 默认 8788）、`pickFreePort()`、`updateLockPort()` 写回真实端口 |
-
-### Types（类型契约）
-
-| 文件                            | 内容                                                                                                                                                                                                                                                                                   |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/types/task.ts`             | `taskPhases = collect\|plan\|execute\|test\|summarize`；`taskTerminals = active\|completed\|failed\|abandoned`；`loopDirectives` (9)；`loopNextActions = recall_tool\|await_webview\|return_control`；`RunTaskLoopInput`/`RunTaskLoopResult`；`TaskInteraction`（含 `interactionKey`） |
-| `src/types/conversation.ts`     | `ConversationRecord`、`ConversationState`                                                                                                                                                                                                                                              |
-| `src/types/control-mode.ts`     | `ControlMode = normal\|alternate\|direct`、`OverrideState`                                                                                                                                                                                                                             |
-| `src/summary/summary-schema.ts` | `TaskSummaryDocument`                                                                                                                                                                                                                                                                  |
-
-## 数据流
+## 模块布局（`packages/mcp/src/`）
 
 ```
-HTTP client (Copilot / extension) → tool call → tools.ts
-  → orchestrator.runTaskLoop / stateGet
-    → memory-store 写入/读取
-    → orchestrator.fanout(n => n.notifyTask(taskId))
-      → 每个已注册 ResourceNotifier 推送 resourceUpdated
-        → 客户端 onResourceUpdate → 重新 stateGet
+index.ts                  # entry: startAgentilsServer + CLI bootstrap
+client/index.ts           # AgentilsClient: 给扩展用的 thin HTTP 客户端
+interaction/response.ts   # 取消 / 超时 / 规范化 InteractionResponse 工具
+orchestrator/orchestrator.ts  # 单一 Orchestrator（parked-promise 池 + SSE 广播 + sweep）
+store/
+  interaction-store.ts    # InteractionStore 接口 + emptyState 工厂
+  memory-store.ts         # 默认实现：内存版 PersistedState
+  json-store.ts           # 可选：~/.agentils/state.json 持久化（已 export，调用方自选）
+transport/
+  http.ts                 # startHttpBridge：Express + SSE
+  stdio.ts                # startStdioTransport：MCP stdio 通道
+types/index.ts            # 4 个 tool 名、所有交互类型、StateSnapshot、ServerOptions
+util/logger.ts            # createLogger + startHttpLogServer (默认 12138)
 ```
 
-## 核心调用链路
+## 对外契约（**改任何一项都必须同步下游 instruction + README**）
 
-### 链路 1：任务推进一步
-
-```
-tools.ts: run_task_loop({ sessionId?, taskId?, userIntent?, directive?, interactionResult? })
-  → orchestrator.runTaskLoop(input)
-    → conversation/task/control-mode/verification orchestrator 协作
-    → memory-store.upsertTask / appendInteraction
-  → orchestrator.fanout(n => n.notifyTask(task.taskId))
-  → return RunTaskLoopResult { status, task, interaction, next: { action, shouldRecallTool, canRenderWebview } }
-```
-
-`next.action`：
-
-- `recall_tool` → caller 必须立即再调一次 `run_task_loop`
-- `await_webview` → 保持 tool 调用挂起，等用户输入
-- `return_control` → 任务到达终态，可返回控制权
-
-### 链路 2：读快照
-
-```
-tools.ts: state_get({ taskId? })
-  → orchestrator.stateGet(taskId)
-    → 从 memory-store 拼 StateSnapshot { task?, pendingInteraction? }
-  → return textResult('State snapshot', snapshot)
-```
-
-### 链路 3：要澄清
-
-```
-tools.ts: request_user_clarification({ question, context?, placeholder?, required? })
-  → server.server.elicitInput({ mode: 'form', message, requestedSchema })
-    → 客户端 elicitation/create handler 触发
-    → 用户回答 → action: 'accept' | 'decline' | 'cancel'
-  → return textResult('Request user clarification', { action, content? })
-```
-
-### 链路 4：HTTP server 启动 + lock
-
-```
-node packages/mcp/dist/index.js (startIfEntrypoint)
-  → acquireRuntimeLock({})  // 默认 preferredPort=8788
-    → 若 lock 存活 peer → 打印 url 退出（保证单 server）
-    → 否则 pickFreePort + 写 lock
-  → startStreamableHttpServer({ host, port, endpoint })
-    → app.listen(port) 失败 EADDRINUSE → 退到 port=0（OS 分配）
-  → 若实际 port ≠ 预约 port → updateLockPort() 改写 lock
-  → 注册 SIGINT/SIGTERM 清理 lock
-```
-
-## `ctx.elicitUser()` 工作原理
+### 1. Elicitation tool（4 个，定义在 `types/index.ts`）
 
 ```ts
-async elicitUser(params): Promise<AgentGateElicitResult> {
-  if (!interactionAllowed) throw new Error('User interaction is not allowed.')
-  return runtime.server.server.elicitInput(params, {
-    timeout: 2_147_483_647, // ~24 天，人类等待
-  })
+export type ToolName =
+    | 'request_user_clarification' // 问澄清，等用户答
+    | 'request_contact_user' // 主动联系用户（推送式）
+    | 'request_user_feedback' // 收任务结束反馈
+    | 'request_dynamic_action' // 自定义 action + params 任意载荷
+```
+
+所有 tool 共用同一套 elicitation 流程：调用 → orchestrator 创建 `InteractionRequest` → parked-promise 挂起 → UI 通过 HTTP 提交 `InteractionResponse` → resolve 唤醒原 tool 调用并返回。
+
+### 2. `InteractionRequest` / `InteractionResponse`（`types/index.ts`）
+
+- `InteractionRequest { id, toolName, question, context?, placeholder?, action?, params?, createdAt, lastHeartbeatAt, traceId, status }`
+- `InteractionStatus = 'pending' | 'submitted' | 'cancelled' | 'expired'`
+- `InteractionResponse { text, images?, reportContent?, cancelled?, timestamp, reason? }`
+- `traceId` 跨 mcp / 扩展 / CLI / logger 关联同一生命周期，**不要丢**
+- `lastHeartbeatAt` 由 UI 心跳推进；超过 `heartbeatTimeoutMs`（`ServerOptions.heartbeatTimeoutMs`，默认 1 小时）会被 `Orchestrator.sweepExpired()` 标 `expired` 并 reject 对应 parked-promise（reason `'heartbeat-timeout'`）
+
+### 3. `StateSnapshot`（read model）
+
+```ts
+{
+  version,                 // 自增；每次状态变更 +1
+  generatedAt,
+  heartbeatTimeoutMs,
+  interactions: { pending, submitted, cancelled, expired, responses },
+  errors: [{ message, detail?, timestamp }],
 }
 ```
 
-- 走 MCP 协议 `elicitation/create`，与 IDE 无关
-- 客户端必须声明 `elicitation` capability，否则失败/挂起
+是给扩展 / WebView / 其它消费方的**唯一状态读模型**。不要单独读 `MemoryStore` 内部字段。
 
-## 开发工作流
+### 4. SSE event reasons（`StateChangedReason`）
 
-1. **按问题分类查阅** AGENTS.md 的 Read Order
-2. **测试先行**：先写 schema + 单元测试，再写实现
-3. **类型合同优先**：相信类型，不猜测运行行为
-4. **上下游对齐**：修改前比对上游输出和下游输入
-5. **持久化未启用**：当前所有写入只到内存；接入持久化前需明确改造方案
+```
+state.replayed | request.created | interaction.submitted
+| interaction.cancelled | interaction.heartbeat | interaction.expired
+```
 
-## 验证命令
+### 5. HTTP bridge endpoints（`transport/http.ts`，默认 `http://127.0.0.1:8788`）
+
+```
+GET  /api/health
+GET  /api/state                  → { ok, snapshot: StateSnapshot }
+GET  /api/requests/pending       → { requests: InteractionRequest[] }
+GET  /api/events                 → SSE: state.changed / request.* / heartbeat ping (15s)
+POST /api/requests               → 扩展 bridge 用：创建 + park（等价于 elicitation tool 调用）
+POST /api/requests/:id/submit    → UI 提交响应；HTTP 状态码 409=cancelled / 408=heartbeat-timeout / 500=other
+POST /api/requests/:id/cancel
+POST /api/requests/:id/heartbeat
+```
+
+### 6. `ServerOptions`（`types/index.ts`）
+
+```ts
+{
+  statePath?,             // 默认 ~/.agentils/state.json（仅当显式接 JsonStore 时落盘）
+  httpPort?,              // 默认 8788
+  logServer?,             // 默认 true
+  logPort?,               // 默认 12138
+  logDir?,                // 默认 <cwd>/.hc/logs
+  heartbeatTimeoutMs?,    // 默认 60 * 60_000
+}
+```
+
+## 入口与启动
+
+`startAgentilsServer(opts)` 是**唯一公开入口**（`src/index.ts`）。返回 `RunningServer { orchestrator, store, http?, logServer?, stop }`。
+
+CLI flags（`process.argv[1]` 是本包时生效）：
+
+- `--stdio` / `--stdio-only` — 启 stdio transport
+- `--http` / `--http-only` — 启 HTTP bridge（默认 8788）
+- 不带 flag → 二者都启（推荐：VS Code 扩展 in-process + Copilot stdio 共享）
+
+`packages/extensions/agentils-vscode` 的 `extension.ts` 直接 in-process `import { startAgentilsServer }` 启同一份 orchestrator；Copilot 通过 `.vscode/mcp.json` 的 stdio 配置（由 `packages/cli init` 写入）连**同一进程**。
+
+## Orchestrator 内部模型
+
+```ts
+class Orchestrator {
+    private parked: Map<requestId, { resolve; reject }>
+    private subscribers: Set<(SseEvent) => void>
+    private version: number // 单调自增
+    pending(): InteractionRequest[]
+    snapshot(): StateSnapshot
+    sweepExpired(): void // index.ts setInterval 30s 调一次
+    // park / submit / cancel / heartbeat / subscribe（详见源码）
+}
+```
+
+要点：
+
+- 一个 tool 调用对应一个 parked promise；UI submit 时 resolve；cancel/expire 时 reject 一个**确切的 Error.message**（`'cancelled'` / `'heartbeat-timeout'`），HTTP 层据此分类返回 `409 / 408 / 500`，扩展 `vscode.lm.registerTool` 接到后透传给 LLM
+- 所有状态变更后必须 `version++` 并 broadcast；订阅者（HTTP SSE / 未来 stdio 通知）凭 version 去重
+- `parked` map 与 `store` 是两份不同视图：`store` 保留所有历史（含 expired），`parked` 只挂活的 promise
+
+## Store 三件套
+
+- `interaction-store.ts` —— `InteractionStore` 接口 + `emptyState()` 工厂；任何替代实现都要满足这个接口
+- `memory-store.ts` —— 默认实现，进程退出即丢
+- `json-store.ts` —— 可选持久化，落 `~/.agentils/state.json`（路径由 `ServerOptions.statePath` 覆盖）；当前 `index.ts` 默认仍用 `MemoryStore`，需要持久化的调用方自己 `new JsonStore(...)` 注入
+
+## 典型调用链：单次澄清
+
+```
+LLM (Copilot)
+  → vscode.lm.registerTool 'agentils_request_user_clarification' invoke handler
+    → AgentilsClient.park({ toolName: 'request_user_clarification', question, ... })
+      → POST /api/requests （HTTP bridge）
+        → Orchestrator: 生成 InteractionRequest, store.upsertRequest, parked.set(id, {resolve,reject})
+          → broadcast SSE 'request.created'
+            → WebView (apps/webview) 收到 → 渲染表单
+              → 用户提交 → POST /api/requests/:id/submit
+                → Orchestrator: store.putResponse, parked.get(id).resolve(response)
+                  → HTTP 返回；扩展端 park() promise resolve
+                    → tool invoke handler 把 response.text 返回给 LLM
+                  → broadcast SSE 'interaction.submitted'
+```
+
+## 边界规则
+
+- `transport/*` 只做协议转换 + 鉴别参数 → 调 `Orchestrator.<method>` → 序列化结果。**禁止**直接读写 `store`
+- `store/*` 不感知 HTTP / SSE / promise，纯 CRUD + 事件无关
+- `Orchestrator` 是唯一可以同时 touch `store` + `parked` + `subscribers` 的角色
+- `client/index.ts` 是**外部消费方**用的 HTTP 客户端，不允许 import `orchestrator` / `store`（否则就违反 in-process vs out-of-process 边界）
+
+## 持久化语义
+
+- 默认 `MemoryStore` 进程退出即丢；这是显式选择，不是 bug
+- 启用 `JsonStore` 后才能 replay；replay 走 `Orchestrator` 构造函数里 `store.listPending()` 重建 `pending` 视图（注意：parked promise 没法 replay——重启后 pending 仍可见但不会自动 resolve 之前 LLM 的 tool 调用）
+
+## 测试与验证
 
 ```bash
 cd packages/mcp
-pnpm tsc -p . --noEmit
-pnpm tsup
-pnpm test
-npx tsx --test test/runtime/{http-smoke,phase3-feasibility,phase4-feasibility,phase4-integration,phase3-e2e}.test.ts
+pnpm tsc -p . --noEmit       # 类型
+pnpm tsup                     # 构建
+pnpm test                     # 单元 + e2e
 ```
 
-全部通过 = MCP 控制平面就绪。
+新增 tool / endpoint / 字段时**先写测试再写实现**（参见总则 Rule 5）：覆盖反向用例（非法输入 / 边界值 / 状态机非法转移 / 并发 / 依赖故障）。
