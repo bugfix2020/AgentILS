@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Avatar, Button, ConfigProvider, Flex, Space, Tag, theme, Typography, message } from 'antd'
 import { Bubble, Conversations, Prompts, Sender, Suggestion, Welcome, XProvider } from '@ant-design/x'
-import type { PromptsItemType } from '@ant-design/x'
 import type { SuggestionItem } from '@ant-design/x/es/suggestion'
+
+// Derive types from component props so TS Language Server resolution stays
+// consistent with `tsc --noEmit`. The root-barrel `PromptsItemType` is
+// occasionally not picked up by VS Code's TS LS under Bundler resolution.
+type PromptsItemType = NonNullable<React.ComponentProps<typeof Prompts>['items']>[number]
+type BubbleRolesType = React.ComponentProps<typeof Bubble.List>['role']
 import { createStyles } from 'antd-style'
 import {
     EllipsisOutlined,
@@ -374,7 +379,7 @@ export function App(): React.ReactElement {
         ]
     }, [active])
 
-    const bubbleRoles: React.ComponentProps<typeof Bubble.List>['role'] = useMemo(
+    const bubbleRoles: BubbleRolesType = useMemo(
         () => ({
             assistant: {
                 placement: 'start' as const,
@@ -620,7 +625,15 @@ export function App(): React.ReactElement {
                         onKeyDown={onKeyDown}
                         onSubmit={(message) => void handleSubmit(message)}
                         onCancel={() => active && bridge.cancelInteraction(active.id)}
-                        onPasteFile={(files) => void handleFiles(files)}
+                        onPasteFile={(files) => {
+                            const list =
+                                files instanceof FileList
+                                    ? Array.from(files)
+                                    : Array.isArray(files)
+                                      ? files
+                                      : [files as File]
+                            void handleFiles(list)
+                        }}
                         placeholder={active?.placeholder ?? '向我提问吧'}
                     />
                 )}
