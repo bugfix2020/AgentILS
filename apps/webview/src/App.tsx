@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Avatar, Button, ConfigProvider, Flex, Space, Tag, theme, Typography, message } from 'antd'
 import { Bubble, Conversations, Prompts, Sender, Suggestion, Welcome, XProvider } from '@ant-design/x'
-import type { PromptsItemType } from '@ant-design/x/es/prompts'
+import type { PromptsItemType } from '@ant-design/x'
 import type { SuggestionItem } from '@ant-design/x/es/suggestion'
 import { createStyles } from 'antd-style'
 import {
