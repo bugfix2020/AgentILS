@@ -3,6 +3,11 @@
 // packages/quality-gate/src/precommit/steps.ts as DEFAULT_STEPS.
 // Discovered automatically by `agentils-quality-gate precommit` when run
 // anywhere inside this repo (config lookup walks upward).
+//
+// Note: GENERATE FLOWCHARTS was intentionally removed — the puppeteer-rendered
+// PNGs are non-deterministic across machines/Chrome versions, and the
+// architecture diagrams have drifted from the current code anyway. Run
+// `pnpm run generate:flowcharts` manually if you want to refresh them.
 export default {
     steps: [
         {
@@ -10,12 +15,12 @@ export default {
             cmd: 'node scripts/dev/sync-agent-instructions.mjs --stage',
         },
         {
-            label: 'GENERATE FLOWCHARTS',
-            cmd: 'pnpm run generate:flowcharts',
-        },
-        {
             label: 'LINT-STAGED STAGED FILES',
             cmd: 'node scripts/dev/run-lint-staged-with-progress.mjs',
+        },
+        {
+            label: 'TYPECHECK (TURBO CACHED)',
+            cmd: 'pnpm -s typecheck',
         },
     ],
 }
