@@ -5,7 +5,6 @@ import type { PromptsItemType } from '@ant-design/x/es/prompts'
 import type { SuggestionItem } from '@ant-design/x/es/suggestion'
 import { createStyles } from 'antd-style'
 import {
-    AppstoreAddOutlined,
     EllipsisOutlined,
     FileSearchOutlined,
     HeartOutlined,
@@ -77,14 +76,19 @@ const useStyle = createStyles(({ token, css }) => ({
         border: none;
         color: ${token.colorText};
         font-weight: 500;
-        &:hover { background-color: #1677ff22 !important; color: ${token.colorPrimary} !important; }
+        &:hover {
+            background-color: #1677ff22 !important;
+            color: ${token.colorPrimary} !important;
+        }
     `,
     conversations: css`
         flex: 1;
         overflow-y: auto;
         margin-top: 4px;
         padding: 0;
-        .ant-conversations-list { padding-inline-start: 0; }
+        .ant-conversations-list {
+            padding-inline-start: 0;
+        }
     `,
     sideStatusCard: css`
         background: ${token.colorBgContainer};
@@ -139,9 +143,16 @@ const useStyle = createStyles(({ token, css }) => ({
         padding: ${token.paddingLG}px;
     `,
     chatPrompt: css`
-        .ant-prompts-label { color: #000000e0 !important; }
-        .ant-prompts-desc { color: #000000a6 !important; width: 100%; }
-        .ant-prompts-icon { color: #000000a6 !important; }
+        .ant-prompts-label {
+            color: #000000e0 !important;
+        }
+        .ant-prompts-desc {
+            color: #000000a6 !important;
+            width: 100%;
+        }
+        .ant-prompts-icon {
+            color: #000000a6 !important;
+        }
     `,
     bubbles: css`
         width: 100%;
@@ -408,10 +419,7 @@ export function App(): React.ReactElement {
         () =>
             pending.map((item) => ({
                 key: item.id,
-                label:
-                    item.id === activeId
-                        ? `[当前] ${truncate(item.question, 32)}`
-                        : truncate(item.question, 36),
+                label: item.id === activeId ? `[当前] ${truncate(item.question, 32)}` : truncate(item.question, 36),
                 group: item.toolName,
             })),
         [activeId, pending],
@@ -452,9 +460,7 @@ export function App(): React.ReactElement {
                     <Typography.Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.4 }}>
                         STATUS
                     </Typography.Text>
-                    {viewModel?.connection.status && (
-                        <Tag color={connectionColor}>{viewModel.connection.status}</Tag>
-                    )}
+                    {viewModel?.connection.status && <Tag color={connectionColor}>{viewModel.connection.status}</Tag>}
                     <Typography.Text style={{ fontSize: 12 }} type="secondary">
                         等待代理请求…
                     </Typography.Text>
@@ -475,7 +481,7 @@ export function App(): React.ReactElement {
                 <Flex vertical gap={16} align="center" className={styles.placeholder}>
                     <Welcome
                         variant="borderless"
-                        icon={<div className="agentils-logo-mark agentils-logo-mark-lg">AI</div>}
+                        icon="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*s5sNRo5LjfQAAAAAAAAAAAAADgCCAQ/fmt.webp"
                         title="你好，我是 AgentILS Human Clarification Agent"
                         description="基于 mcp 控制平面的人类介入工作台 — 等待代理请求并提供上下文澄清。"
                         extra={
@@ -492,8 +498,7 @@ export function App(): React.ReactElement {
                                 list: { height: '100%' },
                                 item: {
                                     flex: 1,
-                                    backgroundImage:
-                                        'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
+                                    backgroundImage: 'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
                                     borderRadius: 12,
                                     border: 'none',
                                 },
@@ -510,8 +515,7 @@ export function App(): React.ReactElement {
                             styles={{
                                 item: {
                                     flex: 1,
-                                    backgroundImage:
-                                        'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
+                                    backgroundImage: 'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
                                     borderRadius: 12,
                                     border: 'none',
                                 },
@@ -527,12 +531,7 @@ export function App(): React.ReactElement {
                     </Flex>
                 </Flex>
             ) : (
-                <Bubble.List
-                    className={styles.bubbles}
-                    items={bubbleItems}
-                    role={bubbleRoles}
-                    autoScroll
-                />
+                <Bubble.List className={styles.bubbles} items={bubbleItems} role={bubbleRoles} autoScroll />
             )}
         </div>
     )
@@ -567,24 +566,12 @@ export function App(): React.ReactElement {
                 />
             )}
 
-            {uiError && (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message={uiError}
-                    closable
-                    onClose={() => setUiError(null)}
-                />
-            )}
+            {uiError && <Alert type="warning" showIcon message={uiError} closable onClose={() => setUiError(null)} />}
 
             {attachmentCount > 0 && (
                 <Flex gap={6} wrap>
                     {images.map((image, index) => (
-                        <Tag
-                            key={`${image.filename ?? 'image'}-${index}`}
-                            closable
-                            onClose={() => removeImage(index)}
-                        >
+                        <Tag key={`${image.filename ?? 'image'}-${index}`} closable onClose={() => removeImage(index)}>
                             {image.filename ?? `image-${index + 1}`}
                         </Tag>
                     ))}
@@ -644,12 +631,7 @@ export function App(): React.ReactElement {
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         @ for instructions · + to attach
                     </Typography.Text>
-                    <Button
-                        type="link"
-                        size="small"
-                        danger
-                        onClick={() => bridge.cancelInteraction(active.id)}
-                    >
+                    <Button type="link" size="small" danger onClick={() => bridge.cancelInteraction(active.id)}>
                         Cancel request
                     </Button>
                 </Flex>
@@ -849,9 +831,7 @@ function buildHotTopicsItem(replyTemplates: ReplyTemplate[]): PromptsItemType {
     const children = replyTemplates.slice(0, 4).map((item, idx) => ({
         key: `hot-${idx}`,
         description: item.name,
-        icon: (
-            <span style={{ color: palette[idx] ?? palette[0], fontWeight: 700 }}>{idx + 1}</span>
-        ),
+        icon: <span style={{ color: palette[idx] ?? palette[0], fontWeight: 700 }}>{idx + 1}</span>,
     }))
     if (children.length === 0) {
         children.push({

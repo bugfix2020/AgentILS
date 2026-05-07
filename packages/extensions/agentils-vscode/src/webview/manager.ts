@@ -482,7 +482,7 @@ export class AgentilsWebviewManager {
             `style-src ${webview.cspSource} 'unsafe-inline'`,
             `script-src ${webview.cspSource}`,
             `font-src ${webview.cspSource}`,
-            `img-src ${webview.cspSource} data:`,
+            `img-src ${webview.cspSource} data: https://mdn.alipayobjects.com`,
         ].join('; ')
 
         return `<!doctype html>
