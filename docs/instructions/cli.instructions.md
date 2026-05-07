@@ -1,94 +1,117 @@
 # packages/cli 开发规则
 
-定义 `packages/cli`（VS Code 配置注入器）的边界、职责约束、当前能力范围。
+定义 `packages/cli`（VS Code 配置注入器）的边界、命令、模板布局。本文件是 cli 实现细节的真值源。
+
+> 跨包总则参见 [`agentils.instructions.md`](agentils.instructions.md)；mcp tool / 配置语义见 [`mcp.instructions.md`](mcp.instructions.md)。本文件**只描述 cli 包内部**。
 
 ## 核心定位
 
-`packages/cli` 是 AgentILS 的**项目外配置注入工具**，仅面向开发者一条命令完成 VS Code 配置：
+`packages/cli` 是一个**配置注入工具**，发布为 npm 包 `@agent-ils/cli`，通过一条命令把 AgentILS 接入用户的 VS Code 工作区或用户级 prompts 目录：
 
 ```bash
-npx agentils install vscode             # 写入 .vscode/mcp.json + .github/{agents,prompts}/
-npx agentils install vscode --workspace /path/to/repo
-npx agentils install vscode --dry-run
-npx agentils uninstall vscode
+npx @agent-ils/cli init                      # 默认 user scope
+npx @agent-ils/cli init --workspace          # 当前目录
+npx @agent-ils/cli init --workspace ./repo
+npx @agent-ils/cli uninstall --workspace .
 ```
 
-**当前 V1 仅支持 VS Code**。Cursor / Codex / Antigravity / 其它 IDE 不在 V1 范围内 —— 任何文档/帮助/模板**不应**暗示它们已支持。
+**当前只支持 VS Code**（`--vscode` 是冗余 flag，存在仅为显式表达意图）。Cursor / Codex / 其它 IDE 不在范围内 —— 任何文档/帮助/模板**不应**暗示它们已支持。
 
 ## ⚠️ 两套完全独立的配置系统（禁止混淆）
 
-| 系统 | 工具 | 内容 | 面向 | 方向 |
-|------|------|------|------|------|
-| **开发指引同步** | `scripts/dev/sync-agent-instructions.mjs` + `docs/instructions/sync-manifest.json` | 模块边界、调用链、状态真值源、开发规范 | AgentILS 项目自身开发者 | `docs/instructions/` → `.github/` + `AGENTS.md` |
-| **用户配置注入（本 CLI）** | `agentils install vscode` | MCP server 配置 + 行为约束 prompt | 使用 AgentILS 的外部开发者 | `packages/cli/templates/` → `.vscode/mcp.json` + `.github/{agents,prompts}/` |
+| 系统                       | 工具                                                                               | 内容                                                   | 面向                    |
+| -------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------- |
+| **开发指引同步**           | `scripts/dev/sync-agent-instructions.mjs` + `docs/instructions/sync-manifest.json` | 模块边界、调用链、状态真值源、开发规范                 | AgentILS 项目自身开发者 |
+| **用户配置注入（本 CLI）** | `@agent-ils/cli init`                                                              | mcp.json + agent / prompt 模板 + VS Code settings 预设 | AgentILS **用户**       |
 
 ### 绝对禁止
 
 - CLI 读取 `docs/instructions/` 任何文件 —— 那是开发指引
 - CLI 调 `syncGeneratedInstructions()` —— 那是 sync 脚本职责
-- CLI 模板存放在非 `packages/cli/templates/` 之外
-- 模板内容包含模块边界 / 调用链 / 内部 API 细节（属于开发指引）
+- 模板存放在 `packages/cli/templates/` 之外
+- 模板内容包含模块边界 / 调用链 / mcp 内部 API / orchestrator 字段细节（属于开发指引）
 
-## 当前命令
+## 命令与参数（`packages/cli/src/index.ts`）
 
-| Command | 行为 |
-|---------|------|
-| `agentils install vscode` | 写 `.vscode/mcp.json`（HTTP，默认 `http://127.0.0.1:8788/mcp`，可由 `AGENTILS_HTTP_PORT`/`AGENTILS_HTTP_HOST` 覆盖）+ `.github/agents/agentils.loop.agent.md` + `.github/prompts/runtask.prompt.md` |
-| `agentils uninstall vscode` | 移除上述文件 + 清理 legacy 路径（`runTask.prompt.md` 大写、旧 `.copilot/` 目录、旧 `agentils.orchestrator.agent.md` 等） |
-| `agentils --help` / `-h` / 无参 | 打印帮助 |
+| Command                         | 行为                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `init`                          | 写 prompt / agent 模板 + （workspace 模式）合并 `.vscode/mcp.json` 与 settings 预设 |
+| `uninstall`                     | 移除上述文件 + 清理历史命名                                                         |
+| `help` / `--help` / `-h` / 无参 | 打印帮助                                                                            |
 
-参数：
+向后兼容：`install` 被解析为 `init` 的别名（早期文档使用过）。
 
-| Flag | 默认 | 说明 |
-|------|------|------|
-| `--workspace <path>` | `process.cwd()` | 目标工作区根 |
-| `--scope workspace\|user\|both` | `workspace` | 仅工作区 / 仅用户级 / 同时写入 |
-| `--dry-run` | false | 预演不落盘 |
+| Flag                                 | 默认    | 说明                                                                                                     |
+| ------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------- |
+| `--vscode` 或裸 `vscode`             | —       | 显式选 VS Code 目标，可省（默认就是它）                                                                  |
+| `--user`                             | ✅ 默认 | 写入 VS Code 用户级 prompts 目录（平台路径见下）                                                         |
+| `--workspace [<dir>]` / `-w [<dir>]` | —       | 写入 `<dir>/.github/{prompts,agents}` + 合并 `<dir>/.vscode/mcp.json`；不带 `<dir>` 时取 `process.cwd()` |
 
-## 模板目录
+### 用户级 prompts 目录（`userPromptsDir()`）
 
-模板**只在** `packages/cli/templates/vscode/`：
+| 平台    | 路径                                              |
+| ------- | ------------------------------------------------- |
+| macOS   | `~/Library/Application Support/Code/User/prompts` |
+| Windows | `%APPDATA%/Code/User/prompts`                     |
+| Linux   | `~/.config/Code/User/prompts`                     |
+
+## 模板布局（`packages/cli/templates/`）
 
 ```
-packages/cli/templates/vscode/
-  agents/
-    agentils.loop.agent.md       → .github/agents/agentils.loop.agent.md
-  prompts/
-    runTask.prompt.md            → .github/prompts/runtask.prompt.md（小写规范化）
+packages/cli/templates/
+  files/              # 25 个 agentils.* 模板（init 主入口）
+    agentils.code.agent.md
+    agentils.orchestrator.agent.md
+    agentils.plan.agent.md
+    agentils.proposal-create.prompt.md
+    agentils.runTask.prompt.md
+    agentils.subagent.opus.agent.md
+    ... (共 25 个；agent.md / prompt.md / chatmode.md 三种扩展名)
+  sample-prompts/     # 2 个示例（agentils.agent.md / agentils.prompt.md）
+  config.json         # VS Code settings 预设（agentils.templates.contact / .feedback / .input ... 等数组）
 ```
 
-模板内的 tool 引用必须是 V1 规范名：`mcp_agentils_state_get` / `mcp_agentils_run_task_loop`（旧名 `bugfix2020.agentils-vscode/stateGet` 等已废弃）。
+模板必须满足：
 
-### 模板内容应该包含
+- 文件名以 `agentils.` 开头（`TEMPLATE_PREFIX`）
+- 扩展名属于 `ALLOWED_TEMPLATE_EXTS = ['.prompt.md', '.chatmode.md', '.agent.md']`
+- 内容引用 mcp tool 时**只能使用** LM 注册前缀名 `agentils_request_user_clarification` / `agentils_request_contact_user` / `agentils_request_user_feedback` / `agentils_request_dynamic_action`（与扩展 `TOOL_BINDINGS.lmId` 一致）
 
-- MCP tools 的使用约束（调用顺序、不能自作主张完成任务等）
-- AgentILS V1 工作流阶段说明（`collect → plan → execute → test → summarize`）
-- VS Code 特定的交互规则（@agentils 入口、WebView 形态）
+模板**应该**包含：用户面向的行为约束（"调 `agentils_request_user_feedback` 等待确认再继续"），prompt slot 设计，subagent 触发条件。
 
-### 模板**不应该**包含
+模板**不应该**包含：mcp 内部模块名（orchestrator / store / parked-promise）、HTTP endpoint 形状、`InteractionRequest` 字段、扩展 in-process 启动机制 —— 这些是开发指引内容，会让用户误解架构。
 
-- 模块边界与调用链（开发指引）
-- 状态真值源、store 架构（开发指引）
-- 内部 API 细节（`ctx.elicitUser()`、`memory-store.ts` 等）
-
-## 生成的 `.vscode/mcp.json`
+## 生成的 `.vscode/mcp.json`（合并写入）
 
 ```jsonc
 {
-  "servers": {
-    "agentils": {
-      "type": "http",
-      "url": "http://127.0.0.1:8788/mcp"
-    }
-  }
+    "servers": {
+        "agentils": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@agent-ils/mcp", "--stdio"],
+        },
+    },
 }
 ```
 
-如果工作区已安装 `agentils-vscode` 扩展，扩展会在 `openPanel` 时根据 `~/.agentils/runtime-*.lock` 把 url 改写为 MCP server 实际绑定的端口。CLI 写入的是**默认值**；运行时真值由扩展同步。
+要点：
 
-## 安全参考
+- **stdio transport**，不是 HTTP（HTTP 是扩展 in-process 启的内部 bridge，给 webview / CLI 之外的消费方用）。Copilot 调 mcp tool 走 stdio，确保扩展不安装时也能用
+- 已存在的其它 server 条目会被保留（`{ ...existing, servers: { ...existing.servers, agentils: ... } }`）
+- 不写 user scope 的 `mcp.json`（user scope 只写 prompts，mcp.json 是 workspace 概念）
 
-参照 `humanClarification.hcInstall.installFromTemplate` 的五层安全校验：路径穿越检查、命名空间校验、扩展名白名单、文件大小限制、数组合并策略。
+## settings 预设合并（workspace mode）
+
+`templates/config.json` 是一组 VS Code settings 预设（如 `agentils.templates.contact` / `.feedback` / `.input`），在 `injectSettings()` 里与 `<workspace>/.vscode/settings.json` 合并：数组按 `name` 字段去重并替换；非数组键保留 existing。
+
+## 安全校验（`copyTemplate` / `injectMcpJson` / `injectSettings`）
+
+- 路径穿越：`basename(file)` + `join` 落到目标目录，不允许相对引用
+- 命名空间：模板名必须以 `TEMPLATE_PREFIX` 开头
+- 扩展名白名单：`ALLOWED_TEMPLATE_EXTS`
+- 文件大小：实际写入由 fs 直接限制（如未来引入远程模板再加显式 size cap）
+- 数组合并：`mergeArraysByName` 保证 settings 不重复
 
 ## 验证命令
 
@@ -96,25 +119,19 @@ packages/cli/templates/vscode/
 cd packages/cli
 pnpm tsc -p . --noEmit
 pnpm tsup
-pnpm test                       # 5 用例，含 mcp.json HTTP transport 模板断言
 node dist/index.js --help
-node dist/index.js install vscode --workspace /tmp/demo --dry-run
-grep -n 'type:' dist/index.js   # 应只看到 "http"，不应有 "stdio"
+node dist/index.js init --workspace /tmp/agentils-cli-smoke
+cat /tmp/agentils-cli-smoke/.vscode/mcp.json    # 应看到 type: 'stdio'
+ls /tmp/agentils-cli-smoke/.github/{prompts,agents}
+node dist/index.js uninstall --workspace /tmp/agentils-cli-smoke
 ```
 
-全部通过 = CLI 就绪。
+`pnpm test` 当前未配置（package.json 无 test script），新增能力时按总则 Rule 5 同步加测试。
 
 ## 禁止事项（再次强调）
 
-- 包含任何业务逻辑（task / approval / budget / policy 全部属于 `packages/mcp`）
-- 包含任何 IDE 特定 UI 代码（属于对应扩展）
-- 在运行时读取 monorepo 源码树文件（模板必须在 CLI 包内并通过 tsup 构建嵌入）
-- 混淆开发指引与用户模板
-- 在文档中暗示已支持 cursor / codex / antigravity（V1 仅 vscode）
-
-## 开发工作流
-
-1. 修改 CLI 模板：编辑 `packages/cli/templates/vscode/` 下文件
-2. 修改开发指引：编辑 `docs/instructions/`，运行 `node scripts/dev/sync-agent-instructions.mjs`
-3. 构建 CLI：`pnpm -C packages/cli tsup`
-4. 测试注入：`node packages/cli/dist/index.js install vscode --workspace /tmp/demo --dry-run`
+- 含任何 mcp 业务逻辑（orchestrator / store / sweep / park 全部属于 mcp）
+- 含任何 IDE UI 代码（属于扩展）
+- 运行时读 monorepo 源码树（模板必须在包内 + tsup 构建嵌入）
+- 暗示已支持 cursor / codex / antigravity（仅 vscode）
+- 在模板里写 collect→plan→execute→test→summarize 之类的废弃 V1 任务阶段术语
