@@ -1,50 +1,63 @@
 ---
-applyTo: 'extensions/agentils-vscode/**,packages/mcp/**,packages/cli/**'
+applyTo: 'packages/extensions/agentils-vscode/**,packages/mcp/**,packages/cli/**,apps/webview/**'
 ---
 
 # Webview Source-of-Truth 真值源约束
 
 ## 核心原则
 
-**Webview 是产品行为的唯一真值源**。protocol / extension host / MCP state machine / CLI 模板全部按 webview 的展示需求倒推。
+**Webview 是产品行为的真值源**：用户体验定义在 `apps/webview/`，扩展 host / mcp transport / mcp store / cli 模板按 webview 渲染需求倒推。但**业务状态的真值源**仍是 `packages/mcp` 的 `InteractionStore`，webview 只是它的投影。
 
 ## 单向数据流（不可违背）
 
 ```
-packages/mcp (StateSnapshot)
-  → extensions/agentils-vscode/src/webview-view-model.ts (buildWebviewViewModelFromSnapshot)
-  → webview-host.ts postMessage({type:'render', payload: WebviewViewModel})
-  → webview/src/App.tsx 监听 window message → setVm
-  → 子组件读 vm 渲染
-  → 用户事件 → protocol-bridge.ts → vscode.postMessage(WebviewToHostMessage)
-  → webview-host.ts handleWebviewMessage → runtimeClient → packages/mcp
+packages/mcp store (InteractionStore: MemoryStore | JsonStore)
+  → mcp/orchestrator (写入 + 推 SSE 事件)
+    → mcp/transport/http.ts SSE GET /api/events
+      → apps/webview/src/App.tsx EventSource 消费
+        → setVm(StateSnapshot)
+        → 子组件读 vm 渲染
+        → 用户事件 → apps/webview/src/protocol-bridge.ts
+          → fetch POST /api/requests/:id/response
+          (或 vscode.postMessage 给扩展 host 处理 IDE 副作用)
+            → packages/extensions/agentils-vscode/src/webview/manager.ts onDidReceiveMessage
+              → 转发给 client / 命令
 ```
 
 ## 硬约束
 
-- ❌ webview 路径**禁止**直连 LLM、ollama、HTTP API；所有数据由 host 推 viewModel
-- ❌ webview 路径**禁止**自维护 stage / controlMode / messages 等业务 state；只可有 UI 局部 state（如 composer 草稿、modal 开关）
-- ❌ webview 路径**禁止**直接调 `vscode.postMessage`，必须经 `protocol-bridge.ts` 的语义函数
-- ❌ webview/src/protocol.ts 与 extensions/agentils-vscode/src/webview-protocol.ts 必须**字段一致**（mirror）；任何字段新增必须双侧同步
-- ❌ 不得在 webview 创建新的 `workflow/` `mock/` 目录；历史 mock 已删除，不得还原
+- ❌ webview 路径**禁止**直连 LLM、ollama、第三方 HTTP API；所有数据由 mcp SSE / fetch 推送
+- ❌ webview 路径**禁止**自维护业务 state（如 `interactions[]`、`status` 计算）；只可有 UI 局部 state（composer 草稿、modal 开关、本地 form 校验）
+- ❌ webview 路径**禁止**直接 `vscode.postMessage(rawAny)`，必须经 `protocol-bridge.ts` 的语义函数
+- ❌ `apps/webview/src/protocol.ts` 与 `packages/extensions/agentils-vscode/src/webview/protocol.ts` 必须**字段一致**（mirror）；任何字段新增双侧同步
+- ❌ 不得在 webview 创建 `workflow/` `mock/` `task-machine/` 这类业务派生目录
 
-## 字段扩展规则
+## 字段扩展规则（按真值源链 **从下往上**）
 
-新字段引入流程（按真值源链 **从下往上** 落地）：
+新字段引入流程：
 
 1. webview UI 设计/原型先行（决定字段需求）
-2. 同时改 `webview/src/protocol.ts` + `extensions/agentils-vscode/src/webview-protocol.ts`（mirror）
-3. 改 `webview-view-model.ts` 的 builder（先填默认值/空数组让 webview 不报错）
-4. 改 `packages/mcp` 的 TaskRecord/StateSnapshot 类型 + state machine 真实写入
-5. 改 `packages/cli/templates/` 模板教 LLM 怎么填该字段
+2. 同步改 `apps/webview/src/protocol.ts` + `packages/extensions/agentils-vscode/src/webview/protocol.ts`（mirror）
+3. 改 mcp `types/index.ts` 的 `InteractionRequest` / `InteractionResponse` / `StateSnapshot`
+4. 改 mcp `orchestrator/orchestrator.ts` 真实写入 + SSE 事件携带
+5. 改 mcp `client/index.ts` `park()` 入参签名
+6. 改扩展 `tools/registerTools.ts.normalizeToolInput`（让 LLM 入参拍平到新字段）
+7. 改 cli `templates/files/*.prompt.md` 教 LLM 怎么填该字段
 
-## 5 节点结构化内容契约
+## SSE 与心跳
 
-`vm.content.{collect,plan,execute,test,summarize}` 的字段定义详见 cascade plan §1.2.2，对应 packages/cli stage-envelope-contract 模板。
+- webview 通过 `new EventSource('/api/events')` 直连 mcp HTTP（baseUrl 由扩展 host 注入；in-process 模式下是 `http://127.0.0.1:<randomPort>`）
+- 收到 `request.created` / `request.updated` / `request.cancelled` / `state.snapshot` 等事件后：要么直接更新本地 `vm`，要么 fetch `GET /api/state` 拿全量
+- webview 必须周期性 `fetch POST /api/heartbeat`（或扩展 host 代发）保持 park 不被 `sweepExpired` 回收为 `heartbeat-timeout`
+- 心跳超时阈值 = `ServerOptions.heartbeatTimeoutMs`；扫描间隔 = `sweepIntervalMs`；测试可用 env `AGENTILS_TEST_HEARTBEAT_MS` / `AGENTILS_TEST_SWEEP_MS`
 
-## TCAS / ECAM 法则
+## 4 个 elicitation tool 的 webview 渲染对应
 
-- TCAS = B 阶段冲突检测器，写入 `vm.content.plan.conflicts[]`
-- ECAM = 横切的法则降级追踪器，写入 `vm.task.controlModeHistory[]`
-- 法则只单向降级（normal → alternate → direct），新任务重置
-- direct 模式 AgentILS 不再生成 plan_confirm/test_confirm interaction
+| `toolName`                   | webview 渲染形态                                                  |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `request_user_clarification` | textarea + submit                                                 |
+| `request_contact_user`       | 普通通知 + 简单回执                                               |
+| `request_user_feedback`      | 多轮反馈面板（accept / change-request / cancel）                  |
+| `request_dynamic_action`     | 按 `action.kind` 渲染：`select` / `confirm` / `composite-form` 等 |
+
+新增 toolName 必须先在 mcp `ToolName` 枚举登记，再加 webview 渲染分支，最后加扩展 LM tool binding。
