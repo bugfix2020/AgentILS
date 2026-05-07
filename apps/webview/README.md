@@ -1,5 +1,7 @@
 # apps/webview
 
+> English | [简体中文](./README.zh-CN.md)
+
 AgentILS webview (React + antd + @ant-design/x). Built with Vite.
 
 ```bash
