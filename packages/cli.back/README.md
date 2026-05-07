@@ -1,5 +1,13 @@
 # @agent-ils/cli — VS Code 配置注入工具
 
+> ⚠️ **DEPRECATED — V0 冻结备份**
+>
+> 本目录（`packages/cli.back/`）仅作为 V0 时期实现的备份保留，**已从 pnpm workspace 中排除**且 `"private": true`。
+> 任何新依赖、新调用、新文档请使用活跃包 [`packages/cli/`](../cli/README.md)（`@agent-ils/cli` V1）。
+> 本文件中描述的命令（`install vscode` / HTTP transport / `templates/vscode/`）在 V1 中**全部已变更**，请以 V1 说明为准。
+
+---
+
 > **角色**：把 AgentILS 的 MCP server 配置 + 用户行为约束 prompt 写入工作区 `.vscode/` 和 `.github/`。
 > **当前能力**：**仅支持 VS Code**（cursor / codex / antigravity 在 V1 不在范围内）。
 

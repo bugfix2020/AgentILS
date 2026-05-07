@@ -2,135 +2,164 @@
 <!-- Source: docs/instructions/vscode-ext.instructions.md -->
 <!-- DO NOT EDIT this generated target. Edit the source file instead. -->
 
-# extensions/agentils-vscode 开发规则
+# packages/extensions/agentils-vscode 开发规则
 
-定义 `extensions/agentils-vscode`（AgentILS V1 thin bridge）的边界、组件职责、调用链路和约束。
+定义 VS Code 扩展（AgentILS thin bridge）的边界、组件职责、调用链路和约束。本文件是扩展实现细节的真值源。
+
+> 跨包总则参见 [`agentils.instructions.md`](agentils.instructions.md)；mcp 协议契约见 [`mcp.instructions.md`](mcp.instructions.md)。本文件**只描述扩展包内部**，不重复其它真值源。
 
 ## 核心定位
 
-V1 thin bridge：**只是一个 HTTP MCP client + 一个 WebView host**。**不**承载业务逻辑，**不**注册任何 LM tool，**不**实现 chat participant，**不**持有跨会话状态。
+VS Code 扩展是 AgentILS 的 **thin bridge**：
 
-业务真值在 `packages/mcp`；扩展只是它的两条 IO 通道之一（另一条是 Copilot 通过 `.vscode/mcp.json` 直接连）。
+1. 在扩展进程内 **in-process 启动** `@agent-ils/mcp` 的 `startAgentilsServer`，监听一个随机 HTTP 端口；
+2. 用 `AgentilsClient` 通过该 HTTP bridge 把 4 个 LM tool 调用 park 到 mcp orchestrator；
+3. 托管 WebView（加载 `apps/webview` 构建产物），把 mcp 状态投影给用户、把用户响应回流到 mcp。
+
+业务真值在 `packages/mcp`；扩展只是它的两条 IO 通道之一（另一条是 Copilot 通过 `.vscode/mcp.json` 的 stdio 子进程，由 `packages/cli init` 注入）。
 
 **禁止事项**：
 
-- 实现业务规则（task 状态机、approval 规则、budget、policy 评估）—— 全部属于 `packages/mcp`
-- 在 webview 里手动算 conversation/task 状态 —— 只消费 MCP 投影
-- 持有跨会话持久状态 —— 真值源在 MCP
-- 重新引入旧文件：`chat-participant.ts` / `session/` / `interaction-channel/` / `lm-tools/` / `mcp-elicitation-bridge.ts` / `task-service-client.ts` / `task-console-panel.ts` / `panel/` （V1 全部删除）
-- 用独立 stdio 子进程独占 MCP（违反 Plan C 单 server 原则）
+- 在扩展进程内实现业务规则（park / resolve / sweep / 状态机）—— 全部属于 `packages/mcp`
+- 在 webview 里手动算 conversation/task 状态 —— 只消费 mcp 投影
+- 持有跨会话持久状态 —— 真值源在 mcp
+- 假设以下 V1 中间形态文件还在：`runtime-client.ts` / `webview-host.ts` / `webview-view-model.ts` / `types.ts` / `tool-result-builder.ts` / `logger.ts` / `mcp-elicitation-bridge.ts` / `task-service-client.ts` / `chat-participant.ts` / `installPromptPack` 命令 / `syncMcpJsonUrl` / lock-file 协议 / 订阅 `state://` MCP resources（**全部已删除**）
+- 自己 spawn `node packages/mcp/dist/index.js` 子进程（已改为 in-process import）
 
-## 当前源码（`src/`）
+## 当前源码（`packages/extensions/agentils-vscode/src/`）
 
-| 文件                     | 职责                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `extension.ts`           | activate 入口；`installPromptPack`（写 `.vscode/mcp.json` + 注入 `.github/agents/` + `.github/prompts/`）；命令 `agentils.installPromptPack` / `agentils.openPanel`；`syncMcpJsonUrl(workspaceRoot, actualUrl)` 用真实 lock url 改写 mcp.json                                                                                                                                                                        |
-| `runtime-client.ts`      | `AgentILSRuntimeClient`：lock 文件查找 → 必要时 spawn `node packages/mcp/dist/index.js` → `StreamableHTTPClientTransport` 连接；接口 `stateGet` / `runTaskLoop` / `subscribeResource` / `setElicitationHandler` / `onResourceUpdate` / `getCurrentLock` / `close`；MCP SDK 用 dynamic `import()`（CommonJS bundle 加载 ESM）；`close()` 先 client/transport.close → SIGTERM child → await exit → 1s 超时回退 SIGKILL |
-| `webview-host.ts`        | `AgentILSLoopWebviewHost`：管理 WebViewPanel；`pendingResolver` 保证一次 elicitation 单次回写；`onUserAction(handler) → disposable`；`userActionHandlers: Set<Handler>`                                                                                                                                                                                                                                              |
-| `webview-protocol.ts`    | host ↔ webview 协议契约：host→webview `render` / `set_busy` / `show_error` / `show_elicitation` / `submit_user_message` / `submit_interaction_result` / `ui_closed`；webview→host `ready` / `rendered` / `client_error` / `submit_elicitation_result`                                                                                                                                                                |
-| `webview-view-model.ts`  | `StateSnapshot` → 渲染模型                                                                                                                                                                                                                                                                                                                                                                                           |
-| `types.ts`               | 与 MCP 镜像的类型 (`StateSnapshot` / `RunTaskLoopInput` / `RunTaskLoopResult` / `RequestUserClarificationResult`)                                                                                                                                                                                                                                                                                                    |
-| `tool-result-builder.ts` | LM tool 结果格式化辅助（保留备用，`package.json.languageModelTools = []`）                                                                                                                                                                                                                                                                                                                                           |
-| `logger.ts`              | `extensionLogger`：文件 + 输出面板，`safeStringify` / `resolveAgentilsEnv`                                                                                                                                                                                                                                                                                                                                           |
+```
+extension.ts            # activate / deactivate 入口；启 mcp + 注册命令 + 注册 4 LM tool
+logging.ts              # createExtensionLogger：包装 OutputChannel + 500 行 ring buffer
+tools/
+  registerTools.ts      # TOOL_BINDINGS（4 个 lmId↔ToolName）+ vscode.lm.registerTool
+  toolResult.ts         # buildToolResultFromResponse / buildCancelledToolResult / buildHeartbeatTimeoutToolResult
+webview/
+  manager.ts            # AgentilsWebviewManager：单 panel 复用、postMessage 桥
+  protocol.ts           # 与 apps/webview 共享的消息类型契约
+```
 
-`webview/` 是独立 Vite + React 19 + AntD 子工程，`pnpm build` 输出 `dist/webview/`。
+`apps/webview/` 是独立 React + Vite 子工程，构建后由 `manager.ts` 加载（`out/webview/index.html`）。
 
-## 激活流程
+## 激活流程（`activate`）
 
 ```
 activate(context)
-  → ensureWorkspaceRoot()
-  → installPromptPack(context, workspaceRoot)   // 写 .vscode/mcp.json + .github/{agents,prompts}/
-  → new AgentILSRuntimeClient({ workspaceRoot, serverModulePath?, spawnEnv })
-  → new AgentILSLoopWebviewHost(context)
-  → register commands: agentils.installPromptPack, agentils.openPanel
+  → createMirroredChannel()         # OutputChannel + ring buffer
+  → 读 config: agentils.mcp.{autoStart, httpUrl, heartbeatTimeoutMs, sweepIntervalMs}
+  → if autoStart:
+      server = await startAgentilsServer({
+        stdio: false,
+        http: true,
+        httpPort: 0,                 # OS 分配随机端口避免冲突
+        statePath: AGENTILS_TEST_STATE_PATH (test only),
+        heartbeatTimeoutMs,
+        sweepIntervalMs,
+      })
+      baseUrl = `http://127.0.0.1:${server.http.port}`
+  → client = new AgentilsClient({ baseUrl })
+  → client.health()                  # 启动健康自检
+  → webviewManager = new AgentilsWebviewManager(context, baseUrl, log)
+  → registerCommand('agentils.openPanel',          () => webviewManager.ensurePanel())
+  → registerCommand('agentils.mcp.testConnection', () => client.health() + showInfo)
+  → registerTools(context, client, webviewManager, channel)
+  → return AgentilsExtensionApi { baseUrl, toolNames, recentLogs, triggerSweep, openWebview }
 
-agentils.openPanel:
-  → runtimeClient.getCurrentLock()              // 触发 ensureServerRunning
-    → 读 ~/.agentils/runtime-{hash}.lock；若存活则复用，否则 spawn + 等 lock
-  → if lock.url ≠ mcp.json.url → syncMcpJsonUrl()
-  → runtimeClient.subscribeResource('state://current')
-  → runtimeClient.subscribeResource('state://interaction/pending')
-  → runtimeClient.onResourceUpdate(uri => render with stateGet)
-  → runtimeClient.setElicitationHandler(params => webviewHost show_elicitation)
-  → webviewHost.show()
-  → webviewHost.onUserAction(action => runtimeClient.runTaskLoop({ interactionResult: ... }))
+deactivate()
+  → webviewManager.dispose()
+  → server.stop()
 ```
 
-## Plan C 约束（关键）
+`activationEvents` 当前为 `onStartupFinished` —— 启动即拉起 mcp + 注册 tool；用户随后通过 `@agentils` 在 Copilot Chat 调 tool 或 `agentils.openPanel` 打开面板。
 
-- 扩展**不**独占 MCP 子进程；它是 HTTP MCP 的 client。
-- 全工作区**只能有一个**运行中 MCP server，由 `~/.agentils/runtime-{sha1(workspace).slice(0,12)}.lock` 协调。
-- spawn 仅在 lock 文件指向的进程不存活时发生；spawn 后等 `LOCK_WAIT_MS=8000`，每 `LOCK_POLL_INTERVAL_MS=100ms` 探测。
-- `getCurrentLock()` 是同步 `.vscode/mcp.json` url 的真值源。
+## 配置项（`package.json contributes.configuration`）
 
-## ResourceNotifier（服务端侧）
+| 设置                              | 默认                    | 说明                                                                                |
+| --------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| `agentils.mcp.autoStart`          | `true`                  | activate 时是否 in-process 启 mcp HTTP bridge                                       |
+| `agentils.mcp.httpUrl`            | `http://127.0.0.1:8788` | 仅 `autoStart=false` 时用作外部 mcp 地址；`autoStart=true` 时被实际 OS 分配端口覆盖 |
+| `agentils.mcp.heartbeatTimeoutMs` | `3_600_000`             | 透传到 mcp `ServerOptions.heartbeatTimeoutMs`                                       |
+| `agentils.mcp.sweepIntervalMs`    | `30_000`                | 透传到 mcp 内部 sweep 定时器                                                        |
 
-每个 HTTP transport 实例（即每个客户端连接）在 server 端创建独立 `ResourceNotifier`，注册到 `orchestrator.notifiers: Set`，断开时自动 dispose。扩展端不直接看到这个机制，但要理解：**多 client 不会互相覆盖 push 通道**。
+测试 env override（仅给 e2e 用，**不要在 prod 文档暴露**）：
 
-## 调用 MCP
+- `AGENTILS_TEST_HEARTBEAT_MS`
+- `AGENTILS_TEST_SWEEP_MS`
+- `AGENTILS_TEST_STATE_PATH`
+
+## 注册的 LM tool（4 个，**带 `agentils_` 前缀避免与其它扩展冲突**）
+
+| `lmId`                                | mcp `toolName`               | confirmation 标签（中文） |
+| ------------------------------------- | ---------------------------- | ------------------------- |
+| `agentils_request_user_clarification` | `request_user_clarification` | 与用户进行澄清            |
+| `agentils_request_contact_user`       | `request_contact_user`       | 联系用户                  |
+| `agentils_request_user_feedback`      | `request_user_feedback`      | 与用户进行反馈沟通        |
+| `agentils_request_dynamic_action`     | `request_dynamic_action`     | 执行动态操作              |
+
+每次 `vscode.lm.registerTool.invoke`：
+
+1. 生成 `traceId = lm-{lmId}-{ts}-{rand}` 作日志关联
+2. `normalizeToolInput` 拍平 `{question, context?, placeholder?, action?, params?}`
+3. `client.park({ toolName, ... })` 调 mcp `POST /api/requests` 创建 + 挂起
+4. webview 消费 SSE 拿到 `request.created` → 渲染对应 UI → 用户提交
+5. `client.park()` 的 promise resolve → `buildToolResultFromResponse` 转成 `vscode.LanguageModelToolResult` 返回 LLM
+6. 异常映射：HTTP 409 → `buildCancelledToolResult`；HTTP 408 → `buildHeartbeatTimeoutToolResult`；其它 → 透传 throw
+
+## 注册的命令
+
+| Command id                    | 行为                                          |
+| ----------------------------- | --------------------------------------------- |
+| `agentils.openPanel`          | 打开（或聚焦）AgentILS WebView                |
+| `agentils.mcp.testConnection` | 调 `client.health()` + showInformationMessage |
+
+`installPromptPack` / `syncMcpJsonUrl` 这些 V1 命令**已删除**。Prompt pack 的注入由 `packages/cli` 通过用户主动 `npx @agent-ils/cli init` 完成，扩展不再代办。
+
+## WebView 协议
+
+`webview/protocol.ts` 定义 host ↔ webview 双向消息类型，**与 `apps/webview/src/` 共享**（修改时两侧必须同步）。
+
+`AgentilsWebviewManager` 主要职责：
+
+- 单 panel 复用（已存在则 `reveal`）
+- 把 `baseUrl` 注入 webview（webview 据此连同进程 mcp 的 SSE / HTTP）
+- 转发 webview postMessage（如调试日志、状态查询）
+
+注意：webview 自己用 `EventSource(/api/events)` 直接连 mcp，**不**通过扩展中转 SSE。这条直连依赖 in-process mcp 监听 `127.0.0.1:<randomPort>`，且 webview 资源已被 VS Code 加载在同源策略下。
+
+## 扩展导出 API
+
+`activate()` 返回 `AgentilsExtensionApi`，可被其它扩展或 e2e 测试通过 `vscode.extensions.getExtension(...).exports` 消费：
 
 ```ts
-// state_get
-await runtimeClient.stateGet(taskId?) → StateSnapshot
-
-// run_task_loop（推进一步）
-await runtimeClient.runTaskLoop({
-  sessionId?, taskId?, userIntent?, directive?, interactionResult?,
-}) → RunTaskLoopResult
-
-// 订阅 resource push
-await runtimeClient.subscribeResource('state://current')
-runtimeClient.onResourceUpdate(uri => /* re-fetch */)
+{
+  baseUrl: string                  // 实际 mcp HTTP 地址
+  toolNames: string[]              // REGISTERED_LM_IDS
+  recentLogs: () => string[]       // OutputChannel ring (最近 500 行)
+  triggerSweep: () => Promise<void>// 主动触发 mcp 的 sweepExpired（测试用）
+  openWebview: () => vscode.WebviewPanel
+}
 ```
 
-`runTaskLoop.next.action` 决定下一步：
+## 边界规则
 
-- `recall_tool` → 立即再 `runTaskLoop`
-- `await_webview` → 保持调用挂起（在扩展里通过 `pendingResolver` 实现）
-- `return_control` → 任务终态
-
-## Webview 通信
-
-```
-webview → host: postMessage({ type: 'submit_elicitation_result', payload: { interactionKey, action, content? } })
-                postMessage({ type: 'submit_user_message', payload: { content } })
-                postMessage({ type: 'ready' | 'rendered' | 'client_error' })
-
-host → webview: panel.webview.postMessage({ type: 'render' | 'set_busy' | 'show_error' | 'show_elicitation' | 'submit_user_message' | 'submit_interaction_result' | 'ui_closed' })
-```
-
-`webview-host.ts` 的 `pendingResolver` 在每次发起 elicitation 时保留一个 resolver；webview 提交结果即 resolve 一次（已内置防重）。
-
-## 命令
-
-| Command id                   | 行为                                                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `agentils.installPromptPack` | 把 `packages/cli/templates/vscode/{agents,prompts}/*` 写入 workspace `.github/`；模板根不存在时早失败提示 `npx agentils init --vscode` |
-| `agentils.openPanel`         | 同步 mcp.json url → 订阅 state resources → 打开 WebView                                                                                |
-
-`activationEvents: ['onStartupFinished']`；`languageModelTools: []`（V1 不再注册 LM tool）。
-
-## 配置
-
-| 设置                                | 用途                                                                                                                                                                                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agentils.runtime.serverModulePath` | 可选，强制指定 `packages/mcp/dist/index.js`；默认按 `extensionPath/../../packages/mcp/dist/index.js` → `workspaceRoot/packages/mcp/dist/index.js` → `workspaceRoot/dist/index.js` 顺序探测 |
+- `extension.ts` 是唯一可以同时持有 `server` / `client` / `webviewManager` 引用的入口；其它模块只接收依赖注入
+- `tools/` 下的代码**禁止** `import vscode from 'vscode'` 之外的 IDE 副作用；只做 LM invoke 的 mcp 桥接
+- `webview/manager.ts` 不感知业务字段（如 `toolName`、`InteractionRequest` 字段）；只搬运 postMessage
+- 所有跨包类型来自 `@agent-ils/mcp/{client,types}`，**不要**在扩展内复制类型定义
 
 ## 开发工作流
 
-1. 先 `pnpm tsc -p . --noEmit` 确认 typecheck
-2. 改协议时同步更新 `webview-protocol.ts` + `webview/src` 两侧
-3. spawn / lock 行为变化时一起改 `runtime-client.ts` + `packages/mcp/src/runtime/lock.ts` + `packages/mcp/src/gateway/transports.ts`
-4. 新功能优先在 `packages/mcp` 实现（业务规则），扩展只增加 UI 投影
+1. `pnpm --filter agentils-vscode build` —— 触发 webview vite build + extension tsup
+2. 协议变更需同步 `webview/protocol.ts` 与 `apps/webview/src/protocol.ts`（如果分两份），并跑两侧 typecheck
+3. 新增 LM tool：在 `TOOL_BINDINGS` 加一项 + 在 mcp `types/index.ts` 的 `ToolName` 加同名值 + 在 webview 加渲染分支；reverse-test 覆盖 cancel / heartbeat-timeout / 非法 input
+4. 用 F5 加载 `apps/vscode-debug/` 调试
 
 ## 验证命令
 
 ```bash
-cd extensions/agentils-vscode
-pnpm tsc -p . --noEmit
-pnpm build                    # 触发 webview vite build + tsc
-cd webview && pnpm build      # 单测 webview 子工程
+pnpm --filter agentils-vscode build
+pnpm --filter agentils-vscode-webview build
+node scripts/prepare-debug-workspace.cjs
 ```
 
-全部通过 = thin bridge 就绪。
+成功后用 `open:agentils-extension-host` task 启 Extension Development Host 验证活体。

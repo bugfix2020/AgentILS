@@ -22,7 +22,7 @@
 
 ## ECAM Panel 渲染层
 
-- `packages/quality-gate/src/precommit/panel.tsx` 是唯一的 ink 渲染入口。
+- `packages/quality-gate/src/precommit/panel.tsx` 是唯一的 ink 渲染入口；`runner.tsx` 是流程驱动器（订阅 step 状态 → 调用 panel render），`steps.ts` 是 BUILTIN_FALLBACK_STEPS 与 step 类型定义，`config.ts` 是 config 文件查找/加载/校验，`index.tsx` 是 `agentils-precommit-gate` bin 的 parseArgs + dispatch；`cli.ts` 在包根，是 `agentils-quality-gate` 主 CLI。
 - 框线必须始终是双字符 `╔ ╗ ╚ ╝ ║ ═ ╠ ╣ ╔══╗ ...`，固定 60 列宽。改宽度要同时改 header / footer / step row。
 - step row 默认布局：`  [indicator] LABEL  ........  N/M`，indicator 与 N/M 由 `step.status` 决定。
 - step.render 钩子：用户配置可写 `render(state) => string`，runner **必须**用 try/catch 包住该调用；抛出时显示 `  [render error] <label>: <message>`（红色），不允许 crash 整个面板。

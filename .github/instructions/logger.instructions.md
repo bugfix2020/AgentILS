@@ -28,8 +28,9 @@
 ## 公共 surface
 
 - **bin** `agent-ils-logger`（`packages/logger/dist/cli.js`，cac CLI）
-    - 子命令：`start` / `write` / `read`
-    - 无子命令时按 flag 自动路由（如 `--tail` 自动跑 `read`）
+    - 子命令：`serve`（启 HTTP collector）/ `read`（流式查询 + 过滤）
+    - 无子命令但带 read flag（如 `--tail`）时自动路由到 `read`
+    - 历史命名 `start` / `write` 已**删除**，文档与 LLM_USAGE 不得再引用
 - **exports**：
     - `.` → Node 端：`createLogger` / `createChannelLogger` /
       `createHttpLogger` / `startHttpLogServer` / 默认值导出
@@ -90,16 +91,15 @@
 
 ## CLI 行为约定
 
-- `agent-ils-logger start [--port N] [--host H] [--log-dir D] [--file-prefix P]`
+- `agent-ils-logger serve [--port N] [--host H] [--log-dir D] [--file-prefix P]`
   — 启动 collector，前台进程，`Ctrl+C` 退出。
-- `agent-ils-logger write --source X --event Y [--message ...] [--field k=v ...]`
-  — POST 一条记录，便于 shell 集成。
 - `agent-ils-logger read [--tail N] [--from <duration|ISO>] [--until ...]
 [--source S] [--level L] [--event E] [--format text|json|jsonl]`
   — 读取并过滤；`--tail` 模式按 DESC，`--from/--until` 模式按 ASC。
 - 无子命令但带 read flags 时自动路由到 `read`（用户视角"少打字"）。
 - 任何 CLI 改动**必须**让 `--help` 反映；不要硬编码 version，让 cac 从
   package.json 读。
+- 写入数据**没有** CLI 子命令；用 SDK（`createLogger` / `createHttpLogger` / `createBrowserLogger`）或直接 `curl POST /api/logs` 即可，不要再恢复 `write` 子命令。
 
 ## 测试约定
 

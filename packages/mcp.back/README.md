@@ -1,5 +1,13 @@
 # @agent-ils/mcp — AgentILS V1 控制平面
 
+> ⚠️ **DEPRECATED — V0 冻结备份**
+>
+> 本目录（`packages/mcp.back/`）仅作为 V0 gateway/orchestrator/store/notifier 架构的备份保留，**已从 pnpm workspace 中排除**且 `"private": true`。
+> 任何新依赖、新调用、新文档请使用活跃包 [`packages/mcp/`](../mcp/README.md)（V1 `startAgentilsServer` + parked-promise orchestrator + InteractionStore）。
+> 本文件中描述的 三个 tools 与五个 `state://` resources 在 V1 中**已被四个 elicitation tool + StateSnapshot/SSE 取代**，请以 V1 说明为准。
+
+---
+
 > **角色**：AgentILS 状态机的**唯一真值源**。完全独立于任何 IDE。
 > **当前版本**：V1（task loop 收敛架构）。
 
