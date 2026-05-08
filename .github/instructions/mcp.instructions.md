@@ -18,7 +18,7 @@
 - 在此包内处理 UI 渲染或交互展示逻辑
 - 在多个模块重复计算核心状态（违反单向数据流）
 - 假设当前 4 个 tool 之外有其它 tool 名存在（V0 / V1 早期 `state_get` / `run_task_loop` / `new_task_request` / `approval_request` / `feedback_gate` / `verify_run` / `ui_session_*` 全部已移除）
-- 假设存在 `state://*` MCP resource、`ResourceNotifier`、`gateway/`、`addNotifier/setNotifier/fanout`、`acquireRuntimeLock`、`TaskRecord/TaskInteraction/TaskSummaryDocument` 这些 V1 中间形态——它们仅在 `packages/mcp.back/` 备份里残留
+- 假设存在 `state://*` MCP resource、`ResourceNotifier`、`gateway/`、`addNotifier/setNotifier/fanout`、`acquireRuntimeLock`、`TaskRecord/TaskInteraction/TaskSummaryDocument` 这些 V1 中间形态——**已全部从仓库删除**（V0 备份目录 `packages/mcp.back/` / `packages/cli.back/` 也已移除），只在 git history 中可见
 
 ## 模块布局（`packages/mcp/src/`）
 

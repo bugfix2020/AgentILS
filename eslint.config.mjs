@@ -12,7 +12,6 @@ export default tseslint.config(
             '**/*.min.js',
             '.tmp/**',
             'packages/extensions/*/webview/**',
-            'packages/*.back/**',
             '**/scripts/**/*.mjs',
         ],
     },

@@ -61,7 +61,8 @@
 
 - **AgentILS** —— 本项目代号；写作时一律 `AgentILS`，不写成 `Agentils` / `agentils` 等变体。
 - **Plan C** —— 部署拓扑决议：每个 workspace 共享**一份** MCP server（HTTP + stdio 双 transport 同进程），Copilot 与 VS Code 扩展看到**同一份** orchestrator 状态。Plan A / Plan B（多 stdio 副本、IPC bridge）已被否决。
-- **V1** —— 当前架构代号，对应单 `Orchestrator` + parked-promise 池 + 4 个 elicitation tool 的实现形态。V0 是早期散点架构（chat-participant、多状态源、`new_task_request` / `approval_request` / `feedback_gate` / `verify_run` / `ui_session_*` / `state_get` / `run_task_loop` 等旧 tool 名），**已全部移除**，调试时不要假设它们存在；具体当前 tool 列表查 [`mcp.instructions.md`](mcp.instructions.md)。
+- **V1（当前 PoC）** —— 当前架构代号，对应单 `Orchestrator` + parked-promise 池 + 4 个 elicitation tool 的实现形态。**这是简化版 PoC，只验证 elicitation 闭环可行**，后续会主动回归 V0 风格的复杂分层架构（见下条）。V0 是更早的散点散点架构（chat-participant、多状态源、`new_task_request` / `approval_request` / `feedback_gate` / `verify_run` / `ui_session_*` / `state_get` / `run_task_loop` 等旧 tool 名），**已全部移除**，调试时不要假设它们存在；具体当前 tool 列表查 [`mcp.instructions.md`](mcp.instructions.md)。
+- **V0 风格（后续 target，不是 stale）** —— 未来要回归的复杂分层架构：多 service（`conversation-service` / `task-service` / `summary-service` / `override-service` / `ui-actions`）、`gateway/` 层、`control-modes`（normal / alternate / direct）、`runTaskLoop` 决策树（`recall_tool` / `await_webview` / `return_control`）、`ResourceNotifier` per-client + `addNotifier/fanout`、`state://*` MCP resource 订阅、`acquireRuntimeLock` 文件协议、`taskPhase = collect/plan/execute/test/summarize` 状态机、独立 `audit-store` / `summary-store` / `task-store` 等。这些术语在 V1 主线**不存在**，但 `docs/flowcharts/{01-plan-c-topology, 02-v1-task-loop, 04-http-lock-startup, 06-vscode-activation, 07-control-modes}.md` 描述的就是这套 target spec。**核查 stale 时的判别**：术语只在 `docs/flowcharts/`、`docs/agentils/`、commit history 出现 = target spec，**禁止删**；术语在活代码（`packages/mcp/src/` / `packages/extensions/agentils-vscode/src/` / `apps/webview/src/`）出现 = 才是 stale，需要核查。
 - **Elicitation** —— MCP 标准的"工具调用→挂起→等用户输入→恢复"机制；当前 4 个对外 tool 全部走这条路径。各 tool 的语义、字段与渲染合同放在子包 instruction 里，本总则不重复。
 - **ECAM panel** —— `@agent-ils/quality-gate` 的 pre-commit TUI 渲染层，借自 A320 ECAM 面板形态。详见 [`quality-gate.instructions.md`](quality-gate.instructions.md)。
 
@@ -190,7 +191,7 @@ GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 - **action 版本**：`actions/checkout@v6`、`actions/setup-node@v6`、`pnpm/action-setup@v6`（Node 24 native）。**不要降到 v4 / v5**，否则会出 "Node 20 deprecated" warning 或被强制提升到 Node 24 的过渡告警。
 - **Node runtime 分工**：`ci.yml` 用 Node 22 LTS（项目目标 runtime）；`release.yml` 单独用 **Node 24**，因为它自带 npm 11.5+，满足 OIDC Trusted Publisher 最低要求。**禁止**在 release job 写 `npm install -g npm@latest`：Node 22 + npm 11.5 self-replace 会撞 bundled-deps 解析 bug，报 `MODULE_NOT_FOUND 'promise-retry'`，`--force` 也救不了。
 - **OIDC Trusted Publisher**：`release.yml` 的 job 必须有 `permissions.id-token: write`；step env 用 `NPM_CONFIG_PROVENANCE: "true"` 自动签 provenance。**禁止使用 `NPM_TOKEN`** —— 已迁移到 OIDC，token 流是历史方案。
-- **ESLint v9 flat config 不读 `.gitignore`**：必须在 `eslint.config.mjs` 显式 `ignores`：`packages/*.back/**`、`.tmp/**`、`**/scripts/**/*.mjs`，新增构建产物或测试 fixture 路径同步加入。
+- **ESLint v9 flat config 不读 `.gitignore`**：必须在 `eslint.config.mjs` 显式 `ignores`：`.tmp/**`、`**/scripts/**/*.mjs`、`packages/extensions/*/webview/**`，新增构建产物或测试 fixture 路径同步加入。
 - **`.gitignore` 必须包含 `.agent-ils/`**：是 `@agent-ils/logger` 的本地 JSONL artifact，测试副作用产物，曾被误提交。
 - **`process.versions` 不含 `npm` key**：检查 npm 版本一律走 `npm --version` shell 命令，不要写 `process.versions.npm.split(...)` —— 会 TypeError。
 

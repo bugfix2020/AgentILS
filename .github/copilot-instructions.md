@@ -19,15 +19,13 @@
     - [`.github/instructions/quality-gate.instructions.md`](.github/instructions/quality-gate.instructions.md) — @agent-ils/quality-gate ECAM panel + ESLint 风格 config 加载边界
     - [`.github/instructions/logger.instructions.md`](.github/instructions/logger.instructions.md) — @agent-ils/logger 本地 JSONL 收集 + 查询；默认值/HTTP/CLI 边界
 
-不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex 读取。
+不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex/Claude Code 读取。
 
 调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。
 
 ## Copilot 专属规则
 
-- 在 VS Code 中使用 `@agentils` 启动 AgentILS WebView 会话；用 `/runtask` 作为 prompt 入口。
-- WebView 启动后，WebView 是主要的输入输出界面；Copilot chat 输出保持最小化。
-- 仅通过 AgentILS WebView 的 finish 操作结束会话，除非用户明确要求其他方式。
-- `run_task_loop.next.action` 是真值：`recall_tool` → 立即再调；`await_webview` → 挂起等待；`return_control` → 任务终态返回控制权。
-- 优先使用 AgentILS tools 与 WebView 交互面板，不要靠纯文本澄清或无关扩展工具。
-- 只问继续当前任务所需的最小阻塞性澄清。
+- 在 VS Code 中通过命令 `agentils.openPanel` 打开 AgentILS WebView；WebView 是主要输入输出界面，Copilot chat 输出保持最小化。
+- 要直接调 AgentILS LM tool，在 chat 里用 `#agentilsRequestUserClarification` 等 `toolReferenceName`（package.json `contributes.languageModelTools` 列出全部）；**没有** chat participant，**没有** slash command。
+- 通过 AgentILS WebView 的 finish 操作结束会话，除非用户明确要求其他方式。
+- 项目通用规则（单向数据流、test-first、命令默认仓库根、不全仓扫描等）请直接读 `agentils.instructions.md` 的 Cardinal Rules，不要在此重复。

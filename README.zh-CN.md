@@ -43,9 +43,7 @@ AgentILS/
 │   ├── extensions/agentils-vscode/  # VS Code 扩展：MCP 的薄桥接，承载 webview
 │   ├── cli/                # `agentils` CLI：跨 IDE 的 VS Code 配置注入器
 │   ├── logger/             # @agent-ils/logger —— 本地 JSONL 收集 + 读取（已发 npm）
-│   ├── quality-gate/       # @agent-ils/quality-gate —— ECAM 风格 pre-commit 面板（已发 npm）
-│   ├── mcp.back/           # 上一代 MCP 冻结归档，仅供参考，请勿编辑
-│   └── cli.back/           # 上一代 CLI 冻结归档，仅供参考，请勿编辑
+│   └── quality-gate/       # @agent-ils/quality-gate —— ECAM 风格 pre-commit 面板（已发 npm）
 ├── docs/
 │   ├── instructions/       # 各模块开发规则的真值源（Copilot/Codex 等读这里）
 │   ├── skills/             # 可被 agent 主动调用的 skill 卡片真值源
@@ -75,7 +73,7 @@ pnpm -r --filter "./packages/*" --filter "./apps/webview" build
 # （命令面板 → Tasks: Run Task）
 ```
 
-在启动后的扩展宿主里，打开 Copilot Chat 面板，输入 `@agentils` 然后 `/runtask` 进入会话。webview 是主要输入界面，chat 输出保持最小。
+在启动后的扩展宿主里，通过命令面板 → **AgentILS: Open AgentILS Panel**（命令 id `agentils.openPanel`）打开 AgentILS WebView。Webview 是主要输入界面，chat 输出保持最小。要从 Copilot Chat 直接调用工具，引用 tool name 即可 —— 例如 `#agentilsRequestUserClarification` —— 没有 chat participant 也没有 slash command。
 
 ## Agent / LLM 工作规则
 

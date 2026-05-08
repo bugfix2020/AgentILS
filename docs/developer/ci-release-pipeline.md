@@ -19,10 +19,10 @@
 Two GitHub Actions workflows, one job each, running on every push to `main` (and
 PRs for CI):
 
-| Workflow | When | Node | Job |
-|---|---|---|---|
-| [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) | every PR + push to `main` | 22 LTS | quality gate (build → typecheck → lint → sync check → changeset check) |
-| [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | push to `main` only | 24 (npm 11.5+ bundled) | `changesets/action`: open Version PR or publish to npm via OIDC |
+| Workflow                                                               | When                      | Node                   | Job                                                                    |
+| ---------------------------------------------------------------------- | ------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)           | every PR + push to `main` | 22 LTS                 | quality gate (build → typecheck → lint → sync check → changeset check) |
+| [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | push to `main` only       | 24 (npm 11.5+ bundled) | `changesets/action`: open Version PR or publish to npm via OIDC        |
 
 Publishable packages: **`@agent-ils/quality-gate`**, **`@agent-ils/logger`**.
 Everything else (`@agent-ils/mcp`, `@agent-ils/cli`, `agentils-vscode`,
@@ -91,7 +91,7 @@ ESLint v9's flat config **does not honor `.gitignore`**. `eslint.config.mjs`
 must list explicit ignores:
 
 ```js
-ignores: ['packages/*.back/**', '.tmp/**', '**/scripts/**/*.mjs']
+ignores: ['.tmp/**', '**/scripts/**/*.mjs', 'packages/extensions/*/webview/**']
 ```
 
 When you add a new build artifact directory or test fixture path, mirror it in
@@ -116,9 +116,9 @@ PR validation, and vice versa).
 
 ```yaml
 permissions:
-  contents: write          # for the auto-opened Version PR
-  pull-requests: write     # for the auto-opened Version PR
-  id-token: write          # for npm OIDC trusted publisher exchange
+    contents: write # for the auto-opened Version PR
+    pull-requests: write # for the auto-opened Version PR
+    id-token: write # for npm OIDC trusted publisher exchange
 ```
 
 Node 24 is used here (not 22 like CI) because:
@@ -249,16 +249,16 @@ You have not run a single publish command yourself.
 
 ## Things that have bitten us — keep in mind when editing CI
 
-| Symptom | Root cause | Fix |
-|---|---|---|
-| `TS2307: Cannot find module '@agent-ils/<x>'` in CI | typecheck ran before workspace deps built `.d.ts` | `turbo.json` `typecheck.dependsOn` must include `^build` |
-| ESLint flagging files inside `.tmp/` or `*.back/` | flat config doesn't read `.gitignore` | add to `ignores` in `eslint.config.mjs` |
-| `.agent-ils/logger/logs/*.jsonl` showing up in `git status` | logger test side effect | `.agent-ils/` in `.gitignore` |
-| `MODULE_NOT_FOUND: 'promise-retry'` after `npm install -g` | Node 22 + npm 11.5 self-replace bug | use Node 24 in release.yml; never `npm install -g npm@latest` |
-| Annotation: "Node.js 20 is deprecated" | actions pinned at v4 (Node 20 runtime) | upgrade actions to `@v6` (Node 24 native) |
-| Release publishes a half-baked package | `.changeset` `ignore` doesn't stop publish | `"private": true` in that package's `package.json` |
-| `TypeError: Cannot read properties of undefined (reading 'split')` from `node -e "process.versions.npm..."` | `process.versions` has no `npm` key | use `npm --version` shell command |
-| Two workflow runs for one push to `main` | `ci.yml` and `release.yml` both subscribe to `push: branches: [main]` | not a bug — designed to be independent |
+| Symptom                                                                                                     | Root cause                                                            | Fix                                                           |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `TS2307: Cannot find module '@agent-ils/<x>'` in CI                                                         | typecheck ran before workspace deps built `.d.ts`                     | `turbo.json` `typecheck.dependsOn` must include `^build`      |
+| ESLint flagging files inside `.tmp/` or `*.back/`                                                           | flat config doesn't read `.gitignore`                                 | add to `ignores` in `eslint.config.mjs`                       |
+| `.agent-ils/logger/logs/*.jsonl` showing up in `git status`                                                 | logger test side effect                                               | `.agent-ils/` in `.gitignore`                                 |
+| `MODULE_NOT_FOUND: 'promise-retry'` after `npm install -g`                                                  | Node 22 + npm 11.5 self-replace bug                                   | use Node 24 in release.yml; never `npm install -g npm@latest` |
+| Annotation: "Node.js 20 is deprecated"                                                                      | actions pinned at v4 (Node 20 runtime)                                | upgrade actions to `@v6` (Node 24 native)                     |
+| Release publishes a half-baked package                                                                      | `.changeset` `ignore` doesn't stop publish                            | `"private": true` in that package's `package.json`            |
+| `TypeError: Cannot read properties of undefined (reading 'split')` from `node -e "process.versions.npm..."` | `process.versions` has no `npm` key                                   | use `npm --version` shell command                             |
+| Two workflow runs for one push to `main`                                                                    | `ci.yml` and `release.yml` both subscribe to `push: branches: [main]` | not a bug — designed to be independent                        |
 
 ---
 

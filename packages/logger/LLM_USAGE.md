@@ -78,7 +78,7 @@ const httpLogger = createHttpLogger({
     endpoint: 'http://127.0.0.1:12138',
 })
 
-httpLogger.info('run_task_loop.next', { action: 'await_webview' })
+httpLogger.info('interaction.submitted', { toolName: 'request_user_feedback', textLen: 42 })
 ```
 
 ### Raw HTTP (no SDK)
