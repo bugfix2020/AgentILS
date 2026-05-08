@@ -1,0 +1,38 @@
+{
+    "name": "@agent-ils/devtools",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Browser-side breadcrumb capture SDK for AgentILS — Sentry-style fill() instrumentation, in-memory LRU store, console + JSONL download transports, floating panel stub.",
+    "type": "module",
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.cjs"
+        },
+        "./auto": {
+            "types": "./dist/auto.d.ts",
+            "import": "./dist/auto.js",
+            "require": "./dist/auto.cjs"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/**/*.test.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.3",
+        "tsup": "^8.5.1",
+        "tsx": "^4.19.4",
+        "typescript": "^5.8.3"
+    }
+}
