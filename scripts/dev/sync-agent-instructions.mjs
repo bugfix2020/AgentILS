@@ -41,9 +41,10 @@ const stageOutputs = args.has('--stage')
 const sourceDirRel = 'docs/instructions'
 const sourceSkillsDirRel = 'docs/skills'
 const targetInstructionsDirRel = '.github/instructions'
-const targetSkillsDirRels = ['.github/skills', '.agents/skills']
+const targetSkillsDirRels = ['.github/skills', '.agents/skills', '.claude/skills']
 const copilotEntryRel = '.github/copilot-instructions.md'
 const agentsEntryRel = 'AGENTS.md'
+const claudeEntryRel = 'CLAUDE.md'
 
 const generatedHeader = (sourceRel) =>
     [
@@ -68,7 +69,7 @@ const writes = []
 let hasDiff = false
 const prettierConfigCache = new Map()
 
-const totalTargets = manifest.sources.length + (manifest.skills?.length ?? 0) * targetSkillsDirRels.length + 2 // copilot + agents entry stubs
+const totalTargets = manifest.sources.length + (manifest.skills?.length ?? 0) * targetSkillsDirRels.length + 3 // copilot + agents + claude entry stubs
 let processedTargets = 0
 
 function emitProgress(targetRel) {
@@ -136,13 +137,20 @@ for (const entry of manifest.skills ?? []) {
     }
 }
 
-// 2) 渲染入口 stub（同源等价，AGENTS.md 与 copilot-instructions.md 共享同一段正文）
+// 2) 渲染入口 stub（同源等价，AGENTS.md / CLAUDE.md / copilot-instructions.md 共享同一段正文）
 function renderEntryStub(audience) {
-    const isCopilot = audience === 'copilot'
-    const title = isCopilot ? '# AgentILS Copilot Instructions' : '# AgentILS Codex / AGENTS Entry'
-    const intro = isCopilot
-        ? '> 本文件由 `scripts/dev/sync-agent-instructions.mjs` 自动生成，**禁止手写**。'
-        : '> 本文件由 `scripts/dev/sync-agent-instructions.mjs` 自动生成，**禁止手写**。\n> Codex 的入口与 Copilot **同源**，两者看到的指令完全一致。'
+    const titleByAudience = {
+        copilot: '# AgentILS Copilot Instructions',
+        agents: '# AgentILS Codex / AGENTS Entry',
+        claude: '# AgentILS Claude Code Entry',
+    }
+    const introByAudience = {
+        copilot: '> 本文件由 `scripts/dev/sync-agent-instructions.mjs` 自动生成，**禁止手写**。',
+        agents: '> 本文件由 `scripts/dev/sync-agent-instructions.mjs` 自动生成，**禁止手写**。\n> Codex 的入口与 Copilot **同源**，两者看到的指令完全一致。',
+        claude: '> 本文件由 `scripts/dev/sync-agent-instructions.mjs` 自动生成，**禁止手写**。\n> Claude Code 的入口与 Copilot / Codex **同源**，三者看到的导读与规则真值源完全一致，仅 audience 专属规则不同。',
+    }
+    const title = titleByAudience[audience]
+    const intro = introByAudience[audience]
     const lead = [
         '',
         '请按以下顺序阅读：',
@@ -156,40 +164,50 @@ function renderEntryStub(audience) {
     )
     const tail = [
         '',
-        '不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex 读取。',
+        '不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex/Claude Code 读取。',
         '',
         '调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。',
         '',
     ]
-    const audienceNote = isCopilot
-        ? [
-              '## Copilot 专属规则',
-              '',
-              '- 在 VS Code 中使用 `@agentils` 启动 AgentILS WebView 会话；用 `/runtask` 作为 prompt 入口。',
-              '- WebView 启动后，WebView 是主要的输入输出界面；Copilot chat 输出保持最小化。',
-              '- 仅通过 AgentILS WebView 的 finish 操作结束会话，除非用户明确要求其他方式。',
-              '- `run_task_loop.next.action` 是真值：`recall_tool` → 立即再调；`await_webview` → 挂起等待；`return_control` → 任务终态返回控制权。',
-              '- 优先使用 AgentILS tools 与 WebView 交互面板，不要靠纯文本澄清或无关扩展工具。',
-              '- 只问继续当前任务所需的最小阻塞性澄清。',
-              '',
-          ].join('\n')
-        : [
-              '## Codex / AGENTS 专属规则',
-              '',
-              '- 不要一开始就全仓扫描；按当前调用链与模块边界工作。',
-              '- 遵守类 React 单向数据流：派生状态只有一个真值源（`packages/mcp` `memory-store`），其他模块禁止重复计算。',
-              '- 命令默认在仓库根执行；进入子目录的命令请先 `cd`，避免拼出 `packages/mcp/packages/mcp/...` 这类错误路径。',
-              '- 测试先行：先定义 schema 与 I/O 合同，再写实现。',
-              '',
-          ].join('\n')
+    const audienceNoteByAudience = {
+        copilot: [
+            '## Copilot 专属规则',
+            '',
+            '- 在 VS Code 中通过命令 `agentils.openPanel` 打开 AgentILS WebView；WebView 是主要输入输出界面，Copilot chat 输出保持最小化。',
+            '- 要直接调 AgentILS LM tool，在 chat 里用 `#agentilsRequestUserClarification` 等 `toolReferenceName`（package.json `contributes.languageModelTools` 列出全部）；**没有** chat participant，**没有** slash command。',
+            '- 通过 AgentILS WebView 的 finish 操作结束会话，除非用户明确要求其他方式。',
+            '- 项目通用规则（单向数据流、test-first、命令默认仓库根、不全仓扫描等）请直接读 `agentils.instructions.md` 的 Cardinal Rules，不要在此重复。',
+            '',
+        ].join('\n'),
+        agents: [
+            '## Codex / AGENTS 专属规则',
+            '',
+            '- Codex 当前没有 AgentILS 专属的运行时入口；项目通用规则全部走 `agentils.instructions.md` Cardinal Rules + 各子包 instruction。',
+            '- 如未来引入 Codex 专属命令、quickfix、或 IDE 集成，再把对应入口写到这里；不要把通用规则下沉到此处（会与其它 audience 漂移）。',
+            '',
+        ].join('\n'),
+        claude: [
+            '## Claude Code 专属规则',
+            '',
+            '- 非平凡改动先 `EnterPlanMode` 与用户对齐方案后再动代码；一行修补 / 纯研究 / 解释代码不需要进入 plan 模式。',
+            '- 跨模块探索用 Explore subagent 并行最多 3 个；目标已知（具体文件 / 符号）时直接用 Read / Grep / Glob，避免子代理空跑。',
+            '- 通过 Skill 工具调用本仓库已注册的 skills（在 `.claude/skills/` 下，与 `.github/skills/` `.agents/skills/` 同源生成）。',
+            '- 项目通用规则（单向数据流、test-first、命令默认仓库根、不全仓扫描等）请直接读 `agentils.instructions.md` 的 Cardinal Rules，不要在此重复。',
+            '- 修改任何 instructions / skills 必须改 `docs/instructions/` 或 `docs/skills/` 源 + 跑 `pnpm run sync:instructions`；**禁止手写 `CLAUDE.md` 入口或 `.claude/skills/` 下的任何 SKILL.md**（这两者都是 sync 产物）。',
+            '',
+        ].join('\n'),
+    }
+    const audienceNote = audienceNoteByAudience[audience]
     return [title, '', intro, ...lead, ...list, ...tail, audienceNote].join('\n').replace(/\n{3,}/g, '\n\n')
 }
 
 const copilotStubBody = renderEntryStub('copilot')
 const agentsStubBody = renderEntryStub('agents')
+const claudeStubBody = renderEntryStub('claude')
 
 await maybeWrite(copilotEntryRel, generatedHeader(manifestRel) + copilotStubBody.trimEnd() + '\n')
 await maybeWrite(agentsEntryRel, generatedHeader(manifestRel) + agentsStubBody.trimEnd() + '\n')
+await maybeWrite(claudeEntryRel, generatedHeader(manifestRel) + claudeStubBody.trimEnd() + '\n')
 
 if (hasDiff && stageOutputs && !checkOnly) {
     const filesToStage = new Set([

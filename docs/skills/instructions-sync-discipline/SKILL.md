@@ -1,11 +1,11 @@
 ---
 name: instructions-sync-discipline
-description: 'Use when: creating, editing, reviewing, or deleting any agent customization file — SKILL.md, .instructions.md, .prompt.md, .agent.md, copilot-instructions.md, AGENTS.md, or anything under .github/instructions/, .github/skills/, .agents/skills/. Always edit the source under docs/ and run the sync script; never hand-edit the generated targets.'
+description: 'Use when: creating, editing, reviewing, or deleting any agent customization file — SKILL.md, .instructions.md, .prompt.md, .agent.md, copilot-instructions.md, AGENTS.md, CLAUDE.md, or anything under .github/instructions/, .github/skills/, .agents/skills/, .claude/skills/. Always edit the source under docs/ and run the sync script; never hand-edit the generated targets.'
 ---
 
 # Instructions / Skills Sync Discipline
 
-This repository has a **single source of truth** for every agent customization file and a **generator** that fans it out to the locations Copilot, Codex, and other agents read. Hand-editing the generated targets causes silent drift between agents.
+This repository has a **single source of truth** for every agent customization file and a **generator** that fans it out to the locations Copilot, Codex, Claude Code, and other agents read. Hand-editing the generated targets causes silent drift between agents.
 
 ## Source of Truth
 
@@ -21,8 +21,10 @@ Generated targets — **do not hand-edit**:
 - `.github/instructions/*.instructions.md`
 - `.github/skills/<dir>/SKILL.md`
 - `.agents/skills/<dir>/SKILL.md`
+- `.claude/skills/<dir>/SKILL.md`
 - `.github/copilot-instructions.md`
 - `AGENTS.md`
+- `CLAUDE.md`
 
 Each generated file carries this banner at the top so reviewers can spot mistakes:
 
@@ -60,15 +62,15 @@ When adding or modifying instructions / skills:
 
 ## Forbidden Actions
 
-- Editing any file under `.github/instructions/`, `.github/skills/`, or `.agents/skills/` directly.
-- Hand-writing `.github/copilot-instructions.md` or `AGENTS.md`.
-- Adding a new skill folder under `.github/skills/` or `.agents/skills/` without a corresponding `docs/skills/<dir>/SKILL.md` source.
+- Editing any file under `.github/instructions/`, `.github/skills/`, `.agents/skills/`, or `.claude/skills/` directly.
+- Hand-writing `.github/copilot-instructions.md`, `AGENTS.md`, or `CLAUDE.md`.
+- Adding a new skill folder under `.github/skills/`, `.agents/skills/`, or `.claude/skills/` without a corresponding `docs/skills/<dir>/SKILL.md` source.
 - Skipping `sync-manifest.json` after adding a new source file (the file will exist in `docs/` but never reach the agents).
 - Disabling the pre-commit `--check` invocation to push uncommitted drift.
 
 ## Why
 
-- Copilot reads `.github/`. Codex reads `AGENTS.md` and `.agents/`. Without a generator they drift, and the two agents will be told different rules.
+- Copilot reads `.github/`. Codex reads `AGENTS.md` and `.agents/`. Claude Code reads `CLAUDE.md` and `.claude/`. Without a generator they drift, and each agent will be told different rules.
 - The `--check` mode runs in pre-commit (via `agentils-quality-gate precommit`) so CI / commits fail fast on drift.
 - The banner + manifest make it trivial for reviewers to confirm a PR did not bypass the generator.
 
@@ -84,6 +86,8 @@ docs/instructions/sync-manifest.json    ──┘
 .github/instructions/foo.instructions.md
 .github/skills/bar/SKILL.md
 .agents/skills/bar/SKILL.md
+.claude/skills/bar/SKILL.md
 .github/copilot-instructions.md
 AGENTS.md                                 <-- generated, never hand-edit
+CLAUDE.md                                 <-- generated, never hand-edit
 ```
