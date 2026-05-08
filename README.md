@@ -43,9 +43,7 @@ AgentILS/
 │   ├── extensions/agentils-vscode/  # VS Code extension: thin bridge to MCP, hosts the webview
 │   ├── cli/                # `agentils` CLI: VS Code config injector for any IDE
 │   ├── logger/             # @agent-ils/logger — local JSONL collector + reader (npm published)
-│   ├── quality-gate/       # @agent-ils/quality-gate — ECAM-style pre-commit panel (npm published)
-│   ├── mcp.back/           # Frozen previous-generation MCP — kept for reference, do not edit
-│   └── cli.back/           # Frozen previous-generation CLI — kept for reference, do not edit
+│   └── quality-gate/       # @agent-ils/quality-gate — ECAM-style pre-commit panel (npm published)
 ├── docs/
 │   ├── instructions/       # Source of truth for per-area dev rules (Copilot/Codex/etc.)
 │   ├── skills/             # Source of truth for agent-invokable skill cards
@@ -75,7 +73,7 @@ pnpm -r --filter "./packages/*" --filter "./apps/webview" build
 # (See .vscode/tasks or run via Command Palette → Tasks: Run Task)
 ```
 
-In a Copilot Chat panel inside the launched extension host, type `@agentils` then `/runtask` to start a session. The webview becomes the primary input surface; chat messages stay minimal.
+In the launched extension host, open the AgentILS WebView via Command Palette → **AgentILS: Open AgentILS Panel** (command id `agentils.openPanel`). The webview is the primary input surface; chat messages stay minimal. To invoke a tool from Copilot Chat, reference its tool name directly — e.g. `#agentilsRequestUserClarification` — there is no chat participant or slash command.
 
 ## Agent / LLM Workflow Rules
 

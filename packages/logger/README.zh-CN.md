@@ -264,14 +264,14 @@ await taskLogger.info('api.request', { url: '/api/users' })
 import { createHttpLogger, createLogger } from '@agent-ils/logger'
 
 const stderrLogger = createLogger('mcp')
-stderrLogger.warn('tool failed', { toolName: 'run_task' })
+stderrLogger.warn('tool failed', { toolName: 'request_user_clarification' })
 
 const httpLogger = createHttpLogger({
     source: 'mcp',
     endpoint: 'http://127.0.0.1:12138',
 })
 
-httpLogger.info('run_task_loop.next', { action: 'await_webview' })
+httpLogger.info('interaction.submitted', { toolName: 'request_user_feedback', textLen: 42 })
 ```
 
 ## HTTP 写入 API

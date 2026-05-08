@@ -70,7 +70,7 @@ deactivate()
   → server.stop()
 ```
 
-`activationEvents` 当前为 `onStartupFinished` —— 启动即拉起 mcp + 注册 tool；用户随后通过 `@agentils` 在 Copilot Chat 调 tool 或 `agentils.openPanel` 打开面板。
+`activationEvents` 当前为 `onStartupFinished` —— 启动即拉起 mcp + 注册 tool；用户随后通过命令 `agentils.openPanel` 打开 WebView，或在 Copilot Chat 用 `#agentilsRequestUserClarification` 等 `toolReferenceName` 直接引用 tool（**没有** chat participant，**没有** slash command 入口）。
 
 ## 配置项（`package.json contributes.configuration`）
 
