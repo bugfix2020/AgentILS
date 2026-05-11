@@ -115,6 +115,7 @@ The generated `.changeset/*.md` must be committed alongside the code changes. Th
 
 - New packages start at `version: "0.0.0"` in `package.json`. The first changeset should use `patch`, which bumps to `0.0.1` — the actual first publish.
 - Do NOT manually set the initial version to `0.0.1` or higher; let changesets control all version bumps.
+- Do NOT use `npm version patch/minor/major` — this bypasses changesets and will desync the publish state. All version bumps go through `pnpm changeset` → `pnpm changeset version`.
 - `patch`: bug fixes, non-breaking additions → 0.0.x
 - `minor`: new features, backward-compatible → 0.x.0
 - `major`: breaking changes → x.0.0
