@@ -1,76 +1,75 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+    push:
+        branches: [main]
 
 concurrency:
-  group: release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+    group: release-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false
 
 permissions:
-  contents: write
-  pull-requests: write
-  # Required for npm Trusted Publisher (OIDC). The release job exchanges
-  # this token with npm to publish without a long-lived NPM_TOKEN.
-  id-token: write
+    contents: write
+    pull-requests: write
+    # Required for npm Trusted Publisher (OIDC). The release job exchanges
+    # this token with npm to publish without a long-lived NPM_TOKEN.
+    id-token: write
 
 jobs:
-  release:
-    name: Version PR or publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    if: github.repository == 'bugfix2020/AgentILS'
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+    release:
+        name: Version PR or publish
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        if: github.repository == 'bugfix2020/AgentILS'
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          run_install: false
+            - name: Install pnpm
+              uses: pnpm/action-setup@v6
+              with:
+                  run_install: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          # Node 24 ships with npm >= 11.5 out of the box, which is the
-          # minimum for npm Trusted Publisher (OIDC). Avoids `npm install -g
-          # npm@latest`, which on Node 22 crashes with MODULE_NOT_FOUND
-          # 'promise-retry' (npm 11.5 bundled-deps resolver bug under
-          # /opt/hostedtoolcache/node/22.x/...). The CI workflow keeps
-          # Node 22 LTS for build/typecheck — only release uses Node 24.
-          node-version: 24
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-          # always-auth + registry-url ensures npm/pnpm publish uses
-          # the registry that issues OIDC trusted-publisher tokens.
+            - name: Setup Node
+              uses: actions/setup-node@v6
+              with:
+                  # Node 24 ships with npm >= 11.5 out of the box, which is the
+                  # minimum for npm Trusted Publisher (OIDC). Avoids `npm install -g
+                  # npm@latest`, which on Node 22 crashes with MODULE_NOT_FOUND
+                  # 'promise-retry' (npm 11.5 bundled-deps resolver bug under
+                  # /opt/hostedtoolcache/node/22.x/...). The CI workflow keeps
+                  # Node 22 LTS for build/typecheck — only release uses Node 24.
+                  node-version: 24
+                  cache: pnpm
+                  registry-url: https://registry.npmjs.org
+                  # always-auth + registry-url ensures npm/pnpm publish uses
+                  # the registry that issues OIDC trusted-publisher tokens.
 
-      - name: Show npm version
-        run: npm --version
+            - name: Show npm version
+              run: npm --version
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+            - name: Build
+              run: pnpm build
 
-      - name: Create Release Pull Request or publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          # On main: if .changeset/*.md exist → open/update "Version Packages" PR.
-          # When that PR is merged (no remaining .changeset/*.md, version bumps land) → publish.
-          version: pnpm changeset version
-          publish: pnpm changeset publish
-          commit: "chore(release): version packages"
-          title: "chore(release): version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # No NPM_TOKEN: this repo uses npm Trusted Publisher (OIDC).
-          # Each package (@agent-ils/mcp / cli / quality-gate / logger)
-          # must register this repo + release.yml as a trusted publisher
-          # at https://www.npmjs.com/package/<name>/access (Trusted Publisher).
-          NPM_CONFIG_PROVENANCE: "true"
-
+            - name: Create Release Pull Request or publish
+              id: changesets
+              uses: changesets/action@v1
+              with:
+                  # On main: if .changeset/*.md exist → open/update "Version Packages" PR.
+                  # When that PR is merged (no remaining .changeset/*.md, version bumps land) → publish.
+                  version: pnpm changeset version
+                  publish: pnpm changeset publish
+                  commit: 'chore(release): version packages'
+                  title: 'chore(release): version packages'
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  # No NPM_TOKEN: this repo uses npm Trusted Publisher (OIDC).
+                  # New packages must be published manually first (npm publish from local),
+                  # then configure Trusted Publisher on the npm package settings page:
+                  # https://www.npmjs.com/package/<name>/access
+                  NPM_CONFIG_PROVENANCE: 'true'
