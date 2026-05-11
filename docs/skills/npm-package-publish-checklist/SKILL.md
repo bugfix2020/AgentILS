@@ -111,6 +111,14 @@ pnpm changeset
 
 The generated `.changeset/*.md` must be committed alongside the code changes. This applies to feature branches too — do not wait until the release branch.
 
+### Version Semantics
+
+- New packages start at `version: "0.0.0"` in `package.json`. The first changeset should use `patch`, which bumps to `0.0.1` — the actual first publish.
+- Do NOT manually set the initial version to `0.0.1` or higher; let changesets control all version bumps.
+- `patch`: bug fixes, non-breaking additions → 0.0.x
+- `minor`: new features, backward-compatible → 0.x.0
+- `major`: breaking changes → x.0.0
+
 ## Release Branch & Tag Workflow
 
 Every publish must be reproducible from `main`. Do not publish from an integration branch or a local-only commit.
