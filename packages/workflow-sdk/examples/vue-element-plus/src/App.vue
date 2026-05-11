@@ -1,150 +1,184 @@
 <template>
-  <div style="max-width: 720px; margin: 48px auto; padding: '0 16px'">
+  <div style="max-width: 800px; margin: 48px auto; padding: 0 16px">
     <h2>Workflow SDK - Vue + Element Plus</h2>
     <p style="color: #909399">
-      演示场景：查看敏感数据前需要验证码鉴权。验证码错误时工作流中断，后续步骤不执行。
+      演示场景：查看 API 密钥需依次通过短信验证码 → 系统安全码 → 环境安全检测三重验证。
     </p>
 
-    <el-steps
-      :active="currentStep"
-      :status="stepStatus"
-      finish-status="success"
-      style="margin-bottom: 32px"
+    <!-- 首页表格 -->
+    <template v-if="phase === 'table'">
+      <h4>API 密钥列表</h4>
+      <ApiKeyTable @view="handleViewKey" />
+    </template>
+
+    <!-- 工作流 Dialog -->
+    <el-dialog
+      v-if="phase === 'workflow'"
+      :model-value="true"
+      :title="selectedKey ? `查看密钥：${selectedKey.name}` : '查看密钥'"
+      width="520px"
+      @close="handleCancel"
     >
-      <el-step title="初始化" />
-      <el-step title="身份验证" />
-      <el-step title="获取数据" />
-      <el-step title="完成" />
-    </el-steps>
+      <el-steps :active="step" size="small" style="margin-bottom: 24px">
+        <el-step
+          v-for="(node, i) in nodes"
+          :key="node.id"
+          :title="node.name ?? node.id"
+          :status="getStepStatus(i)"
+        >
+          <template #icon>
+            <el-tooltip :content="node.description ?? ''" placement="top">
+              <el-icon :size="18">
+                <component :is="iconMap[(node.config as any)?.icon] ?? InfoFilled" />
+              </el-icon>
+            </el-tooltip>
+          </template>
+        </el-step>
+      </el-steps>
 
-    <!-- 空闲 → 查看按钮 + 验证表单 -->
-    <template v-if="phase === 'idle'">
-      <div style="text-align: center; padding: 24px">
-        <el-button type="primary" size="large" @click="showForm = true">
-          查看敏感数据
-        </el-button>
-      </div>
-    </template>
+      <!-- 步骤 0-2：验证表单 -->
+      <template v-if="step < 3">
+        <el-alert
+          v-if="error"
+          type="error"
+          show-icon
+          title="验证失败"
+          :description="error"
+          style="margin-bottom: 16px"
+        />
+        <p>{{ nodes[step].description }}</p>
+        <p style="color: #909399">
+          正确验证码：<el-tag>{{ stepConfigs[step].hint }}</el-tag>
+        </p>
+        <div style="display: flex; gap: 8px">
+          <el-input
+            v-model="inputValue"
+            :placeholder="stepConfigs[step].placeholder"
+            size="large"
+            @keyup.enter="handleSubmit"
+          />
+          <el-button type="primary" size="large" :loading="loading" @click="handleSubmit">
+            {{ error ? '重新验证' : '验证' }}
+          </el-button>
+        </div>
+        <div style="text-align: center; margin-top: 16px">
+          <el-button @click="handleCancel">取消</el-button>
+        </div>
+      </template>
 
-    <!-- 验证表单 -->
-    <template v-if="phase === 'idle' && showForm">
-      <VerifyForm
-        request-id="pending..."
-        :loading="loading"
-        @submit="handleVerify"
-      />
-    </template>
-
-    <!-- 运行中 -->
-    <template v-if="phase === 'running'">
-      <div style="text-align: center; padding: 48px">
-        <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-        <p>执行中...</p>
-        <el-button type="danger" @click="handleAbort">取消</el-button>
-      </div>
-    </template>
-
-    <!-- 中断 -->
-    <template v-if="phase === 'stopped'">
-      <el-alert
-        type="error"
-        show-icon
-        closable
-        title="工作流已中断"
-        :description="failedReason"
-        style="margin-bottom: 24px"
-        @close="handleReset"
-      />
-      <VerifyForm
-        request-id="(重新验证)"
-        :loading="loading"
-        @submit="handleVerify"
-      />
-    </template>
-
-    <!-- 成功 -->
-    <template v-if="phase === 'done' && result">
-      <DataViewer
-        :secret-data="result.secretData"
-        :fetched-at="result.fetchedAt"
-        :request-id="result.requestId"
-      />
-      <div style="text-align: center; margin-top: 24px">
-        <el-button @click="handleReset">重新开始</el-button>
-      </div>
-    </template>
+      <!-- 步骤 3：密钥展示 -->
+      <template v-if="step === 3 && result">
+        <el-alert
+          type="success"
+          show-icon
+          title="所有验证通过"
+          description="API 密钥已解密，请妥善保管"
+          style="margin-bottom: 16px"
+        />
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="密钥名称">{{ result.apiKeyName }}</el-descriptions-item>
+          <el-descriptions-item label="请求 ID">{{ result.requestId }}</el-descriptions-item>
+          <el-descriptions-item label="获取时间">
+            {{ new Date(result.revealedAt).toLocaleString('zh-CN') }}
+          </el-descriptions-item>
+          <el-descriptions-item label="完整密钥">
+            <div style="word-break: break-all">{{ result.fullApiKey }}</div>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div style="text-align: center; margin-top: 16px">
+          <el-button type="primary" @click="handleCancel">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Loading } from '@element-plus/icons-vue'
+import { ref } from 'vue'
+import { InfoFilled, ChatDotRound, Lock, Monitor, Key } from '@element-plus/icons-vue'
 import { useWorkflow } from '@agent-ils/workflow-sdk/vue'
-import { authWorkflow, type AuthWorkflowContext } from './workflow'
-import VerifyForm from './components/VerifyForm.vue'
-import DataViewer from './components/DataViewer.vue'
+import { apiKeyWorkflow, STEP_CONFIGS, type ApiKeyWorkflowContext } from './workflow'
+import ApiKeyTable from './components/ApiKeyTable.vue'
+import type { ApiKeyItem } from './components/ApiKeyTable.vue'
 
-const showForm = ref(false)
+type Phase = 'table' | 'workflow'
+
+const phase = ref<Phase>('table')
+const selectedKey = ref<ApiKeyItem | null>(null)
+const step = ref(0)
+const error = ref<string | null>(null)
+const result = ref<ApiKeyWorkflowContext | null>(null)
 const loading = ref(false)
-const failedReason = ref<string | null>(null)
-const result = ref<AuthWorkflowContext | null>(null)
+const inputValue = ref('')
+const accumulated = ref<Record<string, string>>({})
 
-const { status, start, abort } = useWorkflow({ definition: authWorkflow })
+const { start } = useWorkflow({ definition: apiKeyWorkflow })
+const nodes = apiKeyWorkflow.nodes
+const stepConfigs = STEP_CONFIGS
 
-type Phase = 'idle' | 'running' | 'stopped' | 'done' | 'failed'
-const phase = computed<Phase>(() => {
-  if (status === 'idle' && !result.value && !failedReason.value) return 'idle'
-  if (status === 'running') return 'running'
-  if (status === 'stopped') return 'stopped'
-  if (status === 'failed') return 'failed'
-  if (status === 'done') return 'done'
-  return 'idle'
-})
+const iconMap: Record<string, any> = { ChatDotRound, Lock, Monitor, Key }
 
-const currentStep = computed(() => {
-  if (phase.value === 'idle') return -1
-  if (phase.value === 'running') return 0
-  if (phase.value === 'stopped' || phase.value === 'failed') return 1
-  if (phase.value === 'done') return 3
-  return 0
-})
+function getStepStatus(i: number): '' | 'wait' | 'process' | 'finish' | 'error' | 'success' {
+  if (i < step.value) return 'success'
+  if (i === step.value && error.value) return 'error'
+  if (i === step.value) return 'process'
+  return 'wait'
+}
 
-const stepStatus = computed(() => {
-  if (phase.value === 'stopped' || phase.value === 'failed') return 'error'
-  return 'process'
-})
-
-async function handleVerify(code: string) {
-  loading.value = true
-  failedReason.value = null
+function handleViewKey(key: ApiKeyItem) {
+  selectedKey.value = key
+  step.value = 0
+  error.value = null
   result.value = null
-  showForm.value = false
+  inputValue.value = ''
+  accumulated.value = {}
+  phase.value = 'workflow'
+}
+
+async function handleSubmit() {
+  if (!selectedKey.value || step.value >= 3 || !inputValue.value.trim()) return
+
+  loading.value = true
+  error.value = null
+  const field = stepConfigs[step.value].field
+  const newAcc = { ...accumulated.value, [field]: inputValue.value.trim() }
+  accumulated.value = newAcc
 
   const res = await start({
     requestId: '',
-    code,
-    secretData: '',
-    fetchedAt: 0,
-    completed: false,
+    apiKeyId: selectedKey.value.id,
+    apiKeyName: selectedKey.value.name,
+    smsCode: '',
+    smsVerified: false,
+    systemCode: '',
+    systemVerified: false,
+    envCode: '',
+    envVerified: false,
+    fullApiKey: '',
+    revealedAt: 0,
+    ...newAcc,
   })
 
   loading.value = false
+
   if (res.status === 'done') {
     result.value = res.context
-  } else if (res.status === 'stopped') {
-    failedReason.value = res.reason ?? '未知原因'
-  } else if (res.status === 'failed') {
-    failedReason.value = `执行异常: ${String(res.error)}`
+    step.value = 3
+  } else if (res.status === 'stopped' && res.reason) {
+    if (res.reason.startsWith('NEED_')) {
+      step.value++
+      inputValue.value = ''
+    } else {
+      error.value = res.reason
+    }
   }
 }
 
-function handleAbort() {
-  abort()
-}
-
-function handleReset() {
+function handleCancel() {
+  phase.value = 'table'
+  selectedKey.value = null
+  error.value = null
   result.value = null
-  failedReason.value = null
-  showForm.value = true
+  loading.value = false
 }
 </script>

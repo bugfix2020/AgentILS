@@ -301,6 +301,9 @@ importers:
       '@agent-ils/workflow-sdk':
         specifier: workspace:*
         version: link:../..
+      '@ant-design/icons':
+        specifier: ^6.2.2
+        version: 6.2.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       antd:
         specifier: ^5.24.0
         version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

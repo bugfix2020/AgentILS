@@ -3,6 +3,8 @@ export type WorkflowNodeId = string
 
 export type WorkflowStatus = 'idle' | 'running' | 'done' | 'stopped' | 'failed'
 
+export type NodeState = 'pending' | 'running' | 'done' | 'error' | 'skipped'
+
 export type WorkflowSignal<TContext> =
     | { type: 'continue'; patch?: Partial<TContext> }
     | { type: 'stop'; reason: string; patch?: Partial<TContext> }
@@ -15,6 +17,7 @@ export type WorkflowHook<TContext, TEventMeta = unknown> = {
 export interface WorkflowNode<TContext, TConfig = unknown> {
     id: WorkflowNodeId
     name?: string
+    description?: string
     config?: TConfig
     run: (context: TContext) => Promise<WorkflowSignal<TContext>>
 }
