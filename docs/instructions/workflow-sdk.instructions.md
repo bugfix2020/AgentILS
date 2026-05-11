@@ -1,0 +1,92 @@
+---
+applyTo: 'packages/workflow-sdk/**'
+---
+
+# `@agent-ils/workflow-sdk` Instructions (LLM)
+
+> 真值源：`docs/instructions/workflow-sdk.instructions.md`。
+> 由 `scripts/dev/sync-agent-instructions.mjs` 同步到 `.github/instructions/workflow-sdk.instructions.md`。
+> 禁止手写副本。
+
+## 包定位
+
+`@agent-ils/workflow-sdk` 是框架无关的工作流执行引擎，提供：
+
+- **core** — `defineNode` / `defineWorkflow` / `createWorkflow` / `applyPatch`，纯逻辑，零框架依赖。
+- **react** — `useWorkflow` hook，用 `useState` + `useRef` 管理运行状态。
+- **vue** — `useWorkflow` composable，用 Vue 3 `ref` 管理运行状态。
+
+它**不是**可视化编辑器、持久化层、或服务端运行时。它是一个轻量的客户端编排层。
+
+## 公共接口
+
+```
+@agent-ils/workflow-sdk          → core barrel（types + helpers + createWorkflow）
+@agent-ils/workflow-sdk/core     → 同上
+@agent-ils/workflow-sdk/react    → useWorkflow hook + types
+@agent-ils/workflow-sdk/vue      → useWorkflow composable + types
+```
+
+没有 CLI bin。没有 env var。没有 config file。
+
+## 架构
+
+```
+src/
+  index.ts              ← top barrel: re-export core + aliased react/vue
+  core/
+    types.ts            ← WorkflowNode / WorkflowDefinition / WorkflowSignal / WorkflowRunOptions / WorkflowRunResult / WorkflowHook
+    defineNode.ts       ← identity helper
+    defineWorkflow.ts   ← identity helper
+    createWorkflow.ts   ← 主引擎：遍历 nodes，按 signal 继续/停止/报错
+    applyPatch.ts       ← shallow merge 工具函数
+  react/
+    types.ts            ← UseWorkflowOptions / UseWorkflowReturn<TContext>
+    useWorkflow.ts      ← React hook：useState + useRef<AbortController>
+  vue/
+    types.ts            ← UseWorkflowOptions / UseWorkflowReturn<TContext>
+    useWorkflow.ts      ← Vue composable：ref + AbortController
+```
+
+数据流：`initialContext` → node[i].run(ctx) → `WorkflowSignal` → `applyPatch` → 下一个 node → ... → `WorkflowRunResult`。
+
+React/Vue 层只是 core 的薄包装：管理 `status` 状态和 `AbortController` 生命周期。
+
+## 当前状态
+
+- core 引擎可用：线性执行、continue/stop 信号、hook 回调、AbortSignal 合作取消、错误捕获。
+- React hook 可用：start / abort / status。
+- Vue composable 可用：start / abort / status（通过 getter 暴露）。
+- 构建：tsup ESM + DTS，treeshake 开启。
+- 冒烟测试：`.tmp/workflow-sdk-smoketest/` 下 30 个用例全部通过（core 14 + React 8 + Vue 8）。
+
+### 已知限制
+
+- 节点间 context 类型安全靠 TypeScript 编译期保证，运行时不做 schema 校验。
+- AbortSignal 只在节点之间检查；如果单个 node 的 `run` 永远不 resolve，workflow 无法停止。
+- Vue composable 的 `status` 通过 getter 返回，解构后在 `<script>` 中是静态值；在 `<template>` 中通过 `status` 属性访问仍然是响应式的。
+
+## 反模式（禁止）
+
+- 在 node 的 `run` 里做 DOM 操作——core 不绑定任何 UI 框架。
+- 给 `run` 签名加第二个或第三个参数（如 `emit`）——它只接收 `context`，返回 `WorkflowSignal`。
+- 在 React hook 里用 `useEffect` 管理 abort——abort 由 `abortRef.current` 手动触发。
+- 在 Vue composable 里返回裸 `ref`——返回对象的 getter 保证 API 形状与 React 对齐。
+- 关闭 `treeshake` 或 `dts`——作为库包，必须生成类型声明且支持 tree-shaking。
+
+## 测试约定
+
+- 冒烟测试放 `.tmp/workflow-sdk-smoketest/`（gitignored）；切勿提交。
+- 冒烟测试使用 Node 原生跑 `dist/` 产物，不依赖 vitest。
+- typecheck 用 `tsc --noEmit`；build 用 `tsup`。
+- 任何改动必须通过全仓 `pnpm run typecheck` + `pnpm --filter @agent-ils/workflow-sdk build`。
+
+## 交接清单
+
+最小的文件/命令集合让下一个开发者 2 分钟内上手：
+
+1. `src/core/types.ts` — 所有类型定义，从这里开始理解数据模型。
+2. `src/core/createWorkflow.ts` — 主引擎逻辑，约 60 行。
+3. `pnpm --filter @agent-ils/workflow-sdk run typecheck && pnpm --filter @agent-ils/workflow-sdk run build`
+4. `node .tmp/workflow-sdk-smoketest/smoketest.mjs` — 验证 core。
+5. `packages/workflow-sdk/README.md` — 完整 API 文档和用法示例。
