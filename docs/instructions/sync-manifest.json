@@ -31,6 +31,10 @@
         {
             "file": "logger.instructions.md",
             "summary": "@agent-ils/logger 本地 JSONL 收集 + 查询；默认值/HTTP/CLI 边界"
+        },
+        {
+            "file": "workflow-sdk.instructions.md",
+            "summary": "@agent-ils/workflow-sdk 框架无关工作流引擎 + React hook / Vue composable"
         }
     ],
     "skills": [

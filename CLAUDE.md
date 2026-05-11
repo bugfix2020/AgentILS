@@ -19,6 +19,7 @@
     - [`.github/instructions/webview-source-of-truth.instructions.md`](.github/instructions/webview-source-of-truth.instructions.md) — Webview 是产品真值源；protocol/host/mcp/cli 倒推改造规则
     - [`.github/instructions/quality-gate.instructions.md`](.github/instructions/quality-gate.instructions.md) — @agent-ils/quality-gate ECAM panel + ESLint 风格 config 加载边界
     - [`.github/instructions/logger.instructions.md`](.github/instructions/logger.instructions.md) — @agent-ils/logger 本地 JSONL 收集 + 查询；默认值/HTTP/CLI 边界
+    - [`.github/instructions/workflow-sdk.instructions.md`](.github/instructions/workflow-sdk.instructions.md) — @agent-ils/workflow-sdk 框架无关工作流引擎 + React hook / Vue composable
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex/Claude Code 读取。
 
