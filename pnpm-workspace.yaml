@@ -1,6 +1,7 @@
 packages:
     - packages/*
     - packages/extensions/*
+    - packages/workflow-sdk/examples/*
     - extensions/*
     - extensions/*/webview
     - apps/*

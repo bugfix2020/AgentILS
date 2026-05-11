@@ -62,6 +62,18 @@ React/Vue 层只是 core 的薄包装：管理 `status` 状态和 `AbortControll
 - Vue composable 可用：start / abort / status（通过 getter 暴露）。
 - 构建：tsup ESM + DTS，treeshake 开启。
 - 冒烟测试：`.tmp/workflow-sdk-smoketest/` 下 30 个用例全部通过（core 14 + React 8 + Vue 8）。
+- 场景示例：`examples/react-antd/`（React + Antd）和 `examples/vue-element-plus/`（Vue 3 + Element Plus），演示鉴权中断场景。
+
+### 场景示例
+
+两个完整可运行的示例项目（`pnpm dev` 启动）：
+
+- `examples/react-antd/` — React + Antd，VerifyForm + DataViewer 组件，Steps 状态面板。
+- `examples/vue-element-plus/` — Vue 3 + Element Plus，同场景，SFC 组件。
+
+场景：用户输入验证码 → 验证失败则 `stop`（后续节点不执行）→ 验证成功则拉取敏感数据。
+
+这些示例在 `package.json` 的 `"files": ["dist"]` 排除范围内，不会上 npm。
 
 ### 已知限制
 
@@ -92,4 +104,5 @@ React/Vue 层只是 core 的薄包装：管理 `status` 状态和 `AbortControll
 2. `src/core/createWorkflow.ts` — 主引擎逻辑，约 60 行。
 3. `pnpm --filter @agent-ils/workflow-sdk run typecheck && pnpm --filter @agent-ils/workflow-sdk run build`
 4. `node .tmp/workflow-sdk-smoketest/smoketest.mjs` — 验证 core。
-5. `packages/workflow-sdk/README.md` — 完整 API 文档和用法示例。
+5. `packages/workflow-sdk/README.md` — 场景化文档和 API 参考。
+6. `examples/react-antd/` / `examples/vue-element-plus/` — 完整可运行示例。

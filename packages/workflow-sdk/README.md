@@ -18,110 +18,200 @@ It does **not** provide a visual editor, persistence, or a server runtime — it
 
 ## Install
 
-pnpm:
-
 ```sh
 pnpm add @agent-ils/workflow-sdk
 ```
 
-npm:
+## Scenario: Auth-Gated Data Access
 
-```sh
-npm install @agent-ils/workflow-sdk
+A user clicks "View Secret Data" → a verification code form appears → if the code is correct, protected data is fetched and displayed. If the code is wrong, the workflow **stops immediately** — no data fetch happens.
+
+```
+init → verify → fetch-data → complete
+                ↑
+                └── wrong code → stop (fetch-data never runs)
 ```
 
-yarn:
-
-```sh
-yarn add @agent-ils/workflow-sdk
-```
-
-## Quick Start
+### Define the workflow
 
 ```ts
-import { defineNode, defineWorkflow, createWorkflow } from '@agent-ils/workflow-sdk'
+// workflow.ts
+import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
 
-const workflow = createWorkflow(
-    defineWorkflow({
-        id: 'my-workflow',
-        nodes: [
-            defineNode({
-                id: 'double',
-                run: async (ctx) => ({ type: 'continue', patch: { value: ctx.value * 2 } }),
-            }),
-            defineNode({
-                id: 'add',
-                run: async (ctx) => ({ type: 'continue', patch: { value: ctx.value + 10 } }),
-            }),
-        ],
-    }),
-)
+export interface AuthContext {
+    requestId: string
+    code: string
+    secretData: string
+    fetchedAt: number
+    completed: boolean
+}
 
-const result = await workflow.run({ initialContext: { value: 5 } })
-console.log(result.status) // 'done'
-console.log(result.context.value) // 20
+export const authWorkflow = defineWorkflow<AuthContext>({
+    id: 'auth-view-secret',
+    nodes: [
+        defineNode({
+            id: 'init',
+            run: async () => ({
+                type: 'continue',
+                patch: { requestId: `req_${Date.now()}` },
+            }),
+        }),
+        // Key: verify returns { type: 'stop' } on wrong code
+        defineNode({
+            id: 'verify',
+            run: async (ctx) => {
+                if (ctx.code !== '123456') {
+                    return { type: 'stop', reason: `验证码错误：${ctx.code}` }
+                }
+                return { type: 'continue' }
+            },
+        }),
+        defineNode({
+            id: 'fetch-data',
+            run: async () => ({
+                type: 'continue',
+                patch: { secretData: '机密内容...', fetchedAt: Date.now() },
+            }),
+        }),
+        defineNode({
+            id: 'complete',
+            run: async () => ({ type: 'continue', patch: { completed: true } }),
+        }),
+    ],
+})
 ```
 
-## React
+### React + Antd
 
 ```sh
-pnpm add @agent-ils/workflow-sdk react
+pnpm add @agent-ils/workflow-sdk react antd
 ```
 
 ```tsx
 import { useWorkflow } from '@agent-ils/workflow-sdk/react'
-import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
-
-const definition = defineWorkflow({
-    id: 'counter',
-    nodes: [
-        defineNode({
-            id: 'inc',
-            run: async (ctx) => ({ type: 'continue', patch: { count: ctx.count + 1 } }),
-        }),
-    ],
-})
+import { Steps, Button, Alert } from 'antd'
+import { authWorkflow, type AuthContext } from './workflow'
+import { VerifyForm } from './VerifyForm'
+import { DataViewer } from './DataViewer'
 
 function App() {
-    const { status, start, abort } = useWorkflow({ definition })
+    const { status, start } = useWorkflow({ definition: authWorkflow })
+
+    const handleVerify = async (code: string) => {
+        const res = await start({
+            requestId: '',
+            code,
+            secretData: '',
+            fetchedAt: 0,
+            completed: false,
+        })
+        if (res.status === 'stopped') {
+            // verification failed — fetch-data NEVER ran
+            message.error(res.reason)
+        }
+    }
 
     return (
-        <button onClick={() => start({ count: 0 })} disabled={status === 'running'}>
-            {status}
-        </button>
+        <>
+            <Steps
+                current={status === 'done' ? 3 : status === 'stopped' ? 1 : 0}
+                status={status === 'stopped' ? 'error' : 'process'}
+            >
+                <Step title="Init" />
+                <Step title="Verify" />
+                <Step title="Fetch" />
+                <Step title="Done" />
+            </Steps>
+            {status === 'idle' && <VerifyForm onSubmit={handleVerify} />}
+            {status === 'stopped' && <Alert type="error" description="Verification failed" />}
+            {status === 'done' && <DataViewer />}
+        </>
     )
 }
 ```
 
-## Vue 3
+Full runnable project: [`examples/react-antd/`](./examples/react-antd/)
+
+### Vue 3 + Element Plus
 
 ```sh
-pnpm add @agent-ils/workflow-sdk vue
+pnpm add @agent-ils/workflow-sdk vue element-plus
 ```
 
 ```vue
-<script setup>
+<script setup lang="ts">
 import { useWorkflow } from '@agent-ils/workflow-sdk/vue'
-import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
+import { authWorkflow, type AuthContext } from './workflow'
 
-const definition = defineWorkflow({
-    id: 'counter',
-    nodes: [
-        defineNode({
-            id: 'inc',
-            run: async (ctx) => ({ type: 'continue', patch: { count: ctx.count + 1 } }),
-        }),
-    ],
-})
+const { status, start, abort } = useWorkflow({ definition: authWorkflow })
 
-const { status, start, abort } = useWorkflow({ definition })
+async function handleVerify(code: string) {
+    const res = await start({
+        requestId: '',
+        code,
+        secretData: '',
+        fetchedAt: 0,
+        completed: false,
+    })
+    if (res.status === 'stopped') {
+        ElMessage.error(res.reason)
+    }
+}
 </script>
 
 <template>
-    <button :disabled="status === 'running'" @click="start({ count: 0 })">
-        {{ status }}
-    </button>
+    <el-steps :active="status === 'done' ? 3 : status === 'stopped' ? 1 : 0">
+        <el-step title="Init" /><el-step title="Verify" /> <el-step title="Fetch" /><el-step title="Done" />
+    </el-steps>
+    <VerifyForm v-if="status === 'idle'" @submit="handleVerify" />
+    <el-alert v-if="status === 'stopped'" type="error" description="Verification failed" />
+    <DataViewer v-if="status === 'done'" />
 </template>
+```
+
+Full runnable project: [`examples/vue-element-plus/`](./examples/vue-element-plus/)
+
+## Interrupting a Workflow
+
+There are two ways to prevent downstream nodes from executing:
+
+### 1. `stop` signal — controlled interruption
+
+Return `{ type: 'stop', reason: '...' }` from any node's `run`. The workflow halts immediately, patches are still applied, and `result.status === 'stopped'`.
+
+```ts
+defineNode({
+    id: 'gate',
+    run: async (ctx) => {
+        if (!ctx.authorized) return { type: 'stop', reason: 'Not authorized' }
+        return { type: 'continue' }
+    },
+})
+```
+
+### 2. Thrown exception — unexpected failure
+
+Throw inside `run`. The workflow catches it, sets `result.status === 'failed'`, and stores the error in `result.error`.
+
+```ts
+defineNode({
+    id: 'api-call',
+    run: async (ctx) => {
+        const res = await fetch(ctx.url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return { type: 'continue', patch: { data: await res.json() } }
+    },
+})
+```
+
+### 3. `AbortSignal` — external cancellation
+
+Pass an `AbortSignal` via `run({ signal })`. The engine checks for abort between nodes.
+
+```ts
+const ac = new AbortController()
+setTimeout(() => ac.abort(), 5000)
+const result = await workflow.run({ initialContext: {}, signal: ac.signal })
 ```
 
 ## API

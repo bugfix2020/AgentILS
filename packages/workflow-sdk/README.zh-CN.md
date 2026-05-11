@@ -18,129 +18,219 @@
 
 ## 安装
 
-pnpm：
-
 ```sh
 pnpm add @agent-ils/workflow-sdk
 ```
 
-npm：
+## 场景：鉴权后查看敏感数据
 
-```sh
-npm install @agent-ils/workflow-sdk
+用户点击「查看敏感数据」→ 弹出验证码表单 → 验证码正确则拉取并展示数据，**验证码错误则工作流立即中断**——数据拉取不会执行。
+
+```
+init → verify → fetch-data → complete
+                ↑
+                └── 验证码错误 → stop（fetch-data 不会执行）
 ```
 
-yarn：
-
-```sh
-yarn add @agent-ils/workflow-sdk
-```
-
-## 快速开始
+### 定义工作流
 
 ```ts
-import { defineNode, defineWorkflow, createWorkflow } from '@agent-ils/workflow-sdk'
+// workflow.ts
+import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
 
-const workflow = createWorkflow(
-    defineWorkflow({
-        id: 'my-workflow',
-        nodes: [
-            defineNode({
-                id: 'double',
-                run: async (ctx) => ({ type: 'continue', patch: { value: ctx.value * 2 } }),
-            }),
-            defineNode({
-                id: 'add',
-                run: async (ctx) => ({ type: 'continue', patch: { value: ctx.value + 10 } }),
-            }),
-        ],
-    }),
-)
+export interface AuthContext {
+    requestId: string
+    code: string
+    secretData: string
+    fetchedAt: number
+    completed: boolean
+}
 
-const result = await workflow.run({ initialContext: { value: 5 } })
-console.log(result.status) // 'done'
-console.log(result.context.value) // 20
+export const authWorkflow = defineWorkflow<AuthContext>({
+    id: 'auth-view-secret',
+    nodes: [
+        defineNode({
+            id: 'init',
+            run: async () => ({
+                type: 'continue',
+                patch: { requestId: `req_${Date.now()}` },
+            }),
+        }),
+        // 关键：验证码错误时返回 stop，后续节点不会执行
+        defineNode({
+            id: 'verify',
+            run: async (ctx) => {
+                if (ctx.code !== '123456') {
+                    return { type: 'stop', reason: `验证码错误：${ctx.code}` }
+                }
+                return { type: 'continue' }
+            },
+        }),
+        defineNode({
+            id: 'fetch-data',
+            run: async () => ({
+                type: 'continue',
+                patch: { secretData: '机密内容...', fetchedAt: Date.now() },
+            }),
+        }),
+        defineNode({
+            id: 'complete',
+            run: async () => ({ type: 'continue', patch: { completed: true } }),
+        }),
+    ],
+})
 ```
 
-## React
+### React + Antd
 
 ```sh
-pnpm add @agent-ils/workflow-sdk react
+pnpm add @agent-ils/workflow-sdk react antd
 ```
 
 ```tsx
 import { useWorkflow } from '@agent-ils/workflow-sdk/react'
-import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
-
-const definition = defineWorkflow({
-    id: 'counter',
-    nodes: [
-        defineNode({
-            id: 'inc',
-            run: async (ctx) => ({ type: 'continue', patch: { count: ctx.count + 1 } }),
-        }),
-    ],
-})
+import { Steps, Button, Alert } from 'antd'
+import { authWorkflow, type AuthContext } from './workflow'
+import { VerifyForm } from './VerifyForm'
+import { DataViewer } from './DataViewer'
 
 function App() {
-    const { status, start, abort } = useWorkflow({ definition })
+    const { status, start } = useWorkflow({ definition: authWorkflow })
+
+    const handleVerify = async (code: string) => {
+        const res = await start({
+            requestId: '',
+            code,
+            secretData: '',
+            fetchedAt: 0,
+            completed: false,
+        })
+        if (res.status === 'stopped') {
+            // 验证失败 — fetch-data 从未执行
+            message.error(res.reason)
+        }
+    }
 
     return (
-        <button onClick={() => start({ count: 0 })} disabled={status === 'running'}>
-            {status}
-        </button>
+        <>
+            <Steps
+                current={status === 'done' ? 3 : status === 'stopped' ? 1 : 0}
+                status={status === 'stopped' ? 'error' : 'process'}
+            >
+                <Step title="初始化" />
+                <Step title="身份验证" />
+                <Step title="获取数据" />
+                <Step title="完成" />
+            </Steps>
+            {status === 'idle' && <VerifyForm onSubmit={handleVerify} />}
+            {status === 'stopped' && <Alert type="error" description="验证失败" />}
+            {status === 'done' && <DataViewer />}
+        </>
     )
 }
 ```
 
-## Vue 3
+完整可运行项目：[`examples/react-antd/`](./examples/react-antd/)
+
+### Vue 3 + Element Plus
 
 ```sh
-pnpm add @agent-ils/workflow-sdk vue
+pnpm add @agent-ils/workflow-sdk vue element-plus
 ```
 
 ```vue
-<script setup>
+<script setup lang="ts">
 import { useWorkflow } from '@agent-ils/workflow-sdk/vue'
-import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
+import { authWorkflow, type AuthContext } from './workflow'
 
-const definition = defineWorkflow({
-    id: 'counter',
-    nodes: [
-        defineNode({
-            id: 'inc',
-            run: async (ctx) => ({ type: 'continue', patch: { count: ctx.count + 1 } }),
-        }),
-    ],
-})
+const { status, start, abort } = useWorkflow({ definition: authWorkflow })
 
-const { status, start, abort } = useWorkflow({ definition })
+async function handleVerify(code: string) {
+    const res = await start({
+        requestId: '',
+        code,
+        secretData: '',
+        fetchedAt: 0,
+        completed: false,
+    })
+    if (res.status === 'stopped') {
+        ElMessage.error(res.reason)
+    }
+}
 </script>
 
 <template>
-    <button :disabled="status === 'running'" @click="start({ count: 0 })">
-        {{ status }}
-    </button>
+    <el-steps :active="status === 'done' ? 3 : status === 'stopped' ? 1 : 0">
+        <el-step title="初始化" /><el-step title="身份验证" /> <el-step title="获取数据" /><el-step title="完成" />
+    </el-steps>
+    <VerifyForm v-if="status === 'idle'" @submit="handleVerify" />
+    <el-alert v-if="status === 'stopped'" type="error" description="验证失败" />
+    <DataViewer v-if="status === 'done'" />
 </template>
+```
+
+完整可运行项目：[`examples/vue-element-plus/`](./examples/vue-element-plus/)
+
+## 中断工作流
+
+有三种方式阻止后续节点执行：
+
+### 1. `stop` 信号 — 受控中断
+
+在节点的 `run` 中返回 `{ type: 'stop', reason: '...' }`。工作流立即中断，patch 仍然会被应用，`result.status === 'stopped'`。
+
+```ts
+defineNode({
+    id: 'gate',
+    run: async (ctx) => {
+        if (!ctx.authorized) return { type: 'stop', reason: '未授权' }
+        return { type: 'continue' }
+    },
+})
+```
+
+### 2. 抛出异常 — 意外失败
+
+在 `run` 内部 `throw`。工作流捕获异常，设置 `result.status === 'failed'`，错误存储在 `result.error`。
+
+```ts
+defineNode({
+    id: 'api-call',
+    run: async (ctx) => {
+        const res = await fetch(ctx.url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return { type: 'continue', patch: { data: await res.json() } }
+    },
+})
+```
+
+### 3. `AbortSignal` — 外部取消
+
+通过 `run({ signal })` 传入 `AbortSignal`。引擎在节点之间检查是否已取消。
+
+```ts
+const ac = new AbortController()
+setTimeout(() => ac.abort(), 5000)
+const result = await workflow.run({ initialContext: {}, signal: ac.signal })
 ```
 
 ## API
 
 ### 核心
 
-| 导出                      | 类型     | 说明                                |
-| ------------------------- | -------- | ----------------------------------- |
-| `defineNode(opts)`        | Function | 创建带类型节点的辅助函数            |
-| `defineWorkflow(def)`     | Function | 创建带类型工作流定义的辅助函数      |
-| `createWorkflow(def)`     | Function | 返回 `{ definition, run(options) }` |
-| `applyPatch(ctx, patch?)` | Function | 浅合并 partial patch 到 context     |
+| 导出                      | 类型 | 说明                                |
+| ------------------------- | ---- | ----------------------------------- |
+| `defineNode(opts)`        | 函数 | 创建带类型节点的辅助函数            |
+| `defineWorkflow(def)`     | 函数 | 创建带类型工作流定义的辅助函数      |
+| `createWorkflow(def)`     | 函数 | 返回 `{ definition, run(options) }` |
+| `applyPatch(ctx, patch?)` | 函数 | 浅合并 partial patch 到 context     |
 
 ### 节点 `run` 返回值 — `WorkflowSignal`
 
-| 类型       | 字段                        | 效果                       |
-| ---------- | --------------------------- | -------------------------- |
-| `continue` | `patch?: Partial<TContext>` | 合并 patch，进入下一个节点 |
-| `stop`     | `reason: string`, `patch?`  | 合并 patch，停止工作流     |
+| 类型       | 字段                        | 效果                     |
+| ---------- | --------------------------- | ------------------------ |
+| `continue` | `patch?: Partial<TContext>` | 合并 patch，进入下个节点 |
+| `stop`     | `reason: string`, `patch?`  | 合并 patch，停止工作流   |
 
 ### `run()` 参数
 
