@@ -44,6 +44,18 @@ dist/**/*.map
 
 Adjust the ignore list for packages that intentionally publish source, templates, or source maps.
 
+**Source maps pitfall**: when `files` includes `"dist"`, the `.npmignore` `dist/**/*.map` rule is ignored because `files` takes precedence as a whitelist. To actually exclude source maps, use a specific glob with negation in `files`:
+
+```json
+"files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/*.map"
+]
+```
+
+Always verify with `npm pack --dry-run` that no `.map` files appear in the tarball.
+
 ## README Checks
 
 The package-root README should let a user understand the package without reading source code:
@@ -89,6 +101,19 @@ node <package-root>/dist/<entry>.js --help
 ```
 
 The CLI version should come from `package.json`, not a duplicated hard-coded constant.
+
+## Changeset Gate (CI)
+
+CI enforces a changeset check on every PR that modifies files under `packages/**` (excluding `packages/extensions/*`, `packages/mcp/`, `packages/cli/`). If publishable packages are changed but no new `.changeset/*.md` file is added, CI fails.
+
+Before pushing a PR that touches `packages/*`:
+
+```sh
+pnpm changeset
+# Select the affected package(s), choose bump type (patch/minor/major), write a summary.
+```
+
+The generated `.changeset/*.md` must be committed alongside the code changes. This applies to feature branches too — do not wait until the release branch.
 
 ## Release Branch & Tag Workflow
 
@@ -151,3 +176,5 @@ This keeps `npm view <pkg>` `dist.tarball` ↔ git tag ↔ `main` commit in 1:1 
 - Updating README after publishing; npm package README updates only when publishing a new package version.
 - Publishing from `dev` or a feature branch — the npm tarball commit will not exist on `main` and `repository.directory` traceability breaks.
 - Forgetting to push the git tag after `npm publish` — the tag is the only durable bridge between npm and git history.
+- Forgetting to add a `.changeset/*.md` file when modifying `packages/*` — CI will block the PR with "Verify changeset present" failure.
+- Using `"files": ["dist"]` and expecting `.npmignore` to exclude `.map` files — `files` whitelist takes precedence, use explicit `!dist/**/*.map` negation instead.
