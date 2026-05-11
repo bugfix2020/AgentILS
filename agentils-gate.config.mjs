@@ -19,6 +19,10 @@ export default {
             cmd: 'node scripts/dev/run-lint-staged-with-progress.mjs',
         },
         {
+            label: 'VERSION BUMP GUARD',
+            cmd: 'node scripts/dev/check-no-version-bump.mjs',
+        },
+        {
             label: 'TYPECHECK (TURBO CACHED)',
             cmd: 'pnpm -s typecheck',
         },
