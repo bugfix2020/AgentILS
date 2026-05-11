@@ -22,6 +22,16 @@ Use this skill before publishing or reviewing any npm package in this workspace.
 For the target package root, inspect and configure:
 
 - `package.json` has the intended `name`, `version`, `description`, `type`, `main`, `module`, `types`, `bin`, `exports`, `files`, `engines`, `dependencies`, and scripts.
+- `package.json` includes `repository` and `license` fields (required for npm OIDC provenance):
+    ```json
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/bugfix2020/AgentILS",
+        "directory": "packages/<package-name>"
+    },
+    "license": "MIT"
+    ```
+    Without `repository.url`, OIDC publish fails with `E422 repository.url is empty`.
 - Scoped public packages include `publishConfig.access = "public"`.
 - Packages intended for npm include `publishConfig.registry = "https://registry.npmjs.org/"`.
 - Package-level `.npmrc` sets:
@@ -168,7 +178,37 @@ pnpm changeset
 
 The generated `.changeset/*.md` must be committed alongside the code changes. This applies to feature branches too — do not wait until the release branch.
 
-## Release Branch & Tag Workflow
+## First-Time Publish
+
+New packages must be published manually from local before CI (Trusted Publisher / OIDC) can take over.
+
+Use the automated script:
+
+```sh
+node scripts/dev/npm-first-publish.mjs <package-name>
+```
+
+This script handles: login check → package existence check → build → verify (`npm pack --dry-run`) → publish (with OTP/2FA support) → git tag.
+
+After the first publish, configure Trusted Publisher on the npm package page:
+
+```
+https://www.npmjs.com/package/<name>/access
+```
+
+Add `bugfix2020/AgentILS` as a trusted publisher with the `release.yml` workflow. After this, all subsequent publishes are handled automatically by CI.
+
+## Automatic CI Publish (changeset flow)
+
+After the first manual publish and Trusted Publisher setup, all publishes are automatic:
+
+1. Developer adds `.changeset/*.md` alongside code changes in a feature PR.
+2. PR merges to `main` → release workflow runs `pnpm changeset version` → creates/updates "Version Packages" PR.
+3. "Version Packages" PR merges → release workflow runs `pnpm changeset publish` → publishes to npm via OIDC.
+
+**No manual `npm publish` needed after first-time setup.**
+
+## Release Branch & Tag Workflow (Manual Override)
 
 Every publish must be reproducible from `main`. Do not publish from an integration branch or a local-only commit.
 
@@ -221,13 +261,19 @@ This keeps `npm view <pkg>` `dist.tarball` ↔ git tag ↔ `main` commit in 1:1 
 
 ## Common Mistakes
 
+- Missing `repository` field in `package.json` — npm OIDC provenance requires `repository.url` to match the GitHub repo. Without it, publish fails with `E422 repository.url is empty`.
+- Missing `license` field in `package.json`.
+- New packages starting at `version > 0.0.0` — must start at `0.0.0` and let changesets bump to `0.0.1` on first release.
+- Using `minor` instead of `patch` in changeset for a new package's first release — first release should be `patch` (0.0.0 → 0.0.1), not `minor` (0.0.0 → 0.1.0).
+- Publishing from `dev` or a feature branch — the npm tarball commit will not exist on `main` and `repository.directory` traceability breaks.
+- Forgetting to configure Trusted Publisher (OIDC) after first manual publish — CI auto-publish will fail with `E404` or `E422` until configured at `https://www.npmjs.com/package/<name>/access`.
+- Relative links in README (`./examples/...`, `./README.zh-CN.md`) — these break on npmjs.com because the files aren't in the tarball. Always use GitHub absolute URLs.
+- Updating README after publishing; npm package README updates only when publishing a new package version — if you fix README links, you need a new changeset to trigger a version bump + republish.
 - Removing `private: true` but forgetting `publishConfig.access = "public"` for a scoped public package.
 - Adding `.npmrc` but forgetting `.npmignore` or `files`.
 - Trusting `.gitignore` without checking `npm pack --dry-run`.
 - Publishing source maps unintentionally.
 - Hard-coding a CLI version instead of reading package metadata.
-- Updating README after publishing; npm package README updates only when publishing a new package version.
-- Publishing from `dev` or a feature branch — the npm tarball commit will not exist on `main` and `repository.directory` traceability breaks.
 - Forgetting to push the git tag after `npm publish` — the tag is the only durable bridge between npm and git history.
 - Forgetting to add a `.changeset/*.md` file when modifying `packages/*` — CI will block the PR with "Verify changeset present" failure.
 - Using `"files": ["dist"]` and expecting `.npmignore` to exclude `.map` files — `files` whitelist takes precedence, use explicit `!dist/**/*.map` negation instead.
