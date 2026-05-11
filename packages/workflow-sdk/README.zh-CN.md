@@ -1,6 +1,7 @@
 # AgentILS Workflow SDK
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@agent-ils/workflow-sdk"><img alt="npm" src="https://img.shields.io/npm/v/@agent-ils/workflow-sdk?label=npm&color=CB3837"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white">
   <img alt="tsup" src="https://img.shields.io/badge/tsup-ESM-7C3AED">
@@ -9,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> | 简体中文
+  <a href="https://github.com/bugfix2020/AgentILS/blob/main/packages/workflow-sdk/README.md">English</a> | 简体中文
 </p>
 
 `@agent-ils/workflow-sdk` 是一个框架无关的工作流执行引擎。将多步骤工作流定义为节点数组，运行时通过 context 传递和 patch 更新状态，并可选用 React hooks 或 Vue 3 composables 接入响应式 UI。
@@ -130,7 +131,7 @@ function App() {
 }
 ```
 
-完整可运行项目：[`examples/react-antd/`](./examples/react-antd/)
+完整可运行项目：[`examples/react-antd/`](https://github.com/bugfix2020/AgentILS/tree/main/packages/workflow-sdk/examples/react-antd)
 
 ### Vue 3 + Element Plus
 
@@ -169,7 +170,7 @@ async function handleVerify(code: string) {
 </template>
 ```
 
-完整可运行项目：[`examples/vue-element-plus/`](./examples/vue-element-plus/)
+完整可运行项目：[`examples/vue-element-plus/`](https://github.com/bugfix2020/AgentILS/tree/main/packages/workflow-sdk/examples/vue-element-plus)
 
 ## 中断工作流
 

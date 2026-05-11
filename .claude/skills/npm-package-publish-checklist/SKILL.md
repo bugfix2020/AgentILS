@@ -70,6 +70,59 @@ The package-root README should let a user understand the package without reading
 
 Use the existing package README style in this repo when possible. For Chinese package docs, compare against `packages/quality-gate/README.zh-CN.md`.
 
+### Standard README Structure
+
+Every publishable package in this repo must follow this structure (established by `@agent-ils/quality-gate` and `@agent-ils/logger`):
+
+```markdown
+# <Package Title>
+
+<p align="center">
+  <!-- npm version badge (required) -->
+  <a href="https://www.npmjs.com/package/<scope>/<name>">
+    <img alt="npm" src="https://img.shields.io/npm/v/<scope>/<name>?label=npm&color=CB3837">
+  </a>
+  <!-- tech stack badges -->
+  <img alt="TypeScript" src="..."> ...
+</p>
+
+<p align="center">
+  English | <a href="<GITHUB_ABSOLUTE_URL>/README.zh-CN.md">简体中文</a>
+</p>
+
+One-line description.
+What it does NOT do.
+
+## Install / Usage
+
+pnpm / npm / yarn / bun examples
+
+## ... feature sections
+
+## API
+
+export table
+
+## What It Does Not Do
+
+explicit boundaries
+```
+
+### Link Rules for npm Compatibility
+
+npm renders the package-root `README.md` on the package page. Files not included in the npm tarball (via `files` or `.npmignore`) cannot be linked with relative paths.
+
+**Always use GitHub absolute URLs for:**
+
+| Target         | Relative (broken on npm) | Absolute (works everywhere)                                                       |
+| -------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| Chinese README | `./README.zh-CN.md`      | `https://github.com/bugfix2020/AgentILS/blob/main/packages/<pkg>/README.zh-CN.md` |
+| English README | `./README.md`            | `https://github.com/bugfix2020/AgentILS/blob/main/packages/<pkg>/README.md`       |
+| Examples dir   | `./examples/...`         | `https://github.com/bugfix2020/AgentILS/tree/main/packages/<pkg>/examples/...`    |
+| LLM_USAGE.md   | `./LLM_USAGE.md`         | `https://github.com/bugfix2020/AgentILS/blob/main/packages/<pkg>/LLM_USAGE.md`    |
+
+Reference implementations: `packages/quality-gate/README.md`, `packages/logger/README.md`.
+
 ## Verification Commands
 
 Run from the repository root unless the package requires otherwise:

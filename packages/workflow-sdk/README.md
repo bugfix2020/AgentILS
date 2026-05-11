@@ -1,6 +1,7 @@
 # AgentILS Workflow SDK
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@agent-ils/workflow-sdk"><img alt="npm" src="https://img.shields.io/npm/v/@agent-ils/workflow-sdk?label=npm&color=CB3837"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white">
   <img alt="tsup" src="https://img.shields.io/badge/tsup-ESM-7C3AED">
@@ -9,7 +10,7 @@
 </p>
 
 <p align="center">
-  English | <a href="./README.zh-CN.md">简体中文</a>
+  English | <a href="https://github.com/bugfix2020/AgentILS/blob/main/packages/workflow-sdk/README.zh-CN.md">简体中文</a>
 </p>
 
 `@agent-ils/workflow-sdk` is a framework-agnostic workflow execution engine. Define multi-step workflows as arrays of nodes, run them with context passing and patch-based state updates, and optionally integrate with React hooks or Vue 3 composables for reactive UI state.
@@ -130,7 +131,7 @@ function App() {
 }
 ```
 
-Full runnable project: [`examples/react-antd/`](./examples/react-antd/)
+Full runnable project: [`examples/react-antd/`](https://github.com/bugfix2020/AgentILS/tree/main/packages/workflow-sdk/examples/react-antd)
 
 ### Vue 3 + Element Plus
 
@@ -169,7 +170,7 @@ async function handleVerify(code: string) {
 </template>
 ```
 
-Full runnable project: [`examples/vue-element-plus/`](./examples/vue-element-plus/)
+Full runnable project: [`examples/vue-element-plus/`](https://github.com/bugfix2020/AgentILS/tree/main/packages/workflow-sdk/examples/vue-element-plus)
 
 ## Interrupting a Workflow
 
