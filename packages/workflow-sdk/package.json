@@ -1,6 +1,6 @@
 {
     "name": "@agent-ils/workflow-sdk",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Framework-agnostic workflow infrastructure for AgentILS",
     "type": "module",
     "main": "dist/index.js",

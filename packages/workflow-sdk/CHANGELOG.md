@@ -1,5 +1,11 @@
 # @agent-ils/workflow-sdk
 
+## 0.0.3
+
+### Patch Changes
+
+- b7b32ad: Add `repository` and `license` fields to package.json (required by npm Trusted Publisher / OIDC provenance verification).
+
 ## 0.0.2
 
 ### Patch Changes
