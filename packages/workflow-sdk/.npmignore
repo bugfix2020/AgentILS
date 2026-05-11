@@ -1,0 +1,8 @@
+src/
+tsconfig.json
+tsup.config.ts
+*.tsbuildinfo
+node_modules/
+dist/**/*.map
+__tests__/
+examples/

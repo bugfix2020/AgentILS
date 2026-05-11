@@ -24,8 +24,14 @@
         }
     },
     "files": [
-        "dist"
+        "dist/**/*.js",
+        "dist/**/*.d.ts",
+        "!dist/**/*.map"
     ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "scripts": {
         "build": "tsup",
         "dev": "tsup --watch",
