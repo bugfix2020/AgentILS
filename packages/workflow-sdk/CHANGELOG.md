@@ -1,5 +1,11 @@
 # @agent-ils/workflow-sdk
 
+## 0.0.2
+
+### Patch Changes
+
+- c56d4f8: Fix README links: add npm version badge, use GitHub absolute URLs for Chinese README and examples (relative links break on npmjs.com).
+
 ## 0.0.1
 
 ### Patch Changes
