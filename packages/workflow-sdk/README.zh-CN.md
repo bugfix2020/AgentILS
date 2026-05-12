@@ -23,6 +23,11 @@
 pnpm add @agent-ils/workflow-sdk
 ```
 
+框架适配层通过子路径导出：
+
+- React：`@agent-ils/workflow-sdk/react`
+- Vue：`@agent-ils/workflow-sdk/vue`
+
 ## 场景：鉴权后查看敏感数据
 
 用户点击「查看敏感数据」→ 弹出验证码表单 → 验证码正确则拉取并展示数据，**验证码错误则工作流立即中断**——数据拉取不会执行。

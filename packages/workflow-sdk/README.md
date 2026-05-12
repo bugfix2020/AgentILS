@@ -1,3 +1,9 @@
+---
+dependsOn:
+    - packages/workflow-sdk/src/core/defineNode.ts#defineNode
+    - packages/workflow-sdk/src/core/createWorkflow.ts#createWorkflow
+---
+
 # AgentILS Workflow SDK
 
 <p align="center">
@@ -22,6 +28,11 @@ It does **not** provide a visual editor, persistence, or a server runtime — it
 ```sh
 pnpm add @agent-ils/workflow-sdk
 ```
+
+Framework adapters are exposed via subpaths:
+
+- React: `@agent-ils/workflow-sdk/react`
+- Vue: `@agent-ils/workflow-sdk/vue`
 
 ## Scenario: Auth-Gated Data Access
 
