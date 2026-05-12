@@ -37,7 +37,7 @@ init → verify → fetch-data → complete
 
 ```ts
 // workflow.ts
-import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
+import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk/core'
 
 export interface AuthContext {
     requestId: string
