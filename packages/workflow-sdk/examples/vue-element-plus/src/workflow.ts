@@ -1,4 +1,4 @@
-import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk'
+import { defineNode, defineWorkflow } from '@agent-ils/workflow-sdk/core'
 
 export interface ApiKeyWorkflowContext {
     requestId: string
