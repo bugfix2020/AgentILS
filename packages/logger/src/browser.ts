@@ -1,11 +1,22 @@
 export type BrowserLogLevel = 'debug' | 'info' | 'warn' | 'error'
 
+declare global {
+    interface Window {
+        $agentILS?: {
+            logger?: {
+                overrideKey?: string
+            }
+        }
+    }
+}
+
 export interface BrowserLoggerOptions {
     endpoint?: string
     source?: string
     defaultFields?: Record<string, unknown>
     traceId?: string
     enabled?: boolean
+    overrideKey?: string
     fetchImpl?: typeof fetch
     filePrefix?: string
     fileName?: string
@@ -76,8 +87,71 @@ export interface BrowserLogger {
 const DEFAULT_ENDPOINT = 'http://127.0.0.1:12138'
 const DEFAULT_SOURCE = 'browser'
 const DEFAULT_TIMEOUT_MS = 5_000
+const HEALTH_TIMEOUT_MS = 2_000
+const HEALTH_RETRY_MS = 10_000
 
 export function createBrowserLogger(options: BrowserLoggerOptions = {}): BrowserLogger {
+    // Shared collector readiness state across all child loggers
+    let collectorReady = false
+    let healthInFlight: Promise<boolean> | null = null
+    let healthRetryTimer: ReturnType<typeof setTimeout> | null = null
+
+    const probeHealth = (fetchImpl: typeof fetch, endpoint: string): Promise<boolean> => {
+        if (healthInFlight) return healthInFlight
+
+        healthInFlight = (async () => {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS)
+            try {
+                const res = await fetchImpl(new URL('/api/health', withTrailingSlash(endpoint)), {
+                    method: 'GET',
+                    signal: controller.signal,
+                })
+                return res.ok
+            } catch {
+                return false
+            } finally {
+                clearTimeout(timeout)
+                healthInFlight = null
+            }
+        })()
+
+        return healthInFlight
+    }
+
+    const scheduleHealthRetry = (fetchImpl: typeof fetch, endpoint: string) => {
+        if (healthRetryTimer) return
+        healthRetryTimer = setTimeout(async () => {
+            healthRetryTimer = null
+            const ok = await probeHealth(fetchImpl, endpoint)
+            if (ok) {
+                collectorReady = true
+            } else {
+                scheduleHealthRetry(fetchImpl, endpoint)
+            }
+        }, HEALTH_RETRY_MS)
+    }
+
+    const ensureReady = async (fetchImpl: typeof fetch, endpoint: string): Promise<boolean> => {
+        if (collectorReady) return true
+        const ok = await probeHealth(fetchImpl, endpoint)
+        if (ok) {
+            collectorReady = true
+            if (healthRetryTimer) {
+                clearTimeout(healthRetryTimer)
+                healthRetryTimer = null
+            }
+            return true
+        }
+        scheduleHealthRetry(fetchImpl, endpoint)
+        return false
+    }
+
+    const markUnready = (fetchImpl: typeof fetch, endpoint: string) => {
+        collectorReady = false
+        scheduleHealthRetry(fetchImpl, endpoint)
+    }
+
     const make = (baseOptions: BrowserLoggerOptions): BrowserLogger => {
         const log = async (
             level: BrowserLogLevel,
@@ -85,12 +159,19 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
             fields?: Record<string, unknown>,
             overrideConfig: BrowserLogOverrideConfig = {},
         ): Promise<BrowserLogResult> => {
-            const enabled = overrideConfig.enabled ?? baseOptions.enabled ?? true
+            const configuredKey = baseOptions.overrideKey
+            const windowKey = typeof window !== 'undefined' ? window.$agentILS?.logger?.overrideKey : undefined
+            const keyMatched = configuredKey && windowKey && configuredKey === windowKey
+            const enabled = keyMatched || (overrideConfig.enabled ?? baseOptions.enabled ?? true)
             if (!enabled) return { ok: true, status: 204 }
 
             const endpoint = overrideConfig.endpoint ?? baseOptions.endpoint ?? DEFAULT_ENDPOINT
             const fetchImpl = baseOptions.fetchImpl ?? globalThis.fetch?.bind(globalThis)
             if (!fetchImpl) return { ok: false, error: 'fetch is not available in this environment' }
+
+            // Collector readiness check
+            const ready = await ensureReady(fetchImpl, endpoint)
+            if (!ready) return { ok: true, status: 204 }
 
             const payload: BrowserLogPayload = {
                 ts: new Date().toISOString(),
@@ -115,11 +196,15 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                     payload,
                     baseOptions.timeoutMs ?? DEFAULT_TIMEOUT_MS,
                 )
-                const body = (await response.json().catch(() => undefined)) as BrowserLogResult | undefined
-                if (!response.ok)
+                if (!response.ok) {
+                    markUnready(fetchImpl, endpoint)
+                    const body = (await response.json().catch(() => undefined)) as BrowserLogResult | undefined
                     return { ok: false, status: response.status, error: body?.error ?? `HTTP ${response.status}` }
+                }
+                const body = (await response.json().catch(() => undefined)) as BrowserLogResult | undefined
                 return { ok: true, status: response.status, record: body?.record, records: body?.records }
             } catch (error) {
+                markUnready(fetchImpl, endpoint)
                 baseOptions.onDeliveryError?.(error, payload)
                 return { ok: false, error: error instanceof Error ? error.message : String(error) }
             }
