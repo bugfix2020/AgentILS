@@ -253,8 +253,11 @@ await taskLogger.info('api.request', { url: '/api/users' })
 - `filePrefix`：JSONL 文件名前缀
 - `fileName`：指定 JSONL 文件名
 - `enabled`：关闭投递但保留调用点
+- `overrideKey`：当配置值与 `window.$agentILS.logger.overrideKey` 匹配时，即使 `enabled: false` 也强制记录日志。SSR 环境下 `window` 不可用时不生效，直接走 `enabled` 原逻辑
 - `timeoutMs`：每次写日志请求的超时时间
 - `onDeliveryError`：写入失败时的回调
+
+**Collector 就绪检测**：Browser SDK 在发送日志前会先探测 `GET /api/health`，collector 未运行时静默丢弃日志（不会产生 404 请求）。探测失败后每 10 秒自动重试；日志发送失败时自动重置就绪状态并重新探测。
 
 ## Node 写入 API
 

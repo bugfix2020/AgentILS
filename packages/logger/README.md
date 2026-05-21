@@ -254,8 +254,11 @@ Common options:
 - `filePrefix`: JSONL file name prefix
 - `fileName`: explicit JSONL file name
 - `enabled`: turn delivery off without removing call sites
+- `overrideKey`: when set and matching `window.$agentILS.logger.overrideKey`, force-enable logging even if `enabled: false`. Safe in SSR — no-ops when `window` is unavailable
 - `timeoutMs`: per-request timeout
 - `onDeliveryError`: callback when delivery fails
+
+**Collector readiness check**: the browser SDK probes `GET /api/health` before sending logs. If the collector is not running, logs are silently discarded (no 404 errors). On failure, health is retried every 10 s; on delivery error, readiness is reset and re-probed automatically.
 
 ## Node Writer API
 
