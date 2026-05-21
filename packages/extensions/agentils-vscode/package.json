@@ -2,7 +2,7 @@
     "name": "agentils-vscode",
     "displayName": "AgentILS",
     "description": "AgentILS (Intelligent Logical System) — single-billing multi-turn human-in-the-loop for Copilot Chat",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "private": true,
     "publisher": "agentils",
     "engines": {
