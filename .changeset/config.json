@@ -6,6 +6,6 @@
     "linked": [],
     "access": "public",
     "baseBranch": "main",
-    "updateInternalDependencies": "ignore",
-    "ignore": ["@agent-ils/mcp", "@agent-ils/cli"]
+    "updateInternalDependencies": "patch",
+    "ignore": ["@agent-ils/mcp", "@agent-ils/cli", "agentils-vscode"]
 }
