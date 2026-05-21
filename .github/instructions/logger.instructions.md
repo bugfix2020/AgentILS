@@ -81,8 +81,11 @@
 
 - `src/index.ts` — Node 端 SDK + HTTP collector server。`createLogger`
   写本地文件；`createHttpLogger` 走 fetch；`startHttpLogServer` 起 server。
-- `src/browser.ts` — 纯浏览器 SDK（`fetch` + `navigator.sendBeacon` 兜底），
-  **不要**在这里 import 任何 `node:*`。
+- `src/browser.ts` — 纯浏览器 SDK（`fetch`），**不要**在这里 import 任何 `node:*`。
+    - `overrideKey`：配置后与 `window.$agentILS.logger.overrideKey` 匹配时强制启用日志，
+      `typeof window` 检测保证 SSR 安全。
+    - Collector 就绪探测：发日志前 `GET /api/health`，未就绪静默丢弃，失败 10s 重试，
+      发送失败自动重置。状态在 `createBrowserLogger` 闭包外层共享，`child()` 共用。
 - `src/query.ts` — 读 + 过滤 + 格式化。`matchesRecord(record, range)` 只接
   range，不再接 options（`fix(logger)` 已删除未使用参数）。
 - `src/cli.ts` — cac CLI；无子命令时按 read flag 自动路由到 `read`。

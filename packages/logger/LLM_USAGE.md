@@ -61,12 +61,18 @@ const logger = createBrowserLogger({
     endpoint: 'http://127.0.0.1:12138',
     source: 'frontend',
     defaultFields: { app: '<app-name>' },
+    enabled: import.meta.env.DEV,
+    overrideKey: 'optional-secret-key',
 })
 
 await logger.info('api.response', { url: '/api/users', status: 200, empty: true }, { traceId: 'user-list-001' })
 ```
 
 `logger.child(fields)` returns a child logger with merged default fields. Levels: `debug | info | warn | error`.
+
+**overrideKey**: when `overrideKey` is set and matches `window.$agentILS.logger.overrideKey`, logs are force-enabled even with `enabled: false`. No-ops when `window` is unavailable (SSR / Node).
+
+**Collector readiness**: the SDK probes `GET /api/health` before sending logs; silently discards if the collector is not running (no 404s). Retries health every 10 s on failure; resets on delivery error.
 
 ### Node / MCP / Extension Host
 
