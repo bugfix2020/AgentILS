@@ -53,6 +53,14 @@
         {
             "dir": "package-readme-and-instruction-sync",
             "summary": "每个 package 改动前必须同步 README + <pkg>.instructions.md，且 sandbox 验证 README 跑得通"
+        },
+        {
+            "dir": "ralph",
+            "summary": "Ralph 自治 AI agent 循环；逐一实现 prd.json user story 直到全部通过"
+        },
+        {
+            "dir": "prd",
+            "summary": "为新功能生成 PRD（Product Requirements Document）并保存到 tasks/"
         }
     ]
 }
