@@ -65,11 +65,11 @@ release:
 
 brews:
     - name: agent-ils-logger
-      tap:
+      repository:
           owner: bugfix2020
           name: homebrew-agentils
           branch: main
-      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
+          token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
       commit_author:
           name: bugfix2020[bot]
           email: bot@bugfix2020.dev
