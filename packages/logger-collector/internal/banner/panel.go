@@ -17,24 +17,25 @@ type ServerParams struct {
 }
 
 // Box-drawing borders -- all use C.Dim (dim green) for border characters.
+// Characters: ╔═╗ ╠═╣ ╚═╝ ║ (double-line, matching quality-gate ECAM panel)
 var (
-	TOP = C.Dim + "\u2554" + strings.Repeat("\u2550", IW) + "\u2557" + C.Rst
-	MID = C.Dim + "\u2560" + strings.Repeat("\u2550", IW) + "\u2563" + C.Rst
-	BOT = C.Dim + "\u255A" + strings.Repeat("\u2550", IW) + "\u255B" + C.Rst
+	TOP = C.Dim + "╔" + strings.Repeat("═", IW) + "╗" + C.Rst
+	MID = C.Dim + "╠" + strings.Repeat("═", IW) + "╣" + C.Rst
+	BOT = C.Dim + "╚" + strings.Repeat("═", IW) + "╝" + C.Rst
 )
 
 // rowLine wraps content between box-drawing vertical borders, padded to IW visible characters.
+// If content exceeds IW, it is truncated to fit.
 func rowLine(content string) string {
-	padded := padVisible(content, IW)
-	return C.Dim + "\u2551" + C.Rst + padded + C.Dim + "\u2551" + C.Rst
+	padded := padOrTruncate(content, IW)
+	return C.Dim + "║" + C.Rst + padded + C.Dim + "║" + C.Rst
 }
 
-// fitValue truncates val so that prefix+val fits within IW visible characters.
-// prefix is assumed to be plain text. If the combined length exceeds IW,
-// val is truncated with "..." appended.
+// fitValue truncates val so that prefix+val fits within IW visible characters,
+// leaving at least 1 char of right padding. prefix is assumed to be plain text.
 func fitValue(prefix string, val string) string {
-	prefixLen := len([]rune(prefix))
-	available := IW - prefixLen
+	prefixLen := visLen(prefix)
+	available := IW - prefixLen - 1 // -1 for right padding
 	if available < 4 {
 		available = 4
 	}

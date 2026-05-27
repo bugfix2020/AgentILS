@@ -50,3 +50,51 @@ func padVisible(s string, w int) string {
 	return s + strings.Repeat(" ", w-vl)
 }
 
+// padOrTruncate ensures the visible width of s equals w.
+// If s is shorter, it pads with spaces. If s is longer, it truncates.
+func padOrTruncate(s string, w int) string {
+	// Strip ANSI codes, build visible rune slice
+	clean := ansiRe.ReplaceAllString(s, "")
+	runes := []rune(clean)
+	if len(runes) > w {
+		// Need to truncate — rebuild with ANSI codes preserved up to w visible chars
+		return truncateVisible(s, w)
+	}
+	if len(runes) < w {
+		return s + strings.Repeat(" ", w-len(runes))
+	}
+	return s
+}
+
+// truncateVisible truncates s to at most w visible (non-ANSI) characters.
+func truncateVisible(s string, w int) string {
+	var result []rune
+	visible := 0
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			result = append(result, r)
+			continue
+		}
+		if inEscape {
+			result = append(result, r)
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+		if visible >= w {
+			break
+		}
+		result = append(result, r)
+		visible++
+	}
+	// Pad if needed
+	for visible < w {
+		result = append(result, ' ')
+		visible++
+	}
+	return string(result)
+}
+
