@@ -1,3 +1,5 @@
+version: 2
+
 project_name: agent-ils-logger
 
 before:
@@ -7,7 +9,6 @@ before:
 builds:
     - id: agent-ils-logger
       main: .
-      dir: packages/logger-collector
       binary: agent-ils-logger
       env:
           - CGO_ENABLED=0
