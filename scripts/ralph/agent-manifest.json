@@ -1,0 +1,49 @@
+{
+    "version": 1,
+    "runtime": "claude-code",
+    "mode": "sequential-handoff",
+    "roles": [
+        {
+            "id": "product",
+            "claudeAgent": ".claude/agents/ralph-product.md",
+            "stage": "product",
+            "handoffFile": "scripts/ralph/handoff/product.md"
+        },
+        {
+            "id": "developer",
+            "claudeAgent": ".claude/agents/ralph-developer.md",
+            "stage": "developer",
+            "handoffFile": "scripts/ralph/handoff/developer.md"
+        },
+        {
+            "id": "ops",
+            "claudeAgent": ".claude/agents/ralph-ops.md",
+            "stage": "ops",
+            "handoffFile": "scripts/ralph/handoff/ops.md"
+        },
+        {
+            "id": "tester",
+            "claudeAgent": ".claude/agents/ralph-tester.md",
+            "stage": "tester",
+            "handoffFile": "scripts/ralph/handoff/tester.md"
+        },
+        {
+            "id": "contributor",
+            "claudeAgent": ".claude/agents/ralph-contributor.md",
+            "stage": "contributor",
+            "handoffFile": "scripts/ralph/handoff/contributor.md"
+        },
+        {
+            "id": "beta",
+            "claudeAgent": ".claude/agents/ralph-beta.md",
+            "stage": "beta",
+            "handoffFile": "scripts/ralph/handoff/beta.md"
+        }
+    ],
+    "futureAdapters": {
+        "codex": {
+            "enabled": false,
+            "note": "Do not generate Codex files in MVP. Later, write a sync script that reads this manifest and emits Codex-compatible agent/subagent files after the Codex file format is confirmed."
+        }
+    }
+}
