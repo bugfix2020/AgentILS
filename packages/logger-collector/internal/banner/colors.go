@@ -97,4 +97,3 @@ func truncateVisible(s string, w int) string {
 	}
 	return string(result)
 }
-

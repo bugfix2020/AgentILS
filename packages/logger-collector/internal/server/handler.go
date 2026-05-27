@@ -130,7 +130,7 @@ func (s *Server) handlePostLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sendJSON(w, http.StatusOK, map[string]interface{}{
-			"ok":    true,
+			"ok":     true,
 			"record": rec,
 		})
 	default:

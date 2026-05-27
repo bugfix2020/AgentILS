@@ -70,17 +70,17 @@ func PrintServer(w io.Writer, params ServerParams) {
 
 	// Endpoint row
 	epVal := fitValue("  endpoint   ", params.Endpoint)
-	fmt.Fprintln(w, rowLine("  endpoint   " + epVal))
+	fmt.Fprintln(w, rowLine("  endpoint   "+epVal))
 
 	// LogDir row
 	ldVal := fitValue("  logDir     ", params.LogDir)
-	fmt.Fprintln(w, rowLine("  logDir     " + ldVal))
+	fmt.Fprintln(w, rowLine("  logDir     "+ldVal))
 
 	// Empty row
 	fmt.Fprintln(w, rowLine(""))
 
 	// Read row
-	fmt.Fprintln(w, rowLine("  read       " + params.ReadCmd))
+	fmt.Fprintln(w, rowLine("  read       "+params.ReadCmd))
 
 	// Install row(s) -- only if non-empty
 	if params.InstallHint != "" {
@@ -109,7 +109,7 @@ func printInstallRows(w io.Writer, hint string) {
 
 	// Single-line hint -- fit within row
 	fittedVal := fitValue(prefix, hint)
-	fmt.Fprintln(w, rowLine(prefix + fittedVal))
+	fmt.Fprintln(w, rowLine(prefix+fittedVal))
 }
 
 // PrintJSON outputs startup info as JSON (no banner) to w.

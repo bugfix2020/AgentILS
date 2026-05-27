@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	defaultLimit   = 50
-	maxFieldChars  = 600
+	defaultLimit  = 50
+	maxFieldChars = 600
 )
 
 var relativeTimeRe = regexp.MustCompile(`(?i)^(\d+)(ms|s|m|h|d|w)$`)
@@ -48,15 +48,15 @@ type ReadableLogRecord struct {
 
 // ReadOptions holds all CLI flags for the read subcommand.
 type ReadOptions struct {
-	Cwd     string
-	LogDir  string
-	Tail    int
-	From    string
-	To      string
-	Source  string
-	Level   string
-	Event   string
-	Format  string
+	Cwd    string
+	LogDir string
+	Tail   int
+	From   string
+	To     string
+	Source string
+	Level  string
+	Event  string
+	Format string
 }
 
 // parseLogLine parses a single JSONL line into a ReadableLogRecord.
