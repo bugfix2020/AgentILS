@@ -149,4 +149,40 @@
 - Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
 - **Observation**: Examples section uses green (C.Grn) instead of gray (C.Gry) because examples are rendered as plain indented lines (no Description field). This is consistent with Usage line coloring.
 ---
+## 2026-05-27 -- US-003 Product Handoff
 
+- Analyzed US-003 acceptance criteria: single 1-line change in `packages/logger/src/cli.ts`
+- Located the spawn call at line 192-195 of cli.ts: `env: process.env` needs to become `env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }`
+- Confirmed Go binary already reads `AGENT_ILS_INVOKER` env var via `detect.go` (implemented in US-001)
+- Confirmed SDK files (browser.ts, index.ts, query.ts) are not touched
+- Wrote product handoff at `scripts/ralph/runs/go-collector-v2/handoff/product.md`
+- Updated prd.json: US-003 `handoff.product = true`, `stage = "developer"`
+- **Learnings for future iterations:**
+  - This is the simplest story in the PRD: literally a 1-line change adding one env var to a spread object
+  - The Go side (detect.go) was already built to read this env var in US-001, so no Go changes needed
+---
+## 2026-05-27 -- US-003 Developer Implementation
+
+- Implemented Node thin-shell passthrough invoker marking (1-line change)
+- Changed `packages/logger/src/cli.ts` line 194: `env: process.env` -> `env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }`
+- Build passes: `pnpm --filter @agent-ils/logger build` succeeds (all 4 entry points + DTS)
+- SDK files (browser.ts, index.ts, query.ts) confirmed untouched via `git diff --name-only`
+- **Files changed:**
+  - `packages/logger/src/cli.ts` (modified -- single env injection line)
+- Updated prd.json: US-003 `handoff.developer = true`, `stage = "tester"`
+- Wrote developer handoff at `scripts/ralph/runs/go-collector-v2/handoff/developer.md`
+- **Learnings for future iterations:**
+  - This was a verified 1-line change; the spread operator `...process.env` is type-safe in tsup/node20 target
+  - The env injection only takes effect when the Node thin shell spawns the Go binary; direct Go binary invocation is unaffected
+---
+
+## 2026-05-27 -- US-003 Tester Verification
+
+- Verified all 3 acceptance criteria for US-003 (Node Thin-Shell Passthrough Invoker Marking)
+- **All 3 ACs PASS**
+- AC 1: spawn call at line 192-195 injects `env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }` -- spread preserves process.env, appends invoker marker
+- AC 2: SDK files (browser.ts, index.ts, query.ts) confirmed zero changes via `git diff --name-only`
+- AC 3: `pnpm --filter @agent-ils/logger build` succeeds (all 4 entry points + DTS, zero errors)
+- Updated prd.json: US-003 `passes = true`, `stage = "done"`, `handoff.tester = true`
+- Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
+---

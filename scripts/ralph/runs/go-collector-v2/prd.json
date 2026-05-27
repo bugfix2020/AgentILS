@@ -47,10 +47,10 @@
             "id": "US-003",
             "title": "Node 薄壳透传调用来源标记",
             "priority": 3,
-            "stage": "product",
-            "passes": false,
+            "stage": "done",
+            "passes": true,
             "blocked": false,
-            "handoff": { "product": false, "developer": false, "tester": false },
+            "handoff": { "product": true, "developer": true, "tester": true },
             "acceptanceCriteria": [
                 "packages/logger/src/cli.ts 的 spawn 调用中注入 env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }",
                 "SDK 层（browser.ts、index.ts、query.ts）不做任何修改",
