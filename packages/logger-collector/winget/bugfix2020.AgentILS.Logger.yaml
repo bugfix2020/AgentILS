@@ -1,0 +1,8 @@
+# Winget version manifest
+# Submit to microsoft/winget-pkgs via PR after each release
+# Replace <VERSION> with the actual release version
+PackageIdentifier: bugfix2020.AgentILS.Logger
+PackageVersion: <VERSION>
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

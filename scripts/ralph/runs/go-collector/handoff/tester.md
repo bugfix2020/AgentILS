@@ -2,46 +2,80 @@
 
 ## Story
 
-- id: US-003
-- title: Node CLI 薄壳改造
+- id: US-004
+- title: CI/CD: GoReleaser 多平台构建 + Homebrew tap
 
 ## Verification Summary
 
-All 7 acceptance criteria verified and passed:
+All 6 acceptance criteria verified and passed. Every file was read and inspected against the product handoff specification.
 
-1. **cli.ts thin shell**: Confirmed complete rewrite (~208 lines). Platform detection via `PLATFORM_ARCH_MAP` covers darwin-arm64, darwin-amd64, linux-amd64, windows-amd64. Unsupported platforms exit with clear error message listing supported platforms.
+### AC1: GoReleaser config with 4 build targets -- PASS
 
-2. **Detect existing binary**: Two-phase lookup -- `findInPath()` manually scans `process.env.PATH` split by `path.delimiter` (no `which`/`where` subprocess), then `findInCache()` checks `~/.agent-ils/bin/`. Only downloads if both fail.
+- `.goreleaser.yml` configures goos: [darwin, linux, windows], goarch: [amd64, arm64]
+- linux/arm64 is in the ignore list, yielding exactly 4 targets: darwin-amd64, darwin-arm64, linux-amd64, windows-amd64
+- ldflags: `-s -w -X main.version={{.Version}}` -- version injection confirmed
+- Archives: tar.gz for unix, zip for windows (format_overrides confirmed)
+- Checksum: algorithm sha256 in checksums.txt
+- extra_files: 4 raw binaries uploaded (darwin-amd64, darwin-arm64, linux-amd64, windows-amd64.exe) for thin shell compatibility
 
-3. **Cache directory**: `~/.agent-ils/bin/` with filename `agent-ils-logger-<platform>-<arch>` (`.exe` on Windows). Includes platform+arch in filename for shared network homedir support.
+### AC2: GitHub Actions workflow for tag-triggered GoReleaser -- PASS
 
-4. **Download failure hints**: `printInstallHelp()` prints brew tap/install for macOS, winget for Windows, direct download for Linux, and source build instructions.
+- `.github/workflows/go-release.yml` triggers on `push: tags: ['v*']`
+- Uses actions/checkout@v4 with fetch-depth: 0
+- Uses actions/setup-go@v5 with go-version: '1.22'
+- Uses goreleaser/goreleaser-action@v6 with workdir: packages/logger-collector
+- Env vars: GITHUB_TOKEN (auto), HOMEBREW_TAP_TOKEN (secret)
 
-5. **Functional test**:
-    - `npx @agent-ils/logger serve --port 19999` starts the Go collector server and prints ready message
-    - `npx @agent-ils/logger read --tail 50` works (returned "No log records found" as expected with no log data)
-    - Both tests run with Go binary available via PATH
+### AC3: Artifacts upload to GitHub Release with SHA256 checksums -- PASS
 
-6. **SDK layer unchanged**: `git diff main...HEAD` shows zero changes to `packages/logger/src/browser.ts`, `packages/logger/src/index.ts`, `packages/logger/src/query.ts`.
+- checksum section: name_template checksums.txt, algorithm sha256
+- release section: owner bugfix2020, name AgentILS, mode replace
+- extra_files upload raw binaries matching thin shell download URL pattern
 
-7. **Typecheck passes**: `pnpm --filter @agent-ils/logger build` succeeds -- all 4 entry points (index, browser, cli, query) build in both ESM and CJS, DTS generation succeeds for all.
+### AC4: Homebrew tap config -- PASS
 
-Additional checks:
+- brews section with tap owner: bugfix2020, name: homebrew-agentils, branch: main
+- token: `{{ .Env.HOMEBREW_TAP_TOKEN }}`
+- install: `bin.install "agent-ils-logger"`
+- test: `system "#{bin}/agent-ils-logger", "--version"`
+- commit_author, homepage, description, license all present
 
-- `cac` removed from `packages/logger/package.json` dependencies -- confirmed, package has zero runtime deps
-- Signal forwarding: SIGINT/SIGTERM handlers registered via `process.on()`
-- Exit code propagation: `process.exitCode = code ?? 1` (not `process.exit()`)
-- Download uses `node:https` with 301/302 redirect following, `.tmp` write + rename, `chmod 0o755` on non-Windows
+### AC5: winget manifest -- PASS
+
+- 3 files in `packages/logger-collector/winget/`: version, installer, locale (en-US)
+- PackageIdentifier: bugfix2020.AgentILS.Logger in all 3 files
+- Installer URL pattern: `https://github.com/bugfix2020/AgentILS/releases/download/v<VERSION>/agent-ils-logger-windows-amd64.zip`
+- ManifestVersion: 1.6.0 in all files
+- Placeholders for VERSION and SHA256 (manual fill at release time)
+
+### AC6: Go CI workflow -- PASS
+
+- `.github/workflows/go-ci.yml` triggers on PR + push to main with path filter `packages/logger-collector/**`
+- Steps: gofmt check (`test -z "$(gofmt -l .)"`), go vet, go test, golangci-lint
+- Working directory default: packages/logger-collector
+- Concurrency group with cancel-in-progress for PRs
+- golangci-lint-action@v6 with working-directory set correctly
+
+### Additional verifications
+
+- `go build ./...` -- PASS (no errors)
+- `go vet ./...` -- PASS (no errors)
+- `--version` flag prints `agent-ils-logger dev` (default)
+- `-v` short flag also works
+- ldflags injection: `go build -ldflags "-X main.version=0.1.0"` prints `agent-ils-logger 0.1.0`
+- `serve` and `read` subcommands still work correctly after version changes
+- `var version = "dev"` present in main.go line 16
 
 ## Commands Run
 
-1. `git diff main...HEAD -- packages/logger/` -- no output (changes already committed)
-2. `git diff main...HEAD -- packages/logger/src/browser.ts packages/logger/src/index.ts packages/logger/src/query.ts` -- no output (SDK unchanged)
-3. `pnpm --filter @agent-ils/logger build` -- passed (all 4 entry points, ESM + CJS + DTS)
-4. `node packages/logger/dist/cli.js read --tail 50` -- showed download failure hint (binary not in PATH initially, confirmed error message works)
-5. `PATH=...:$PATH node packages/logger/dist/cli.js read --tail 50` -- "No log records found." (works correctly)
-6. `PATH=...:$PATH node packages/logger/dist/cli.js serve --port 19999` -- "AgentILS Logger server ready" (works correctly)
-7. `ls -la packages/logger-collector/agent-ils-logger` -- Go binary exists (8.6MB)
+1. `go build ./...` from packages/logger-collector -- PASS
+2. `go vet ./...` from packages/logger-collector -- PASS
+3. `go build -o agent-ils-logger . && ./agent-ils-logger --version` -- prints "agent-ils-logger dev"
+4. `go build -ldflags "-X main.version=0.1.0" -o agent-ils-logger . && ./agent-ils-logger --version` -- prints "agent-ils-logger 0.1.0"
+5. `./agent-ils-logger -v` -- prints "agent-ils-logger 0.1.0"
+6. `./agent-ils-logger read --tail 5 --log-dir /tmp/nonexistent` -- "No log records found."
+7. `./agent-ils-logger serve --help` -- usage printed correctly
+8. Read and verified all source files: .goreleaser.yml, go-release.yml, go-ci.yml, main.go, 3 winget manifests
 
 ## Result
 
@@ -53,4 +87,4 @@ N/A
 
 ## Required Fixes
 
-N/A
+None. All 6 acceptance criteria pass.

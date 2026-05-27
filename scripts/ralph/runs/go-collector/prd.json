@@ -58,10 +58,10 @@
             "id": "US-004",
             "title": "CI/CD: GoReleaser 多平台构建 + Homebrew tap",
             "priority": 4,
-            "stage": "product",
-            "passes": false,
+            "stage": "done",
+            "passes": true,
             "blocked": false,
-            "handoff": { "product": false, "developer": false, "tester": false },
+            "handoff": { "product": true, "developer": true, "tester": true },
             "acceptanceCriteria": [
                 "packages/logger-collector/.goreleaser.yml 配置 darwin-amd64、darwin-arm64、linux-amd64、windows-amd64",
                 "GitHub Actions workflow: tag 推送触发 GoReleaser 构建",
