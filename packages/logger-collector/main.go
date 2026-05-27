@@ -83,7 +83,10 @@ func runServe(args []string) {
 	silentOutput := fs.Bool("silent", false, "Suppress startup output")
 	cwd := fs.String("cwd", "", "Project root for resolving relative paths")
 
-	fs.Parse(filterSubcommandArgs(args, "serve"))
+	if err := fs.Parse(filterSubcommandArgs(args, "serve")); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Resolve cwd
 	effectiveCwd := *cwd
@@ -132,7 +135,10 @@ func runRead(args []string) {
 	logDir := fs.String("log-dir", "", "Directory containing JSONL files")
 	cwd := fs.String("cwd", "", "Project root for resolving relative paths")
 
-	fs.Parse(filterSubcommandArgs(args, "read"))
+	if err := fs.Parse(filterSubcommandArgs(args, "read")); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Resolve cwd
 	effectiveCwd := *cwd

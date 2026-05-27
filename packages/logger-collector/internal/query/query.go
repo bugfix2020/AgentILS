@@ -3,7 +3,6 @@ package query
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -214,7 +213,7 @@ func normalizeLimit(limit int) int {
 	if limit <= 0 {
 		return defaultLimit
 	}
-	return int(math.Floor(float64(limit)))
+	return limit
 }
 
 // listJsonlFiles lists all .jsonl files in logDir, sorted alphabetically.

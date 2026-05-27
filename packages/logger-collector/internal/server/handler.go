@@ -166,7 +166,7 @@ func setCORSHeaders(w http.ResponseWriter) {
 func sendJSON(w http.ResponseWriter, status int, body interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(body)
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func absPath(p string) (string, error) {
