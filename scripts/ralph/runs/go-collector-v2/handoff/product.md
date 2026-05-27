@@ -1,551 +1,268 @@
-# Product Handoff: US-001 -- Brand Banner + ECAM Info Panel + Platform-Aware Output
+# US-002 Product Handoff: --help Output Format Aligned with quality-gate
 
 > Target: `feat/logger-go-collector` branch, `packages/logger-collector/`
-> Scope: Replace plain-text startup output with branded banner + ECAM-style info panel
+> Scope: Replace Go flag.Usage/PrintDefaults with custom help renderer matching quality-gate renderHelp() pattern
+> Depends on: US-001 (already done -- banner, detect, colors packages exist)
 
 ---
 
-## 1. Exact Banner ASCII Art
+## 1. Exact Help Text to Produce
 
-Source of truth: `packages/quality-gate/templates/banner.txt`
+The help output is: **banner (gradient) + blank line + colored structured plain-text**.
 
-Copy this **verbatim** into the Go banner package as a raw string literal:
+The plain-text section follows the quality-gate `templates/help.txt` layout exactly: title, Usage, Commands, Options, Examples.
+
+### Template (invokePrefix is dynamic, Examples are hardcoded)
 
 ```
-     ___     _____  ______  __   _  _______  _____  __       _____
-    / _ \   / ____||  ____||  \ | ||__   __||_   _|| |     / ____|
-   / /_\ \ | |  __ | |__   |   \| |   | |     | |  | |    | (___
-  / ___  \ | | |_ ||  __|  | |\   |   | |     | |  | |     \___ \
- / /   \  \| |__| || |____ | | \  |   | |    _| |_ | |____ ____) |
-/_/     \__\\_____||______||_|  \_|   |_|   |_____||______|_____/
+<gradient banner output from ColorizeBanner()>
+
+AgentILS Logger
+
+Usage:
+    <invokePrefix> serve [flags]
+    <invokePrefix> read [flags]
+
+Commands:
+    serve              Start HTTP log collector (default)
+    read               Query and read JSONL log files
+
+Serve Options:
+    --host <addr>      HTTP bind host (default: 127.0.0.1)
+    --port <num>       HTTP bind port (default: 12138)
+    --log-dir <path>   JSONL output directory
+    --file-prefix <s>  Default file prefix for JSONL files (default: agent-ils)
+    --json             Output startup info as JSON
+    --silent           Suppress startup output
+
+Read Options:
+    --tail <n>         Number of recent records (default: 50)
+    --from <time>      Start time filter (ISO, epoch ms, or 10m/2h/1d)
+    --to <time>        End time filter
+    --source <s>       Filter by source field
+    --level <s>        Filter by level field (case-insensitive)
+    --event <s>        Filter by event field
+    --format <fmt>     Output format: text, json, jsonl (default: text)
+
+Examples:
+    agent-ils-logger serve
+    agent-ils-logger serve --port 8080
+    agent-ils-logger read --tail 50
+    agent-ils-logger read --from 10m --format json
+    npx @agent-ils/logger serve
 ```
 
-- 6 lines, no trailing newline inside the constant (add newline between banner and panel during rendering).
-- Width of the longest line is 67 characters (the last line).
+### invokePrefix substitution (Usage section only)
+
+Resolved at help-render time using `banner.DetectInvoker()` + `banner.InvokePrefix()`:
+
+| Mode   | invokePrefix value      |
+| ------ | ----------------------- |
+| npx    | `npx @agent-ils/logger` |
+| gorun  | `go run .`              |
+| binary | `agent-ils-logger`      |
+
+The **Examples section uses hardcoded strings** (`agent-ils-logger` and `npx @agent-ils/logger`), not invokePrefix. This matches quality-gate's help.txt which shows multiple package manager examples side-by-side.
 
 ---
 
-## 2. Exact Banner Colorization Algorithm
+## 2. ANSI Color Scheme for Help Text
 
-Source of truth: `packages/quality-gate/src/index.ts` -- `BANNER_COLORS` + `colorizeBanner()`
+Apply these three ANSI colors to the help text. Guard all colorization behind `supportsANSI()` (already in `internal/banner/banner.go`).
 
-### 2.1 Gradient Colors (5 stops, xterm-256)
+| Element        | ANSI Sequence        | Purpose                           |
+| -------------- | -------------------- | --------------------------------- |
+| Section titles | `\x1b[1;37m` (C.Wht) | "Usage:", "Commands:", etc.       |
+| Labels/flags   | `\x1b[32m` (C.Grn)   | `serve`, `--host`, `--port`, etc. |
+| Descriptions   | `\x1b[90m` (C.Gry)   | "Start HTTP log collector..."     |
+| Reset          | `\x1b[0m` (C.Rst)    | After each colored segment        |
+
+The title line "AgentILS Logger" is also in bright white (`C.Wht`).
+
+### Note on quality-gate reference
+
+quality-gate's `renderHelp()` composes `renderBanner() + "\n" + readTemplate('help.txt')`. The `help.txt` is plain text without ANSI codes. However, the PRD acceptance criteria explicitly require ANSI colors on the help text (title=bright white, labels=green, description=light gray). So we **must** add ANSI colors programmatically in Go.
+
+### Coloring approach
+
+Color the help text programmatically using structured data, not by embedding ANSI codes in template strings:
+
+- **Title line** (`AgentILS Logger`): wrap entire line with `C.Wht` + `C.Rst`
+- **Section headers** (`Usage:`, `Commands:`, `Serve Options:`, `Read Options:`, `Examples:`): wrap with `C.Wht` + `C.Rst`
+- **Command/flag names** (first column before the spacing gap): wrap with `C.Grn` + `C.Rst`
+- **Descriptions** (text after the spacing gap): wrap with `C.Gry` + `C.Rst`
+
+---
+
+## 3. How to Replace Go flag.Usage with Custom Help Renderer
+
+### Current state (in main.go)
 
 ```go
-var bannerColors = [5]string{
-    "\x1b[38;5;75m",  // cyan-blue
-    "\x1b[38;5;105m", // medium purple
-    "\x1b[38;5;141m", // lavender
-    "\x1b[38;5;175m", // rose
-    "\x1b[38;5;204m", // pink
+// runServe
+fs.Usage = func() {
+    fmt.Fprintf(os.Stderr, "Usage: %s serve [flags]\n\nFlags:\n", os.Args[0])
+    fs.PrintDefaults()
+}
+
+// runRead
+fs.Usage = func() {
+    fmt.Fprintf(os.Stderr, "Usage: %s read [flags]\n\nFlags:\n", os.Args[0])
+    fs.PrintDefaults()
 }
 ```
 
-### 2.2 Colorization Logic
+### New approach
 
-Port this TypeScript verbatim to Go:
-
-```typescript
-// TypeScript source (quality-gate/src/index.ts lines 398-413)
-function colorizeBanner(banner: string): string {
-    if (!supportsAnsi()) return banner
-    return banner
-        .split('\n')
-        .map((line) =>
-            [...line]
-                .map((character, index) => {
-                    if (character === ' ') return character
-                    const color =
-                        BANNER_COLORS[Math.floor((index / Math.max(line.length - 1, 1)) * (BANNER_COLORS.length - 1))]
-                    return `${color}${character}${ANSI_RESET}`
-                })
-                .join(''),
-        )
-        .join('\n')
-}
-```
-
-Go equivalent:
-
-```go
-func colorizeBanner(banner string) string {
-    if !supportsANSI() {
-        return banner
+1. **Remove** `fs.Usage` overrides from both `runServe()` and `runRead()`.
+2. **Intercept `--help` / `-h` early in `detectSubcommand()`** (before `fs.Parse()` is called in any subcommand path). Currently `detectSubcommand` routes `--help` to `"serve"` which then falls through to flag's default handling. Change it to:
+    ```go
+    if arg == "--help" || arg == "-h" {
+        mode := banner.DetectInvoker()
+        prefix := banner.InvokePrefix(mode)
+        banner.PrintHelp(os.Stderr, prefix)
+        os.Exit(0)
     }
-    lines := strings.Split(banner, "\n")
-    var sb strings.Builder
-    for i, line := range lines {
-        if i > 0 {
-            sb.WriteByte('\n')
-        }
-        runes := []rune(line)
-        lineLen := len(runes)
-        for j, ch := range runes {
-            if ch == ' ' {
-                sb.WriteRune(ch)
-                continue
-            }
-            idx := int(float64(j) / float64(max(lineLen-1, 1)) * float64(len(bannerColors)-1))
-            sb.WriteString(bannerColors[idx])
-            sb.WriteRune(ch)
-            sb.WriteString("\x1b[0m")
-        }
-    }
-    return sb.String()
-}
+    ```
+3. The `flag` package never sees `--help`, so its default usage handler is never triggered. This is clean and produces a unified help page for all subcommands.
 
-func max(a, b int) int {
-    if a > b {
-        return a
-    }
-    return b
-}
-```
+### Why intercept in detectSubcommand, not in fs.Usage
 
-Key rules:
-
-- Spaces are **never** colored (left bare).
-- Every non-space character gets its own color + reset (`\x1b[0m`).
-- The interpolation index is computed per character as: `floor(charIndex / (lineLen-1) * 4)`.
-- Guard against `lineLen == 1` (single-char line) by clamping denominator to `max(lineLen-1, 1)`.
+Overriding `fs.Usage` would produce subcommand-specific help (serve-only or read-only). The PRD wants a **unified** help page showing all commands and all options, exactly like quality-gate's single help page. Intercepting before subcommand dispatch achieves this.
 
 ---
 
-## 3. Exact ECAM Color Constants
+## 4. Where to Put the Help Template Code
 
-Source of truth: `packages/quality-gate/src/precommit/panel.tsx` -- `C` object (lines 23-33)
+### New file: `internal/banner/help.go`
+
+The `banner` package already owns:
+
+- `banner.go` -- gradient banner (`ColorizeBanner()`)
+- `colors.go` -- color constants (`C`), visLen, padVisible
+- `panel.go` -- ECAM info panel (`PrintServer()`, `PrintJSON()`)
+- `detect.go` -- invoker detection (`DetectInvoker()`, `InvokePrefix()`, `InstallHint()`)
+
+Add `help.go` in the same package. It exports:
 
 ```go
-// C holds the ANSI color constants, matching the ECAM panel in quality-gate.
-var C = struct {
-    Grn, Brt, Amb, Wht, Cyn, Dim, Red, Gry, Rst string
-}{
-    Grn: "\x1b[32m",      // standard green
-    Brt: "\x1b[1;32m",    // bright green (bold)
-    Amb: "\x1b[33m",      // amber/yellow
-    Wht: "\x1b[1;37m",    // bright white (bold)
-    Cyn: "\x1b[36m",      // cyan
-    Dim: "\x1b[2;32m",    // dim green -- box-drawing border color
-    Red: "\x1b[31m",      // red
-    Gry: "\x1b[90m",      // gray
-    Rst: "\x1b[0m",       // reset
-}
+// PrintHelp writes the full --help output (banner + formatted help text) to w.
+// prefix is the detected invoke prefix for the Usage section.
+func PrintHelp(w io.Writer, prefix string)
 ```
 
 ---
 
-## 4. Exact Box-Drawing Pattern
+## 5. BOT Border Fix (from US-001 tester observation)
 
-Source of truth: `packages/quality-gate/src/precommit/panel.tsx` -- `IW`, `TOP`, `MID`, `BOT`, `rowLine()` (lines 21, 46-52)
+The US-001 tester noted in `progress.txt`:
 
-```go
-const IW = 60 // inner width, exactly matching quality-gate ECAM panel
+> Minor observation: BOT border corners use (U+2558/U+2559) instead of (U+255A/U+255B) as in quality-gate panel.tsx.
 
-// Box-drawing borders -- all use C.Dim (dim green) for border characters
-var TOP = C.Dim + "\u2554" + strings.Repeat("\u2550", IW) + "\u2557" + C.Rst  // ╔═...═╗
-var MID = C.Dim + "\u2560" + strings.Repeat("\u2550", IW) + "\u2563" + C.Rst  // ╠═...═╣
-var BOT = C.Dim + "\u2558" + strings.Repeat("\u2550", IW) + "\u2559" + C.Rst  // ╚═...═╝
-
-func rowLine(content string) string {
-    // Pad content to IW visible characters, then wrap with ║ borders
-    padded := padVisible(content, IW)
-    return C.Dim + "\u2551" + C.Rst + padded + C.Dim + "\u2551" + C.Rst
-}
-```
-
-`padVisible` must strip ANSI escape sequences when computing visible width, then pad with spaces.
-
-### `visLen` helper (port from panel.tsx line 37):
+In `panel.go` line 23, the current code is:
 
 ```go
-// visLen returns the visible (non-ANSI) length of a string.
-func visLen(s string) int {
-    re := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-    return utf8.RuneCountInString(re.ReplaceAllString(s, ""))
-}
+BOT = C.Dim + "\u2558" + strings.Repeat("\u2550", IW) + "\u2559" + C.Rst
 ```
 
-### `padVisible` helper:
+Change to:
 
 ```go
-func padVisible(s string, width int) string {
-    vl := visLen(s)
-    if vl >= width {
-        return s
-    }
-    return s + strings.Repeat(" ", width-vl)
-}
+BOT = C.Dim + "\u255A" + strings.Repeat("\u2550", IW) + "\u255B" + C.Rst
 ```
+
+| Current | Char | Name                                  | Should be | Char | Name                             |
+| ------- | ---- | ------------------------------------- | --------- | ---- | -------------------------------- |
+| U+2558  | ╘    | BOX DRAWINGS UP LIGHT AND LEFT LIGHT  | U+255A    | ╚    | BOX DRAWINGS DOUBLE UP AND LEFT  |
+| U+2559  | ╙    | BOX DRAWINGS UP LIGHT AND RIGHT LIGHT | U+255B    | ╝    | BOX DRAWINGS DOUBLE UP AND RIGHT |
+
+The correct characters (`╚` U+255A, `╝` U+255B) are "double" variants that match TOP (`╔` U+2554, `╗` U+2557) and MID (`╠` U+2560, `╣` U+2563). The current ones are "light" variants that visually mismatch the other borders.
+
+**Include this fix in the US-002 changeset** since it was noted by the tester but was not blocking for US-001.
 
 ---
 
-## 5. File Structure for New `internal/banner/` Package
+## 6. Detailed PrintHelp Output Specification
+
+### Output structure (line by line, with color annotations)
 
 ```
-packages/logger-collector/
-  internal/
-    banner/
-      banner.go    -- ASCII art constant, colorizeBanner(), supportsANSI()
-      colors.go    -- C color constants, bannerColors gradient array
-      panel.go     -- ECAM panel rendering: TOP/MID/BOT/rowLine, PrintServer(), PrintJSON()
-      detect.go    -- detectInvoker(), invokePrefix(), installHint()
-    server/
-      server.go    -- modified: remove printStartupHuman/JSON, call banner.PrintServer/PrintJSON
-  main.go          -- modified: detect invoker, pass params to server
+[gradient banner from ColorizeBanner()]
+[blank line]
+[C.Wht]AgentILS Logger[C.Rst]
+[blank line]
+[C.Wht]Usage:[C.Rst]
+    [C.Grn]<prefix> serve [flags][C.Rst]
+    [C.Grn]<prefix> read [flags][C.Rst]
+[blank line]
+[C.Wht]Commands:[C.Rst]
+    [C.Grn]serve[C.Rst]              [C.Gry]Start HTTP log collector (default)[C.Rst]
+    [C.Grn]read[C.Rst]               [C.Gry]Query and read JSONL log files[C.Rst]
+[blank line]
+[C.Wht]Serve Options:[C.Rst]
+    [C.Grn]--host <addr>[C.Rst]      [C.Gry]HTTP bind host (default: 127.0.0.1)[C.Rst]
+    [C.Grn]--port <num>[C.Rst]       [C.Gry]HTTP bind port (default: 12138)[C.Rst]
+    [C.Grn]--log-dir <path>[C.Rst]   [C.Gry]JSONL output directory[C.Rst]
+    [C.Grn]--file-prefix <s>[C.Rst]  [C.Gry]Default file prefix for JSONL files (default: agent-ils)[C.Rst]
+    [C.Grn]--json[C.Rst]             [C.Gry]Output startup info as JSON[C.Rst]
+    [C.Grn]--silent[C.Rst]           [C.Gry]Suppress startup output[C.Rst]
+[blank line]
+[C.Wht]Read Options:[C.Rst]
+    [C.Grn]--tail <n>[C.Rst]         [C.Gry]Number of recent records (default: 50)[C.Rst]
+    [C.Grn]--from <time>[C.Rst]      [C.Gry]Start time filter (ISO, epoch ms, or 10m/2h/1d)[C.Rst]
+    [C.Grn]--to <time>[C.Rst]        [C.Gry]End time filter[C.Rst]
+    [C.Grn]--source <s>[C.Rst]       [C.Gry]Filter by source field[C.Rst]
+    [C.Grn]--level <s>[C.Rst]        [C.Gry]Filter by level field (case-insensitive)[C.Rst]
+    [C.Grn]--event <s>[C.Rst]        [C.Gry]Filter by event field[C.Rst]
+    [C.Grn]--format <fmt>[C.Rst]     [C.Gry]Output format: text, json, jsonl (default: text)[C.Rst]
+[blank line]
+[C.Wht]Examples:[C.Rst]
+    [C.Gry]agent-ils-logger serve[C.Rst]
+    [C.Gry]agent-ils-logger serve --port 8080[C.Rst]
+    [C.Gry]agent-ils-logger read --tail 50[C.Rst]
+    [C.Gry]agent-ils-logger read --from 10m --format json[C.Rst]
+    [C.Gry]npx @agent-ils/logger serve[C.Rst]
 ```
 
-### 5.1 `banner.go`
+All output goes to `io.Writer` (which will be `os.Stderr`), consistent with the US-001 convention of outputting to stderr.
 
-- `const asciiBanner` = the raw 6-line banner text (section 1 above).
-- `func ColorizeBanner(banner string) string` = the gradient algorithm (section 2).
-- `func supportsANSI() bool` = check `os.Stderr` is a terminal and `NO_COLOR` is unset and `TERM != "dumb"`.
+### Implementation approach
 
-### 5.2 `colors.go`
-
-- `var C` struct with all 9 color constants (section 3).
-- `var bannerColors [5]string` gradient array (section 2.1).
-- `const IW = 60`.
-- Helper functions: `visLen()`, `padVisible()`.
-
-### 5.3 `panel.go`
-
-- `func PrintServer(w io.Writer, params ServerParams)` -- renders the full banner + ECAM info panel to `w`.
-- `func PrintJSON(w io.Writer, params ServerParams)` -- outputs JSON (no banner).
-- `ServerParams` struct:
+Use structured Go data for clean rendering:
 
 ```go
-type ServerParams struct {
-    Version     string
-    Endpoint    string
-    LogDir      string
-    ReadCmd     string  // e.g. "agent-ils-logger read --tail 50"
-    InstallHint string  // empty string means "don't show install row"
+type helpSection struct {
+    Title string        // e.g. "Usage:", "Commands:"
+    Lines []helpLine    // nil means section has raw indented text lines
+}
+
+type helpLine struct {
+    Label       string  // e.g. "serve", "--host <addr>"
+    Description string  // e.g. "Start HTTP log collector (default)"; empty for Usage/Examples lines
 }
 ```
 
-### 5.4 `detect.go`
-
-- `func DetectInvoker() string` -- section 6 below.
-- `func InvokePrefix(mode string) string` -- section 8 below.
-- `func InstallHint() string` -- section 7 below.
+Then `PrintHelp()` iterates sections, applying `C.Wht`/`C.Grn`/`C.Gry` colors guarded by `supportsANSI()`.
 
 ---
 
-## 6. Invocation Detection Algorithm
+## 7. Acceptance Criteria Mapping
 
-Priority order (first match wins):
-
-1. **npx mode**: `os.Getenv("AGENT_ILS_INVOKER") == "npx"` --> return `"npx"`
-2. **gorun mode**: `strings.Contains(os.Args[0], "go-build")` --> return `"gorun"`
-3. **binary mode**: default --> return `"binary"`
-
-```go
-func DetectInvoker() string {
-    if os.Getenv("AGENT_ILS_INVOKER") == "npx" {
-        return "npx"
-    }
-    if strings.Contains(os.Args[0], "go-build") {
-        return "gorun"
-    }
-    return "binary"
-}
-```
-
-Note: `go run` compiles to a temp directory like `/tmp/go-build123456/...`, so checking for `"go-build"` in `os.Args[0]` is the standard detection method.
+| #   | AC                                                                                   | Implementation Detail                                                                    |
+| --- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| 1   | `--help` / `-h` outputs Banner (gradient) + blank line + help                        | `PrintHelp()` calls `ColorizeBanner()` then renders structured help sections             |
+| 2   | Help format matches quality-gate: Usage/Commands/Options/Examples sections           | Sections rendered in exact order with proper labels and spacing                          |
+| 3   | Usage line uses detected invokePrefix                                                | `detectSubcommand()` calls `DetectInvoker()` + `InvokePrefix()`, passes to `PrintHelp()` |
+| 4   | Help text uses ANSI colors: title=bright white, labels=green, description=light gray | Color constants `C.Wht`, `C.Grn`, `C.Gry`; guarded by `supportsANSI()`                   |
+| 5   | No longer uses Go flag package's `PrintDefaults()`                                   | `--help` intercepted before `fs.Parse()`; `fs.Usage` overrides removed                   |
+| 6   | go build succeeds, go vet passes                                                     | Zero external deps, stdlib only                                                          |
 
 ---
 
-## 7. Platform-Aware Install Hints
-
-Only shown in **binary** mode. Not shown in npx or gorun modes.
-
-```go
-func InstallHint() string {
-    switch runtime.GOOS {
-    case "darwin":
-        return "brew tap bugfix2020/agentils && brew install agent-ils-logger"
-    case "windows":
-        return "winget install bugfix2020.AgentILS.Logger"
-    default:
-        return "https://github.com/bugfix2020/AgentILS/releases"
-    }
-}
-```
-
-When mode is `npx` or `gorun`, pass empty string as `InstallHint` so the panel omits the install row.
-
----
-
-## 8. Invoke Prefix Mapping
-
-```go
-func InvokePrefix(mode string) string {
-    switch mode {
-    case "npx":
-        return "npx @agent-ils/logger"
-    case "gorun":
-        return "go run ."
-    default:
-        return "agent-ils-logger"
-    }
-}
-```
-
-The `ReadCmd` in `ServerParams` is constructed as: `InvokePrefix(mode) + " read --tail 50"`.
-
----
-
-## 9. How `server.go` Changes
-
-### 9.1 Remove
-
-Delete these two functions entirely:
-
-- `printStartupHuman(endpoint string, logDir string)`
-- `printStartupJSON(endpoint string, logDir string)`
-
-### 9.2 Modify `Start()` signature
-
-Change from:
-
-```go
-func (s *Server) Start(ctx context.Context, jsonOutput bool, silentOutput bool) error
-```
-
-To:
-
-```go
-func (s *Server) Start(ctx context.Context, params banner.ServerParams, jsonOutput bool, silentOutput bool) error
-```
-
-### 9.3 Replace startup output block
-
-Change from:
-
-```go
-if !silentOutput {
-    if jsonOutput {
-        printStartupJSON(endpoint, s.LogDir)
-    } else {
-        printStartupHuman(endpoint, s.LogDir)
-    }
-}
-```
-
-To:
-
-```go
-if !silentOutput {
-    params.Endpoint = endpoint
-    params.LogDir = s.LogDir
-    if jsonOutput {
-        banner.PrintJSON(os.Stderr, params)
-    } else {
-        banner.PrintServer(os.Stderr, params)
-    }
-}
-```
-
----
-
-## 10. How `main.go` Changes
-
-### 10.1 Add detection in `runServe()`
-
-After flag parsing and before creating the server, add:
-
-```go
-mode := banner.DetectInvoker()
-readCmd := banner.InvokePrefix(mode) + " read --tail 50"
-installHint := ""
-if mode == "binary" {
-    installHint = banner.InstallHint()
-}
-params := banner.ServerParams{
-    Version:     version,
-    ReadCmd:     readCmd,
-    InstallHint: installHint,
-}
-```
-
-Then pass `params` to `srv.Start()`.
-
-### 10.2 `--version` output stays unchanged
-
-The existing `--version` / `-v` handler in `detectSubcommand` already prints `agent-ils-logger <version>` and exits. No change needed.
-
----
-
-## 11. Exact Output Format Per Mode
-
-All output goes to **stderr** (`os.Stderr`).
-
-### 11.1 Binary + macOS (full output)
-
-```
-[gradient banner]
-
-╔══════════════════════════════════════════════════════════╗
-║  AGENTILS  LOGGER SERVICE · v0.1.0                      ║
-╠══════════════════════════════════════════════════════════╣
-║  ● server ready                                         ║
-║                                                         ║
-║  endpoint   http://127.0.0.1:12138                      ║
-║  logDir     /path/to/.agent-ils/logger/logs             ║
-║                                                         ║
-║  read       agent-ils-logger read --tail 50             ║
-║  install    brew tap bugfix2020/agentils &&             ║
-║             brew install agent-ils-logger               ║
-╚══════════════════════════════════════════════════════════╝
-```
-
-Panel construction:
-
-1. `TOP`
-2. Header row: `rowLine("  " + C.Wht + "AGENTILS  LOGGER SERVICE" + C.Rst + " · " + version)`
-3. `MID`
-4. Status row: `rowLine("  " + C.Brt + "\u25cf" + C.Rst + " server ready")`
-5. Empty row: `rowLine("")`
-6. Endpoint row: `rowLine("  endpoint   " + endpoint)`
-7. LogDir row: `rowLine("  logDir     " + logDir)`
-8. Empty row: `rowLine("")`
-9. Read row: `rowLine("  read       " + readCmd)`
-10. Install row (if non-empty): `rowLine("  install    " + installHint)` -- if installHint is longer than IW-14, wrap to next line with `"             "` continuation prefix
-11. `BOT`
-
-### 11.2 Binary + Windows
-
-Same as above, but install line shows:
-
-```
-║  install    winget install bugfix2020.AgentILS.Logger   ║
-```
-
-### 11.3 Binary + Linux
-
-Same as above, but install line shows:
-
-```
-║  install    https://github.com/bugfix2020/AgentILS/rele…║
-```
-
-(If the URL exceeds IW-14 visible chars, truncate with `...`)
-
-### 11.4 npx mode
-
-```
-[gradient banner]
-
-╔══════════════════════════════════════════════════════════╗
-║  AGENTILS  LOGGER SERVICE · v0.1.0                      ║
-╠══════════════════════════════════════════════════════════╣
-║  ● server ready                                         ║
-║                                                         ║
-║  endpoint   http://127.0.0.1:12138                      ║
-║  logDir     /path/to/.agent-ils/logger/logs             ║
-║                                                         ║
-║  read       npx @agent-ils/logger read --tail 50        ║
-╚══════════════════════════════════════════════════════════╝
-```
-
-No install row.
-
-### 11.5 go run mode
-
-```
-[gradient banner]
-
-╔══════════════════════════════════════════════════════════╗
-║  AGENTILS  LOGGER SERVICE · dev                         ║
-╠══════════════════════════════════════════════════════════╣
-║  ● server ready                                         ║
-║                                                         ║
-║  endpoint   http://127.0.0.1:12138                      ║
-║  logDir     /path/to/.agent-ils/logger/logs             ║
-║                                                         ║
-║  read       go run . read --tail 50                     ║
-╚══════════════════════════════════════════════════════════╝
-```
-
-No install row. Version shows `dev` (the ldflags default).
-
-### 11.6 JSON mode (`--json`)
-
-Output to stderr, no banner, JSON object:
-
-```json
-{
-    "ok": true,
-    "endpoint": "http://127.0.0.1:12138",
-    "logDir": "/path/to/.agent-ils/logger/logs",
-    "read": "agent-ils-logger read --tail 50",
-    "installHint": "brew tap bugfix2020/agentils && brew install agent-ils-logger"
-}
-```
-
-- `read` field uses the platform-appropriate command.
-- `installHint` field is present for binary mode (platform-specific), absent for npx/gorun.
-- When absent, omit the key entirely (do not set to null or empty string).
-
-### 11.7 `--silent` mode
-
-No output at all. No banner, no panel, no JSON. Function returns immediately.
-
----
-
-## 12. Content Truncation Rule
-
-Any value that would make a row exceed IW (60) visible characters inside the borders must be truncated.
-
-Algorithm:
-
-1. Compute visible length of the full row content (between the `║` borders).
-2. If `visLen(content) > IW`, truncate from the end.
-3. Replace the last 1 character with `...` (3 chars, so total = truncated_len - 1 + 3).
-4. Final visible length must equal IW exactly.
-
-Example: if content is `"  install    https://github.com/bugfix2020/AgentILS/releases"` and visible length is 65, truncate to fit IW=60.
-
-For install hints that are long (like the `brew` two-liner), use line wrapping instead:
-
-- First line: `"  install    brew tap bugfix2020/agentils &&"`
-- Second line: `"             brew install agent-ils-logger"`
-- Wrap only happens for `install` field when content exceeds IW.
-
----
-
-## 13. Status Indicator
-
-The `●` character is `\u25cf` (BLACK CIRCLE), rendered in bright green:
-
-```go
-C.Brt + "\u25cf" + C.Rst
-```
-
-This matches the ECAM panel `stepIndicator('passed')` in panel.tsx (line 99):
-
-```typescript
-case 'passed':
-    return `${C.brt}\u25cf${C.rst}`
-```
-
----
-
-## 14. Summary of Acceptance Criteria Mapping
-
-| AC                                        | Where Implemented                                              |
-| ----------------------------------------- | -------------------------------------------------------------- |
-| Banner identical to banner.txt            | `internal/banner/banner.go` constant                           |
-| 5-color gradient interpolation            | `internal/banner/banner.go` colorizeBanner()                   |
-| ECAM box-drawing, dim green border, IW=60 | `internal/banner/panel.go` using `internal/banner/colors.go`   |
-| Header row with version                   | `internal/banner/panel.go` PrintServer()                       |
-| Version from ldflags                      | `main.go` `var version = "dev"` passed to params               |
-| Status indicator bright green circle      | `internal/banner/panel.go` using `C.Brt + "\u25cf" + C.Rst`    |
-| Invoker detection                         | `internal/banner/detect.go` DetectInvoker()                    |
-| Platform install hints                    | `internal/banner/detect.go` InstallHint()                      |
-| npx/gorun no install row                  | `main.go` conditional on mode                                  |
-| Content truncation                        | `internal/banner/panel.go` truncateRow()                       |
-| JSON mode no banner                       | `internal/banner/panel.go` PrintJSON()                         |
-| --silent no output                        | `server.go` early return before banner.Print                   |
-| Output to stderr                          | All Print functions write to `io.Writer` passed as `os.Stderr` |
-| go build + go vet pass                    | Must verify after implementation                               |
+## 8. Files to Change
+
+| File                       | Change                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `internal/banner/help.go`  | **NEW** -- `PrintHelp(w io.Writer, prefix string)` with structured help rendering + ANSI colors                                                                                      |
+| `internal/banner/panel.go` | Fix BOT border: `\u2558\u2559` -> `\u255A\u255B` (line 23)                                                                                                                           |
+| `main.go`                  | 1) In `detectSubcommand()`, intercept `--help`/`-h` and call `banner.PrintHelp(os.Stderr, prefix)` + `os.Exit(0)`. 2) Remove `fs.Usage` overrides from `runServe()` and `runRead()`. |

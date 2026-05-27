@@ -30,10 +30,10 @@
             "id": "US-002",
             "title": "--help 输出格式对齐 quality-gate",
             "priority": 2,
-            "stage": "product",
-            "passes": false,
+            "stage": "done",
+            "passes": true,
             "blocked": false,
-            "handoff": { "product": false, "developer": false, "tester": false },
+            "handoff": { "product": true, "developer": true, "tester": true },
             "acceptanceCriteria": [
                 "--help / -h 输出格式：Banner（渐变色）+ 空行 + 纯文本帮助（与 quality-gate renderHelp() 模式一致）",
                 "帮助文本格式与 quality-gate templates/help.txt 统一：Usage/Commands/Options/Examples 分节",

@@ -20,7 +20,7 @@ type ServerParams struct {
 var (
 	TOP = C.Dim + "\u2554" + strings.Repeat("\u2550", IW) + "\u2557" + C.Rst
 	MID = C.Dim + "\u2560" + strings.Repeat("\u2550", IW) + "\u2563" + C.Rst
-	BOT = C.Dim + "\u2558" + strings.Repeat("\u2550", IW) + "\u2559" + C.Rst
+	BOT = C.Dim + "\u255A" + strings.Repeat("\u2550", IW) + "\u255B" + C.Rst
 )
 
 // rowLine wraps content between box-drawing vertical borders, padded to IW visible characters.

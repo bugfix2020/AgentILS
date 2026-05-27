@@ -81,3 +81,72 @@
 - Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
 ---
 
+## 2026-05-27 -- US-002 Product Handoff
+
+- Analyzed all reference implementations for US-002 (--help output format aligned with quality-gate)
+- Read and extracted exact requirements from:
+  - `packages/quality-gate/templates/help.txt` -- plain text help with Usage/Commands/Options/Examples sections
+  - `packages/quality-gate/src/index.ts` -- `renderHelp()` = `renderBanner() + "\n" + readTemplate('help.txt') + "\n"` (banner+help composition)
+  - `packages/quality-gate/src/cli.ts` -- `cli.help()` prepends banner to cac's help sections; empty-argv calls `renderHelp()` directly
+  - `packages/logger-collector/main.go` -- current `fs.Usage` overrides using `flag.PrintDefaults()` for serve and read
+  - `packages/logger-collector/internal/banner/` -- existing 4-file package from US-001 (colors.go, banner.go, panel.go, detect.go)
+- Key design decisions:
+  - Intercept `--help`/`-h` in `detectSubcommand()` **before** `fs.Parse()` so flag package never handles help
+  - Produce a **unified** help page (all commands + all options) rather than per-subcommand help, matching quality-gate
+  - Examples section uses **hardcoded** strings (not invokePrefix), matching quality-gate's multi-PM example pattern
+  - Help text uses **programmatic ANSI colors** (C.Wht/C.Grn/C.Gry) even though quality-gate's help.txt is plain text, per PRD AC requirement
+  - New file `internal/banner/help.go` with `PrintHelp(w io.Writer, prefix string)` function
+  - Include BOT border fix from US-001 tester observation (╘╙ -> ╚╝, U+2558/2559 -> U+255A/255B)
+- Wrote comprehensive product handoff at `scripts/ralph/runs/go-collector-v2/handoff/product.md` covering:
+  - Exact help text template with all sections and labels
+  - invokePrefix substitution rules (dynamic in Usage, hardcoded in Examples)
+  - ANSI color scheme: titles=bright white, labels=green, descriptions=light gray
+  - How to replace flag.Usage with early interception in detectSubcommand
+  - Structured rendering approach (helpSection/helpLine types)
+  - BOT border character fix specification
+  - Acceptance criteria mapping (6 ACs)
+  - Files to change (3 files: help.go new, panel.go fix, main.go modify)
+- Updated prd.json: US-002 `handoff.product = true`, `stage = "developer"`
+- **Learnings for future iterations:**
+  - quality-gate's `renderHelp()` does NOT color the help text itself -- only the banner is colored. The PRD adds coloring as an enhancement.
+  - The flag package's `--help` handling can be completely bypassed by intercepting args before `fs.Parse()`. This is simpler than overriding `fs.Usage`.
+  - A unified help page (not per-subcommand) matches quality-gate's single-page pattern and is simpler to implement.
+  - The BOT border mismatch was noted in US-001 testing but not blocking -- carrying it as a fix in US-002.
+---
+## 2026-05-27 -- US-002 Developer Implementation
+
+- Implemented custom --help output matching quality-gate renderHelp() pattern
+- Created `internal/banner/help.go` with PrintHelp() using structured helpSection/helpLine types
+- Fixed BOT border corners in panel.go: U+2558/U+2559 -> U+255A/U+255B (light -> double variants)
+- Modified main.go: intercept --help/-h in detectSubcommand() before fs.Parse(), removed fs.Usage overrides
+- Help text uses ANSI colors: C.Wht for titles, C.Grn for labels/flags, C.Gry for descriptions
+- Usage section uses dynamic invokePrefix; Examples use hardcoded strings (matching quality-gate pattern)
+- All 6 acceptance criteria verified passing
+- **Files changed:**
+  - `packages/logger-collector/internal/banner/help.go` (new)
+  - `packages/logger-collector/internal/banner/panel.go` (modified -- BOT border fix)
+  - `packages/logger-collector/main.go` (modified -- help interception, removed fs.Usage)
+- **Learnings for future iterations:**
+  - Intercepting --help before fs.Parse() in detectSubcommand() is cleaner than overriding fs.Usage -- avoids flag package's default PrintDefaults() entirely
+  - Structured helpSection/helpLine approach keeps help text data-driven; easy to add/remove options without formatting bugs
+  - labelWidth() auto-computes alignment from description-bearing sections; no manual column width tuning needed
+  - The BOT border fix (panel.go) is part of US-002 changeset but affects both help output and normal server startup panel
+---
+
+## 2026-05-27 -- US-002 Tester Verification
+
+- Verified all 6 acceptance criteria for US-002 (--help Output Format Aligned with quality-gate)
+- **All 6 ACs PASS**
+- Help output composition: gradient banner + blank line + "AgentILS Logger" title + 5 structured sections (Usage, Commands, Serve Options, Read Options, Examples)
+- Format matches quality-gate help.txt pattern: section headers without colons, indented content, flag descriptions right-aligned in a column
+- invokePrefix dynamic substitution: binary mode shows `agent-ils-logger`, npx mode shows `npx @agent-ils/logger`
+- ANSI colors verified via `script -q /dev/null` + `cat -v`: title `\x1b[1;37m` (bright white), labels `\x1b[32m` (green), descriptions `\x1b[90m` (gray)
+- No PrintDefaults() or fs.Usage remaining in main.go -- grep confirms zero occurrences
+- go build + go vet pass
+- BOT border fix confirmed: panel.go uses `\u255A\u255B` (╚╝) matching TOP (╔╗) and MID (╠╣)
+- Supplementary checks all pass: no-args starts server, read command works, -h shorthand works, serve --help shows unified help, output to stderr, non-TTY suppresses ANSI
+- Updated prd.json: US-002 `passes = true`, `stage = "done"`, `handoff.tester = true`
+- Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
+- **Observation**: Examples section uses green (C.Grn) instead of gray (C.Gry) because examples are rendered as plain indented lines (no Description field). This is consistent with Usage line coloring.
+---
+

@@ -1,4 +1,4 @@
-# Developer Handoff: US-001 -- Brand Banner + ECAM Info Panel + Platform-Aware Output
+# Developer Handoff: US-002 -- --help Output Format Aligned with quality-gate
 
 > Status: IMPLEMENTED, ready for tester
 > Branch: feat/logger-go-collector
@@ -7,38 +7,34 @@
 
 ## What was implemented
 
-Replaced plain-text startup output with branded ASCII banner (5-color gradient) + A320 ECAM-style info panel in the Go binary (`packages/logger-collector`).
+Replaced Go flag package's default `PrintDefaults()` help output with a custom formatted help renderer that matches quality-gate's `renderHelp()` pattern (banner + structured help text with ANSI colors). Also fixed the BOT border corner characters from the US-001 tester observation.
 
 ## Files changed
 
-### New files (internal/banner/ package)
+### New files
 
-| File                        | Purpose                                                                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `internal/banner/colors.go` | C color struct (9 ANSI constants), bannerColors gradient array (5 xterm-256), IW=60, visLen(), padVisible(), truncatePlain() helpers  |
-| `internal/banner/banner.go` | asciiBanner constant (verbatim from quality-gate templates/banner.txt), ColorizeBanner() gradient algorithm, supportsANSI() TTY guard |
-| `internal/banner/panel.go`  | ServerParams struct, TOP/MID/BOT box-drawing borders, rowLine(), fitValue(), PrintServer(), PrintJSON(), printInstallRows()           |
-| `internal/banner/detect.go` | DetectInvoker() (npx/gorun/binary), InvokePrefix(), InstallHint() (platform-specific)                                                 |
+| File                      | Purpose                                                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/banner/help.go` | `PrintHelp(w io.Writer, prefix string)` with structured help rendering, `helpSection`/`helpLine` types, ANSI colors (C.Wht/C.Grn/C.Gry), `labelWidth()` alignment |
 
 ### Modified files
 
-| File                        | Changes                                                                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `internal/server/server.go` | Removed printStartupHuman/printStartupJSON. Added banner.ServerParams to Start() signature. Output now goes to stderr via banner.PrintServer/PrintJSON. |
-| `main.go`                   | Added detection in runServe(): calls DetectInvoker(), builds ServerParams with version/readCmd/installHint. Passes params to srv.Start().               |
+| File                       | Changes                                                                                                                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/banner/panel.go` | Fixed BOT border corners: `\u2558\u2559` -> `\u255A\u255B` (light -> double box-drawing variants matching TOP/MID)                                                                            |
+| `main.go`                  | `detectSubcommand()`: intercept `--help`/`-h` before `fs.Parse()`, call `banner.PrintHelp(os.Stderr, prefix)` + `os.Exit(0)`. Removed `fs.Usage` overrides from `runServe()` and `runRead()`. |
 
 ## Verification results
 
-All modes verified:
+All help modes verified:
 
-1. **Binary mode (macOS)**: Banner + ECAM panel with brew install hint (two-line wrap)
-2. **Binary mode + --json**: JSON to stderr, includes installHint, no banner
-3. **Binary mode + --silent**: No output
-4. **npx mode** (AGENT_ILS_INVOKER=npx): No install row, read shows "npx @agent-ils/logger"
-5. **npx + --json**: JSON omits installHint key entirely
-6. **gorun mode** (go run .): No install row, read shows "go run .", version shows "dev"
-7. **read command**: Still works (`./agent-ils-logger read --tail 5`)
-8. **--version**: Still works
+1. **`./agent-ils-logger --help`**: Banner (gradient) + structured help, Usage shows `agent-ils-logger`
+2. **`./agent-ils-logger -h`**: Identical output to --help
+3. **`AGENT_ILS_INVOKER=npx ./agent-ils-logger --help`**: Usage shows `npx @agent-ils/logger`, Examples still hardcoded
+4. **`./agent-ils-logger serve --help`**: Unified help (all commands + all options)
+5. **`./agent-ils-logger`** (no args): Starts server normally, does NOT show help
+6. **Non-TTY output**: No ANSI escape codes (supportsANSI guard works correctly)
+7. **BOT border**: Now uses `╚╝` matching TOP `╔╗` and MID `╠╣`
 
 - `go build ./...` -- PASS
 - `go vet ./...` -- PASS
@@ -46,14 +42,25 @@ All modes verified:
 
 ## Key design decisions
 
-- **fitValue()** for truncation: uses plain-text rune counting since the values (endpoint, logDir, installHint) are plain text. Label prefixes are known-width constants.
-- **printInstallRows()** for wrapping: splits on " && " for brew hints, uses continuation line with 13-space indent. Single-line hints (winget, URL) use truncation if over-width.
-- **supportsANSI()** checks stderr (not stdout) since all output goes to stderr.
-- **JSON mode** uses `json.Marshal` on a map; empty InstallHint causes the key to be omitted entirely.
+- **Early interception**: `--help`/`-h` caught in `detectSubcommand()` before any `fs.Parse()` call. This produces a unified help page (all commands + all options) rather than subcommand-specific help, matching quality-gate's single-page pattern.
+- **Structured rendering**: `helpSection`/`helpLine` types keep the help template data-driven and easy to modify. No embedded ANSI codes in string literals.
+- **Dynamic Usage, hardcoded Examples**: Usage section uses `invokePrefix` (varies by mode). Examples use hardcoded `agent-ils-logger` and `npx @agent-ils/logger` strings, matching quality-gate's multi-PM example pattern.
+- **labelWidth()**: Automatically computes the alignment column from sections that have descriptions (Commands, Serve Options, Read Options), so descriptions always align properly.
+
+## Acceptance criteria mapping
+
+| #   | AC                                                                                   | Status |
+| --- | ------------------------------------------------------------------------------------ | ------ |
+| 1   | --help / -h outputs Banner (gradient) + blank line + help                            | PASS   |
+| 2   | Help format matches quality-gate: Usage/Commands/Options/Examples sections           | PASS   |
+| 3   | Usage line uses detected invokePrefix                                                | PASS   |
+| 4   | Help text uses ANSI colors: title=bright white, labels=green, description=light gray | PASS   |
+| 5   | No longer uses Go flag package's PrintDefaults()                                     | PASS   |
+| 6   | go build succeeds, go vet passes                                                     | PASS   |
 
 ## Gotchas for tester
 
-- The banner appears without colors when piped (supportsANSI returns false for non-TTY). This is correct behavior matching quality-gate.
-- The logDir value in the panel may be truncated with "..." depending on path length.
-- The brew install hint wraps across two lines; winget and URL hints fit on one line.
-- `go run .` detection uses `strings.Contains(os.Args[0], "go-build")` which matches Go's temp build directory pattern.
+- Help output goes to stderr (same as banner/ECAM in US-001).
+- Colors only appear on TTY; piped output is plain text (supportsANSI guard).
+- The `serve --help` interception works because `detectSubcommand` scans ALL args for `--help`/`-h`, not just the first positional arg.
+- The BOT border fix (panel.go) affects both the banner help output and the normal server startup panel.

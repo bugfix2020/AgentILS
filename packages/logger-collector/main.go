@@ -54,7 +54,10 @@ func detectSubcommand(args []string) string {
 			os.Exit(0)
 		}
 		if arg == "--help" || arg == "-h" {
-			return "serve" // will be handled by flag package
+			mode := banner.DetectInvoker()
+			prefix := banner.InvokePrefix(mode)
+			banner.PrintHelp(os.Stderr, prefix)
+			os.Exit(0)
 		}
 	}
 	first := args[0]
@@ -79,11 +82,6 @@ func runServe(args []string) {
 	jsonOutput := fs.Bool("json", false, "Output startup info as JSON")
 	silentOutput := fs.Bool("silent", false, "Suppress startup output")
 	cwd := fs.String("cwd", "", "Project root for resolving relative paths")
-
-	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s serve [flags]\n\nFlags:\n", os.Args[0])
-		fs.PrintDefaults()
-	}
 
 	fs.Parse(filterSubcommandArgs(args, "serve"))
 
@@ -133,11 +131,6 @@ func runRead(args []string) {
 	format := fs.String("format", "text", "Output format: text, json, jsonl")
 	logDir := fs.String("log-dir", "", "Directory containing JSONL files")
 	cwd := fs.String("cwd", "", "Project root for resolving relative paths")
-
-	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s read [flags]\n\nFlags:\n", os.Args[0])
-		fs.PrintDefaults()
-	}
 
 	fs.Parse(filterSubcommandArgs(args, "read"))
 
