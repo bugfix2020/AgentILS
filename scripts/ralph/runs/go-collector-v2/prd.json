@@ -1,0 +1,61 @@
+{
+    "branchName": "feat/logger-go-collector",
+    "userStories": [
+        {
+            "id": "US-001",
+            "title": "品牌 Banner + ECAM 信息区 + 平台感知输出",
+            "priority": 1,
+            "stage": "done",
+            "passes": true,
+            "blocked": false,
+            "handoff": { "product": true, "developer": true, "tester": true },
+            "acceptanceCriteria": [
+                "Go binary 启动输出 AgentILS ASCII banner，与 packages/quality-gate/templates/banner.txt 完全一致",
+                "Banner 使用 5 色渐变（xterm-256: 75/105/141/175/204），逐字符按水平位置插值，空格不着色",
+                "Banner 后紧跟 ECAM 风格信息区（╔═╗ box-drawing，dim green 边框，内宽 60）",
+                "信息区包含：header 行（AGENTILS LOGGER SERVICE）、版本号、分隔线、endpoint/logDir/read 行",
+                "版本号从 ldflags 注入的 version 变量读取",
+                "状态指示符使用 ●（bright green）",
+                "检测逻辑：1) 环境变量 AGENT_ILS_INVOKER=npx → npx 模式 2) os.Args[0] 含 go-build → gorun 3) 默认 → binary",
+                "binary 模式下按 runtime.GOOS 区分平台安装提示：darwin→brew, windows→winget, linux→github releases",
+                "npx 模式无 install 行，gorun 模式无 install 行",
+                "信息区内容自动截断：超过 58 字符的值截断加 …",
+                "JSON 模式（--json）的 read 和 installHint 字段适配，不输出 banner",
+                "--silent 模式不输出任何内容",
+                "输出到 stderr",
+                "go build 成功，go vet 通过"
+            ]
+        },
+        {
+            "id": "US-002",
+            "title": "--help 输出格式对齐 quality-gate",
+            "priority": 2,
+            "stage": "product",
+            "passes": false,
+            "blocked": false,
+            "handoff": { "product": false, "developer": false, "tester": false },
+            "acceptanceCriteria": [
+                "--help / -h 输出格式：Banner（渐变色）+ 空行 + 纯文本帮助（与 quality-gate renderHelp() 模式一致）",
+                "帮助文本格式与 quality-gate templates/help.txt 统一：Usage/Commands/Options/Examples 分节",
+                "Usage 行使用检测到的调用前缀（npx @agent-ils/logger / go run . / agent-ils-logger）",
+                "帮助文本用 ANSI 颜色：标题 bright white，标签 green，描述 light gray",
+                "不再使用 Go flag 包的默认 PrintDefaults() 输出",
+                "go build 成功，go vet 通过"
+            ]
+        },
+        {
+            "id": "US-003",
+            "title": "Node 薄壳透传调用来源标记",
+            "priority": 3,
+            "stage": "product",
+            "passes": false,
+            "blocked": false,
+            "handoff": { "product": false, "developer": false, "tester": false },
+            "acceptanceCriteria": [
+                "packages/logger/src/cli.ts 的 spawn 调用中注入 env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }",
+                "SDK 层（browser.ts、index.ts、query.ts）不做任何修改",
+                "pnpm --filter @agent-ils/logger build 通过"
+            ]
+        }
+    ]
+}

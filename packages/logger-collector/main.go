@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bugfix2020/AgentILS/packages/logger-collector/internal/banner"
 	"github.com/bugfix2020/AgentILS/packages/logger-collector/internal/query"
 	"github.com/bugfix2020/AgentILS/packages/logger-collector/internal/server"
 )
@@ -102,8 +103,20 @@ func runServe(args []string) {
 
 	srv := server.New(*host, *port, effectiveLogDir, *filePrefix)
 
+	mode := banner.DetectInvoker()
+	readCmd := banner.InvokePrefix(mode) + " read --tail 50"
+	installHint := ""
+	if mode == "binary" {
+		installHint = banner.InstallHint()
+	}
+	params := banner.ServerParams{
+		Version:     version,
+		ReadCmd:     readCmd,
+		InstallHint: installHint,
+	}
+
 	ctx := context.Background()
-	if err := srv.Start(ctx, *jsonOutput, *silentOutput); err != nil {
+	if err := srv.Start(ctx, params, *jsonOutput, *silentOutput); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

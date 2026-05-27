@@ -2,13 +2,15 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/bugfix2020/AgentILS/packages/logger-collector/internal/banner"
 )
 
 // Server encapsulates the HTTP log collector server.
@@ -32,7 +34,7 @@ func New(host string, port int, logDir string, filePrefix string) *Server {
 
 // Start starts the HTTP server and blocks until the context is cancelled
 // or a signal is received.
-func (s *Server) Start(ctx context.Context, jsonOutput bool, silentOutput bool) error {
+func (s *Server) Start(ctx context.Context, params banner.ServerParams, jsonOutput bool, silentOutput bool) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRequest)
 
@@ -56,10 +58,12 @@ func (s *Server) Start(ctx context.Context, jsonOutput bool, silentOutput bool) 
 		endpoint := fmt.Sprintf("http://%s", s.server.Addr)
 
 		if !silentOutput {
+			params.Endpoint = endpoint
+			params.LogDir = s.LogDir
 			if jsonOutput {
-				printStartupJSON(endpoint, s.LogDir)
+				banner.PrintJSON(os.Stderr, params)
 			} else {
-				printStartupHuman(endpoint, s.LogDir)
+				banner.PrintServer(os.Stderr, params)
 			}
 		}
 
@@ -77,22 +81,4 @@ func (s *Server) Start(ctx context.Context, jsonOutput bool, silentOutput bool) 
 		}
 		return err
 	}
-}
-
-func printStartupHuman(endpoint string, logDir string) {
-	fmt.Println("AgentILS Logger server ready")
-	fmt.Printf("endpoint: %s\n", endpoint)
-	fmt.Printf("logDir: %s\n", logDir)
-	fmt.Println("read: npx @agent-ils/logger read --tail 50")
-}
-
-func printStartupJSON(endpoint string, logDir string) {
-	obj := map[string]interface{}{
-		"ok":       true,
-		"endpoint": endpoint,
-		"logDir":   logDir,
-		"read":     "npx @agent-ils/logger read --tail 50",
-	}
-	data, _ := json.Marshal(obj)
-	fmt.Println(string(data))
 }
