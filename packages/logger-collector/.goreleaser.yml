@@ -1,0 +1,81 @@
+project_name: agent-ils-logger
+
+before:
+    hooks:
+        - go mod tidy
+
+builds:
+    - id: agent-ils-logger
+      main: .
+      dir: packages/logger-collector
+      binary: agent-ils-logger
+      env:
+          - CGO_ENABLED=0
+      goos:
+          - darwin
+          - linux
+          - windows
+      goarch:
+          - amd64
+          - arm64
+      ignore:
+          # No linux-arm64 target in acceptance criteria
+          - goos: linux
+            goarch: arm64
+      ldflags:
+          - -s -w -X main.version={{.Version}}
+      flags:
+          - -trimpath
+
+archives:
+    - id: default
+      name_template: >-
+          agent-ils-logger-
+          {{- .Os }}-
+          {{- if eq .Arch "amd64" }}amd64
+          {{- else if eq .Arch "arm64" }}arm64
+          {{- end }}
+      format: tar.gz
+      format_overrides:
+          - goos: windows
+            format: zip
+      files:
+          - LICENSE*
+          - README*
+
+checksum:
+    name_template: checksums.txt
+    algorithm: sha256
+
+release:
+    github:
+        owner: bugfix2020
+        name: AgentILS
+    mode: replace
+    extra_files:
+        - glob: dist/agent-ils-logger_darwin_amd64_v1/agent-ils-logger
+          name_template: agent-ils-logger-darwin-amd64
+        - glob: dist/agent-ils-logger_darwin_arm64/agent-ils-logger
+          name_template: agent-ils-logger-darwin-arm64
+        - glob: dist/agent-ils-logger_linux_amd64_v1/agent-ils-logger
+          name_template: agent-ils-logger-linux-amd64
+        - glob: dist/agent-ils-logger_windows_amd64_v1/agent-ils-logger.exe
+          name_template: agent-ils-logger-windows-amd64.exe
+
+brews:
+    - name: agent-ils-logger
+      tap:
+          owner: bugfix2020
+          name: homebrew-agentils
+          branch: main
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
+      commit_author:
+          name: bugfix2020[bot]
+          email: bot@bugfix2020.dev
+      homepage: 'https://github.com/bugfix2020/AgentILS/tree/main/packages/logger-collector'
+      description: 'Local JSONL logger for AI-assisted debugging (Go collector binary)'
+      license: MIT
+      install: |
+          bin.install "agent-ils-logger"
+      test: |
+          system "#{bin}/agent-ils-logger", "--version"

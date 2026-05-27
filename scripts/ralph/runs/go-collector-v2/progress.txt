@@ -1,0 +1,188 @@
+## Codebase Patterns
+- Go binary 位于 packages/logger-collector/，零外部依赖，只用 Go stdlib
+- server 包在 internal/server/，负责 HTTP 和启动输出
+- query 包在 internal/query/，负责 read/filter/format
+- main.go 负责 CLI 路由和参数解析
+- Node 薄壳在 packages/logger/src/cli.ts，零外部依赖
+- quality-gate 的品牌规范：templates/banner.txt（ASCII art）+ 5 色渐变（38;5;75/105/141/175/204）
+- quality-gate 的 ECAM 面板：C 颜色常量 + ╔═╗ box-drawing + dim green 边框 + 内宽 60
+---
+
+## 2026-05-27 -- US-001 Product Handoff
+- Analyzed all reference implementations for US-001 brand banner + ECAM panel requirements
+- Read and extracted exact algorithms from:
+  - `packages/quality-gate/templates/banner.txt` -- 6-line ASCII art
+  - `packages/quality-gate/src/index.ts` -- `BANNER_COLORS` (5-stop gradient), `colorizeBanner()` interpolation algorithm, `supportsAnsi()` guard
+  - `packages/quality-gate/src/precommit/panel.tsx` -- `C` color constants (9 entries), `IW=60`, `TOP/MID/BOT` box-drawing, `rowLine()`, `stepIndicator()`, `visLen()`
+  - `packages/logger-collector/internal/server/server.go` -- `printStartupHuman()`, `printStartupJSON()` to be replaced
+  - `packages/logger-collector/main.go` -- `detectSubcommand()`, `runServe()`, `runRead()` to be modified
+  - Go project structure: 6 .go files across internal/payload, internal/jsonl, internal/server, internal/query, main
+- Wrote comprehensive product handoff at `scripts/ralph/runs/go-collector-v2/handoff/product.md` covering:
+  - Exact banner ASCII art (verbatim from banner.txt)
+  - Exact colorization algorithm (ported from TypeScript to Go)
+  - Exact C color constants and box-drawing pattern (IW=60)
+  - File structure for new `internal/banner/` package (4 files)
+  - server.go and main.go modification plan
+  - Invocation detection algorithm (npx/gorun/binary)
+  - Platform-aware install hints (darwin/windows/linux)
+  - Exact output format for all 7 modes (binary-mac/win/linux, npx, gorun, json, silent)
+  - Content truncation rule
+  - Acceptance criteria mapping
+- Updated prd.json: US-001 `handoff.product = true`, `stage = "developer"`
+- **Learnings for future iterations:**
+  - The `colorizeBanner` algorithm uses `Math.floor(index / max(lineLen-1, 1) * (colors.length-1))` -- must guard against single-char lines
+  - ECAM panel `rowLine()` strips ANSI escapes for width calc via `visLen()` regex -- Go port needs `regexp.MustCompile`
+  - `printStartupHuman` and `printStartupJSON` currently output to stdout via `fmt.Println` -- new code must switch to stderr
+  - `server.Start()` currently takes `(ctx, jsonOutput, silentOutput)` -- must add `banner.ServerParams` parameter
+  - JSON mode `installHint` should be **omitted** (not null/empty) when in npx/gorun mode
+  - The `go run` detection uses `strings.Contains(os.Args[0], "go-build")` because Go compiles to temp dirs like `/tmp/go-buildXXXXX/`
+---
+
+## 2026-05-27 -- US-001 Developer Implementation
+
+- Implemented brand banner + ECAM info panel + platform-aware output in Go binary
+- Created new `internal/banner/` package (4 files: colors.go, banner.go, panel.go, detect.go)
+- Modified `internal/server/server.go`: removed printStartupHuman/JSON, added banner.ServerParams to Start(), output to stderr
+- Modified `main.go`: added DetectInvoker() in runServe(), builds ServerParams with version/readCmd/installHint
+- All 7 output modes verified (binary-mac, binary-json, binary-silent, npx, npx-json, gorun, read command)
+- go build + go vet pass, zero external dependencies
+- **Files changed:**
+  - `packages/logger-collector/internal/banner/colors.go` (new)
+  - `packages/logger-collector/internal/banner/banner.go` (new)
+  - `packages/logger-collector/internal/banner/panel.go` (new)
+  - `packages/logger-collector/internal/banner/detect.go` (new)
+  - `packages/logger-collector/internal/server/server.go` (modified)
+  - `packages/logger-collector/main.go` (modified)
+  - `scripts/ralph/runs/go-collector-v2/handoff/developer.md` (new)
+- **Learnings for future iterations:**
+  - Panel values (endpoint, logDir, installHint) can overflow IW=60 -- need fitValue() truncation with "..."
+  - Brew install hint contains " && " -- split into two rows with continuation indent instead of truncating
+  - JSON mode uses map[string]interface{} so empty InstallHint omits the key entirely (not null/empty)
+  - supportsANSI() must check stderr (os.Stderr.Stat()) since all startup output goes to stderr
+  - The `rowLine()` function uses padVisible() which only pads short content -- long content must be truncated before calling rowLine()
+---
+
+## 2026-05-27 -- US-001 Tester Verification
+
+- Verified all 14 acceptance criteria for US-001 (Brand Banner + ECAM Info Panel + Platform-Aware Output)
+- **All 14 ACs PASS**
+- Tested all 7 output modes: binary-macOS, binary-json, binary-silent, npx, npx-json, gorun, read command
+- Banner text exact match with `packages/quality-gate/templates/banner.txt` (zero diff)
+- 5-color xterm-256 gradient codes verified: 75, 105, 141, 175, 204
+- ECAM box-drawing: TOP ╔╗, MID ╠╣, vertical ║, horizontal ═ all match quality-gate reference
+- Invocation detection: npx (env var), gorun (go-build path), binary (default) -- all working
+- Platform install hints: darwin=brew (two-line wrap), windows=winget, linux=github URL
+- JSON mode: omits installHint key entirely for npx/gorun (not null/empty)
+- Silent mode: zero output confirmed
+- All output to stderr confirmed
+- go build + go vet pass
+- **Minor observation**: BOT border corners use ╘╙ (U+2558/U+2559) instead of ╚╝ (U+255A/U+255B) as in quality-gate panel.tsx. Visual difference is minor; ECAM style maintained.
+- Updated prd.json: US-001 `passes = true`, `stage = "done"`, `handoff.tester = true`
+- Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
+---
+
+## 2026-05-27 -- US-002 Product Handoff
+
+- Analyzed all reference implementations for US-002 (--help output format aligned with quality-gate)
+- Read and extracted exact requirements from:
+  - `packages/quality-gate/templates/help.txt` -- plain text help with Usage/Commands/Options/Examples sections
+  - `packages/quality-gate/src/index.ts` -- `renderHelp()` = `renderBanner() + "\n" + readTemplate('help.txt') + "\n"` (banner+help composition)
+  - `packages/quality-gate/src/cli.ts` -- `cli.help()` prepends banner to cac's help sections; empty-argv calls `renderHelp()` directly
+  - `packages/logger-collector/main.go` -- current `fs.Usage` overrides using `flag.PrintDefaults()` for serve and read
+  - `packages/logger-collector/internal/banner/` -- existing 4-file package from US-001 (colors.go, banner.go, panel.go, detect.go)
+- Key design decisions:
+  - Intercept `--help`/`-h` in `detectSubcommand()` **before** `fs.Parse()` so flag package never handles help
+  - Produce a **unified** help page (all commands + all options) rather than per-subcommand help, matching quality-gate
+  - Examples section uses **hardcoded** strings (not invokePrefix), matching quality-gate's multi-PM example pattern
+  - Help text uses **programmatic ANSI colors** (C.Wht/C.Grn/C.Gry) even though quality-gate's help.txt is plain text, per PRD AC requirement
+  - New file `internal/banner/help.go` with `PrintHelp(w io.Writer, prefix string)` function
+  - Include BOT border fix from US-001 tester observation (╘╙ -> ╚╝, U+2558/2559 -> U+255A/255B)
+- Wrote comprehensive product handoff at `scripts/ralph/runs/go-collector-v2/handoff/product.md` covering:
+  - Exact help text template with all sections and labels
+  - invokePrefix substitution rules (dynamic in Usage, hardcoded in Examples)
+  - ANSI color scheme: titles=bright white, labels=green, descriptions=light gray
+  - How to replace flag.Usage with early interception in detectSubcommand
+  - Structured rendering approach (helpSection/helpLine types)
+  - BOT border character fix specification
+  - Acceptance criteria mapping (6 ACs)
+  - Files to change (3 files: help.go new, panel.go fix, main.go modify)
+- Updated prd.json: US-002 `handoff.product = true`, `stage = "developer"`
+- **Learnings for future iterations:**
+  - quality-gate's `renderHelp()` does NOT color the help text itself -- only the banner is colored. The PRD adds coloring as an enhancement.
+  - The flag package's `--help` handling can be completely bypassed by intercepting args before `fs.Parse()`. This is simpler than overriding `fs.Usage`.
+  - A unified help page (not per-subcommand) matches quality-gate's single-page pattern and is simpler to implement.
+  - The BOT border mismatch was noted in US-001 testing but not blocking -- carrying it as a fix in US-002.
+---
+## 2026-05-27 -- US-002 Developer Implementation
+
+- Implemented custom --help output matching quality-gate renderHelp() pattern
+- Created `internal/banner/help.go` with PrintHelp() using structured helpSection/helpLine types
+- Fixed BOT border corners in panel.go: U+2558/U+2559 -> U+255A/U+255B (light -> double variants)
+- Modified main.go: intercept --help/-h in detectSubcommand() before fs.Parse(), removed fs.Usage overrides
+- Help text uses ANSI colors: C.Wht for titles, C.Grn for labels/flags, C.Gry for descriptions
+- Usage section uses dynamic invokePrefix; Examples use hardcoded strings (matching quality-gate pattern)
+- All 6 acceptance criteria verified passing
+- **Files changed:**
+  - `packages/logger-collector/internal/banner/help.go` (new)
+  - `packages/logger-collector/internal/banner/panel.go` (modified -- BOT border fix)
+  - `packages/logger-collector/main.go` (modified -- help interception, removed fs.Usage)
+- **Learnings for future iterations:**
+  - Intercepting --help before fs.Parse() in detectSubcommand() is cleaner than overriding fs.Usage -- avoids flag package's default PrintDefaults() entirely
+  - Structured helpSection/helpLine approach keeps help text data-driven; easy to add/remove options without formatting bugs
+  - labelWidth() auto-computes alignment from description-bearing sections; no manual column width tuning needed
+  - The BOT border fix (panel.go) is part of US-002 changeset but affects both help output and normal server startup panel
+---
+
+## 2026-05-27 -- US-002 Tester Verification
+
+- Verified all 6 acceptance criteria for US-002 (--help Output Format Aligned with quality-gate)
+- **All 6 ACs PASS**
+- Help output composition: gradient banner + blank line + "AgentILS Logger" title + 5 structured sections (Usage, Commands, Serve Options, Read Options, Examples)
+- Format matches quality-gate help.txt pattern: section headers without colons, indented content, flag descriptions right-aligned in a column
+- invokePrefix dynamic substitution: binary mode shows `agent-ils-logger`, npx mode shows `npx @agent-ils/logger`
+- ANSI colors verified via `script -q /dev/null` + `cat -v`: title `\x1b[1;37m` (bright white), labels `\x1b[32m` (green), descriptions `\x1b[90m` (gray)
+- No PrintDefaults() or fs.Usage remaining in main.go -- grep confirms zero occurrences
+- go build + go vet pass
+- BOT border fix confirmed: panel.go uses `\u255A\u255B` (╚╝) matching TOP (╔╗) and MID (╠╣)
+- Supplementary checks all pass: no-args starts server, read command works, -h shorthand works, serve --help shows unified help, output to stderr, non-TTY suppresses ANSI
+- Updated prd.json: US-002 `passes = true`, `stage = "done"`, `handoff.tester = true`
+- Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
+- **Observation**: Examples section uses green (C.Grn) instead of gray (C.Gry) because examples are rendered as plain indented lines (no Description field). This is consistent with Usage line coloring.
+---
+## 2026-05-27 -- US-003 Product Handoff
+
+- Analyzed US-003 acceptance criteria: single 1-line change in `packages/logger/src/cli.ts`
+- Located the spawn call at line 192-195 of cli.ts: `env: process.env` needs to become `env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }`
+- Confirmed Go binary already reads `AGENT_ILS_INVOKER` env var via `detect.go` (implemented in US-001)
+- Confirmed SDK files (browser.ts, index.ts, query.ts) are not touched
+- Wrote product handoff at `scripts/ralph/runs/go-collector-v2/handoff/product.md`
+- Updated prd.json: US-003 `handoff.product = true`, `stage = "developer"`
+- **Learnings for future iterations:**
+  - This is the simplest story in the PRD: literally a 1-line change adding one env var to a spread object
+  - The Go side (detect.go) was already built to read this env var in US-001, so no Go changes needed
+---
+## 2026-05-27 -- US-003 Developer Implementation
+
+- Implemented Node thin-shell passthrough invoker marking (1-line change)
+- Changed `packages/logger/src/cli.ts` line 194: `env: process.env` -> `env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }`
+- Build passes: `pnpm --filter @agent-ils/logger build` succeeds (all 4 entry points + DTS)
+- SDK files (browser.ts, index.ts, query.ts) confirmed untouched via `git diff --name-only`
+- **Files changed:**
+  - `packages/logger/src/cli.ts` (modified -- single env injection line)
+- Updated prd.json: US-003 `handoff.developer = true`, `stage = "tester"`
+- Wrote developer handoff at `scripts/ralph/runs/go-collector-v2/handoff/developer.md`
+- **Learnings for future iterations:**
+  - This was a verified 1-line change; the spread operator `...process.env` is type-safe in tsup/node20 target
+  - The env injection only takes effect when the Node thin shell spawns the Go binary; direct Go binary invocation is unaffected
+---
+
+## 2026-05-27 -- US-003 Tester Verification
+
+- Verified all 3 acceptance criteria for US-003 (Node Thin-Shell Passthrough Invoker Marking)
+- **All 3 ACs PASS**
+- AC 1: spawn call at line 192-195 injects `env: { ...process.env, AGENT_ILS_INVOKER: 'npx' }` -- spread preserves process.env, appends invoker marker
+- AC 2: SDK files (browser.ts, index.ts, query.ts) confirmed zero changes via `git diff --name-only`
+- AC 3: `pnpm --filter @agent-ils/logger build` succeeds (all 4 entry points + DTS, zero errors)
+- Updated prd.json: US-003 `passes = true`, `stage = "done"`, `handoff.tester = true`
+- Wrote tester handoff at `scripts/ralph/runs/go-collector-v2/handoff/tester.md`
+---

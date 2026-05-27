@@ -1,0 +1,57 @@
+## Codebase Patterns
+- Go binary 位于 packages/logger-collector/，零外部依赖
+- Banner 包在 internal/banner/：colors.go, banner.go, panel.go, detect.go, help.go
+- IW=60 是 ECAM 面板内宽常量，所有行必须严格遵守
+- quality-gate 的 ECAM panel.tsx 用 padVisible + visLen 确保行宽一致
+- Changeset 文件放 .changeset/ 目录，格式见 .changeset/*.md
+- @agent-ils/logger 是受 changesets 管理的 npm 包
+---
+
+## 2026-05-27 - US-001
+- Product handoff written for ECAM panel width overflow + truncation fix
+- Inspected fix already applied in panel.go and colors.go
+- Root cause: fitValue used rune count instead of visLen; padVisible didn't truncate
+- Fix: rowLine uses padOrTruncate, fitValue uses visLen + -1 padding, box-drawing chars use UTF-8 literals
+- Files changed:
+  - scripts/ralph/runs/go-collector-v2-fix/handoff/product.md (created)
+  - scripts/ralph/runs/go-collector-v2-fix/prd.json (updated: handoff.product=true, stage=developer)
+- **Learnings for future iterations:**
+  - The fix was already applied manually; product handoff describes what changed for developer verification
+  - padOrTruncate is the key new primitive -- it replaces padVisible in rowLine and guarantees exact width
+  - truncateVisible preserves ANSI codes while counting visible chars, useful pattern for any terminal formatting
+---
+
+## 2026-05-27 - US-001 (developer stage)
+- Verified fix in panel.go: rowLine uses padOrTruncate, fitValue uses visLen + -1 padding, box-drawing chars are UTF-8 literals
+- Verified fix in colors.go: padOrTruncate and truncateVisible functions correctly preserve ANSI codes while enforcing exact width
+- All builds pass: go build, go vet, pnpm --filter @agent-ils/logger build
+- Created changeset: .changeset/tidy-ecam-panel-truncation.md (patch for @agent-ils/logger)
+- Files changed:
+  - .changeset/tidy-ecam-panel-truncation.md (created)
+  - scripts/ralph/runs/go-collector-v2-fix/handoff/developer.md (created)
+  - scripts/ralph/runs/go-collector-v2-fix/prd.json (updated: handoff.developer=true, stage=tester)
+- **Learnings for future iterations:**
+  - logger-collector is a pure Go module (no package.json); its npm distribution goes through @agent-ils/logger which wraps the Go binary
+  - The changeset targets @agent-ils/logger since that is the npm-published package; Go binary changes are described in the changeset body
+  - visLen + padOrTruncate is the canonical width enforcement pattern for ECAM panels, consistent between quality-gate (TS) and logger-collector (Go)
+---
+
+## 2026-05-27 - US-001 (tester stage)
+- Verified all 7 acceptance criteria against source code and runtime output
+- AC 1: padOrTruncate/truncateVisible enforce IW=60 correctly, rowLine uses padOrTruncate(content, IW)
+- AC 2: fitValue uses visLen(prefix) not len([]rune(prefix)), available := IW - prefixLen - 1
+- AC 3: Built binary and ran with long logDir -- all right borders align perfectly after truncation
+- AC 4: Box-drawing chars use UTF-8 literals (╔╗╠╣╚╝║), confirmed via git diff from \uXXXX escapes
+- AC 5: go build ./... and go vet ./... both pass
+- AC 6: .changeset/tidy-ecam-panel-truncation.md exists with correct package + patch bump
+- AC 7: pnpm --filter @agent-ils/logger build passes
+- Files changed:
+  - scripts/ralph/runs/go-collector-v2-fix/handoff/tester.md (created)
+  - scripts/ralph/runs/go-collector-v2-fix/prd.json (updated: handoff.tester=true, passes=true, stage=done)
+  - scripts/ralph/runs/go-collector-v2-fix/progress.txt (appended)
+- **Learnings for future iterations:**
+  - To visually test the Go binary banner, use a high port (39997+) to avoid conflicts, redirect to file, then strip ANSI with sed
+  - The logger-collector binary prints banner to stdout then blocks on HTTP listen -- use background + kill pattern to capture just the banner
+  - All ECAM panel rows now guarantee exact IW=60 visible width regardless of content length
+---
+

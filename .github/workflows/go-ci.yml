@@ -1,0 +1,46 @@
+name: Go CI
+
+on:
+    pull_request:
+        paths:
+            - 'packages/logger-collector/**'
+    push:
+        branches: [main]
+        paths:
+            - 'packages/logger-collector/**'
+
+concurrency:
+    group: go-ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+    contents: read
+
+jobs:
+    go-ci:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        defaults:
+            run:
+                working-directory: packages/logger-collector
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version: '1.22'
+
+            - name: Go fmt
+              run: test -z "$(gofmt -l .)"
+
+            - name: Go vet
+              run: go vet ./...
+
+            - name: Go test
+              run: go test ./...
+
+            - name: golangci-lint
+              uses: golangci/golangci-lint-action@v6
+              with:
+                  version: latest
+                  working-directory: packages/logger-collector

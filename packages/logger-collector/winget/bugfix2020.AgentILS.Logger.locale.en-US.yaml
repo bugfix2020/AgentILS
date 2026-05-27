@@ -1,0 +1,26 @@
+# Winget locale manifest
+# Submit to microsoft/winget-pkgs via PR after each release
+# Replace <VERSION> with the actual release version
+PackageIdentifier: bugfix2020.AgentILS.Logger
+PackageVersion: <VERSION>
+PackageLocale: en-US
+Publisher: bugfix2020
+PackageName: AgentILS Logger
+ShortDescription: Local JSONL logger for AI-assisted debugging
+Description: |
+    The AgentILS Logger collector binary provides a local HTTP server that
+    captures structured JSONL log records from the AgentILS browser SDK and
+    other clients. It supports serve mode (HTTP server) and read mode (query
+    and filter stored records).
+License: MIT
+LicenseUrl: https://github.com/bugfix2020/AgentILS/blob/main/LICENSE
+Homepage: https://github.com/bugfix2020/AgentILS/tree/main/packages/logger-collector
+Tags:
+    - logging
+    - jsonl
+    - debugging
+    - ai
+    - developer-tools
+ReleaseNotesUrl: https://github.com/bugfix2020/AgentILS/releases/tag/v<VERSION>
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
