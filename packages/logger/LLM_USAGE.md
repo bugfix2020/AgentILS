@@ -42,6 +42,11 @@ yarn dlx @agent-ils/logger
 bunx @agent-ils/logger
 ```
 
+These package-manager commands first run the package's Node wrapper. The wrapper
+must resolve a native `agent-ils-logger` binary and must not execute a
+`node_modules/.bin/agent-ils-logger` shim, because that shim points back to the
+wrapper itself.
+
 Health check (use this before deciding the collector is broken):
 
 ```sh

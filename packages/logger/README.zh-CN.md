@@ -97,6 +97,11 @@ pnpm --filter @agent-ils/logger build
 node packages/logger/dist/cli.js read --tail 50
 ```
 
+`npx`、`pnpm dlx`、`yarn dlx`、`bunx` 会先运行一个很小的 Node wrapper。
+这个 wrapper 必须从系统或 `~/.agent-ils/bin` 解析真正的原生
+`agent-ils-logger` 二进制；它会刻意跳过 `node_modules/.bin` 下的包管理器
+shim，避免递归启动自己。
+
 ## 常用命令
 
 显式启动本地日志收集器：

@@ -3,29 +3,75 @@ name: Go Release
 on:
     push:
         tags:
-            - 'v*'
+            - '@agent-ils/logger@*'
 
 permissions:
     contents: write
 
 jobs:
-    goreleaser:
+    release:
         runs-on: ubuntu-latest
         timeout-minutes: 15
         steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
+            - uses: actions/checkout@v6
 
-            - uses: actions/setup-go@v5
+            - uses: actions/setup-go@v6
               with:
                   go-version: '1.22'
 
-            - name: Run GoReleaser
-              uses: goreleaser/goreleaser-action@v6
-              with:
-                  args: release --clean
-                  workdir: packages/logger-collector
+            - name: Derive version
+              id: version
+              shell: bash
+              run: |
+                  tag="${GITHUB_REF_NAME}"
+                  version="${tag#@agent-ils/logger@}"
+                  if [[ "$version" == "$tag" || ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+                    echo "Invalid @agent-ils/logger tag: $tag" >&2
+                    exit 1
+                  fi
+                  {
+                    echo "tag=$tag"
+                    echo "version=$version"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Build binaries
+              shell: bash
+              working-directory: packages/logger-collector
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  rm -rf dist
+                  mkdir -p dist
+
+                  build() {
+                    local goos="$1"
+                    local goarch="$2"
+                    local out="$3"
+                    GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
+                      go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "dist/${out}" .
+                  }
+
+                  build darwin arm64 agent-ils-logger-darwin-arm64
+                  build darwin amd64 agent-ils-logger-darwin-amd64
+                  build linux amd64 agent-ils-logger-linux-amd64
+                  build windows amd64 agent-ils-logger-windows-amd64.exe
+
+                  (cd dist && shasum -a 256 agent-ils-logger-* > checksums.txt)
+
+            - name: Publish GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ steps.version.outputs.tag }}
+                  VERSION: ${{ steps.version.outputs.version }}
+              shell: bash
+              run: |
+                  gh release create "$TAG" \
+                    --title "@agent-ils/logger ${VERSION}" \
+                    --notes "Native collector binaries for @agent-ils/logger ${VERSION}." \
+                    --target "$GITHUB_SHA" \
+                    packages/logger-collector/dist/agent-ils-logger-darwin-arm64 \
+                    packages/logger-collector/dist/agent-ils-logger-darwin-amd64 \
+                    packages/logger-collector/dist/agent-ils-logger-linux-amd64 \
+                    packages/logger-collector/dist/agent-ils-logger-windows-amd64.exe \
+                    packages/logger-collector/dist/checksums.txt

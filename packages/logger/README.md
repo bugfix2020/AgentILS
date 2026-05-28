@@ -97,6 +97,11 @@ pnpm --filter @agent-ils/logger build
 node packages/logger/dist/cli.js read --tail 50
 ```
 
+`npx`, `pnpm dlx`, `yarn dlx`, and `bunx` run a small Node wrapper first. The
+wrapper must resolve a native `agent-ils-logger` binary from the system or
+`~/.agent-ils/bin`; it intentionally ignores package-manager shims under
+`node_modules/.bin` to avoid recursively spawning itself.
+
 ## Common Commands
 
 Start the local log collector explicitly:

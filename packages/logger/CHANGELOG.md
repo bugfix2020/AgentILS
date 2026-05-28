@@ -1,5 +1,15 @@
 # @agent-ils/logger
 
+## 0.1.2
+
+### Patch Changes
+
+- Fix the npm wrapper so package-manager shims under `node_modules/.bin` are not
+  treated as native `agent-ils-logger` binaries. This prevents `npx
+@agent-ils/logger serve` from recursively spawning itself. The wrapper now also
+  downloads native binaries from the package tag format
+  `@agent-ils/logger@<version>`.
+
 ## 0.1.1
 
 ### Patch Changes

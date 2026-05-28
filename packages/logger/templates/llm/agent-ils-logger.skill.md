@@ -35,6 +35,9 @@ bunx @agent-ils/logger
 ```
 
 Use `--cwd <dir>` when the target project is not the current working directory.
+The package-manager commands first run the npm wrapper, which should resolve a
+native `agent-ils-logger` binary. It must not execute a `node_modules/.bin`
+shim with the same name, because that shim points back to the wrapper itself.
 
 ## Decision Rules
 

@@ -21,6 +21,6 @@ Tags:
     - debugging
     - ai
     - developer-tools
-ReleaseNotesUrl: https://github.com/bugfix2020/AgentILS/releases/tag/v<VERSION>
+ReleaseNotesUrl: https://github.com/bugfix2020/AgentILS/releases/tag/%40agent-ils%2Flogger%40<VERSION>
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

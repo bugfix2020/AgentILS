@@ -246,12 +246,23 @@ Every publish must be reproducible from `main`. Do not publish from an integrati
     npm publish
     ```
 
-8. Tag the published commit and push the tag:
+8. Tag the published commit and push the tag. The tag name is always the full
+   npm package name plus the version:
 
     ```sh
     git tag <package>@<version>
     git push origin <package>@<version>
     ```
+
+    Examples:
+
+    ```sh
+    git tag @agent-ils/logger@0.1.2
+    git tag @agent-ils/quality-gate@0.0.3
+    ```
+
+    Do not use repository-level semver tags such as `v0.1.2`, and do not use
+    shortened package names such as `logger@0.1.2`.
 
 This keeps `npm view <pkg>` `dist.tarball` ↔ git tag ↔ `main` commit in 1:1 correspondence so any future bisect or PR review can trace a published artifact back to the exact tree.
 
@@ -275,5 +286,7 @@ This keeps `npm view <pkg>` `dist.tarball` ↔ git tag ↔ `main` commit in 1:1 
 - Publishing source maps unintentionally.
 - Hard-coding a CLI version instead of reading package metadata.
 - Forgetting to push the git tag after `npm publish` — the tag is the only durable bridge between npm and git history.
+- Tagging a package release with `v<version>` or `<short-name>@<version>`
+  instead of `<full-npm-package-name>@<version>`.
 - Forgetting to add a `.changeset/*.md` file when modifying `packages/*` — CI will block the PR with "Verify changeset present" failure.
 - Using `"files": ["dist"]` and expecting `.npmignore` to exclude `.map` files — `files` whitelist takes precedence, use explicit `!dist/**/*.map` negation instead.

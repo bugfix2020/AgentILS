@@ -36,10 +36,12 @@ archives:
           {{- if eq .Arch "amd64" }}amd64
           {{- else if eq .Arch "arm64" }}arm64
           {{- end }}
-      format: tar.gz
+      formats:
+          - tar.gz
       format_overrides:
           - goos: windows
-            format: zip
+            formats:
+                - zip
       files:
           - LICENSE*
           - README*
@@ -63,7 +65,7 @@ release:
         - glob: dist/agent-ils-logger_windows_amd64_v1/agent-ils-logger.exe
           name_template: agent-ils-logger-windows-amd64.exe
 
-brews:
+homebrew_casks:
     - name: agent-ils-logger
       repository:
           owner: bugfix2020
@@ -75,8 +77,7 @@ brews:
           email: bot@bugfix2020.dev
       homepage: 'https://github.com/bugfix2020/AgentILS/tree/main/packages/logger-collector'
       description: 'Local JSONL logger for AI-assisted debugging (Go collector binary)'
-      license: MIT
-      install: |
-          bin.install "agent-ils-logger"
-      test: |
-          system "#{bin}/agent-ils-logger", "--version"
+      binaries:
+          - agent-ils-logger
+      url:
+          verified: github.com/bugfix2020/AgentILS

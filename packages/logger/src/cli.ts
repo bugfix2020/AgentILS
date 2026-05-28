@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { existsSync, createWriteStream, renameSync, mkdirSync, chmodSync } from 'node:fs'
+import { existsSync, createWriteStream, renameSync, mkdirSync, chmodSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { get } from 'node:https'
 import { homedir } from 'node:os'
 import { join, delimiter } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // ---------------------------------------------------------------------------
 // Platform detection
@@ -78,9 +79,26 @@ function findInPath(binaryName: string): string | null {
     const dirs = pathEnv.split(delimiter)
     for (const dir of dirs) {
         const candidate = join(dir, binaryName)
-        if (existsSync(candidate)) return candidate
+        if (!existsSync(candidate)) continue
+        if (isPackageManagerShim(candidate) || isCurrentWrapper(candidate)) continue
+        return candidate
     }
     return null
+}
+
+function isPackageManagerShim(candidate: string): boolean {
+    const normalized = candidate.replace(/\\/g, '/')
+    return normalized.includes('/node_modules/.bin/')
+}
+
+function isCurrentWrapper(candidate: string): boolean {
+    try {
+        const current = realpathSync(fileURLToPath(import.meta.url))
+        const resolvedCandidate = realpathSync(candidate)
+        return resolvedCandidate === current
+    } catch {
+        return false
+    }
 }
 
 function findInCache(cachedBinaryName: string): string | null {
@@ -166,7 +184,8 @@ async function main(): Promise<void> {
         const downloadName = platformArch.startsWith('windows')
             ? `agent-ils-logger-${platformArch}.exe`
             : `agent-ils-logger-${platformArch}`
-        const url = `https://github.com/bugfix2020/AgentILS/releases/download/v${version}/${downloadName}`
+        const releaseTag = encodeURIComponent(`@agent-ils/logger@${version}`)
+        const url = `https://github.com/bugfix2020/AgentILS/releases/download/${releaseTag}/${downloadName}`
         const cacheDir = getCacheDir()
         const dest = join(cacheDir, cachedBinaryName)
 

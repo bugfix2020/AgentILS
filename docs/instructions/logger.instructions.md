@@ -24,7 +24,10 @@ applyTo: 'packages/logger/**'
 
 ## 公共 surface
 
-- **bin** `agent-ils-logger`（`packages/logger/dist/cli.js`，cac CLI）
+- **bin** `agent-ils-logger`（npm 包内 `packages/logger/src/cli.ts` 是 Node wrapper；
+  真正的 CLI/collector 在 `packages/logger-collector` Go 二进制）
+    - wrapper 顺序：查找已安装的原生 `agent-ils-logger` → 查
+      `~/.agent-ils/bin/agent-ils-logger-<platform>` → 从 GitHub Release 下载。
     - 子命令：`serve`（启 HTTP collector）/ `read`（流式查询 + 过滤）
     - 无子命令但带 read flag（如 `--tail`）时自动路由到 `read`
     - 历史命名 `start` / `write` 已**删除**，文档与 LLM_USAGE 不得再引用
@@ -76,7 +79,13 @@ applyTo: 'packages/logger/**'
 
 模块分工：
 
-- `src/index.ts` — Node 端 SDK + HTTP collector server。`createLogger`
+- `src/cli.ts` — npm/npx wrapper，只负责定位 / 下载 / exec Go 原生二进制。
+  **必须跳过 `node_modules/.bin` 下的 package-manager shim**，否则
+  `npx @agent-ils/logger serve` 会找到并反复执行自己的 shim，造成进程递归、
+  CPU / 内存暴涨。
+- `packages/logger-collector` — Go 原生 CLI。实现 `serve` / `read`、启动 HTTP
+  collector、打印 banner、读取 JSONL。
+- `src/index.ts` — Node 端 SDK + 兼容的 HTTP collector server。`createLogger`
   写本地文件；`createHttpLogger` 走 fetch；`startHttpLogServer` 起 server。
 - `src/browser.ts` — 纯浏览器 SDK（`fetch`），**不要**在这里 import 任何 `node:*`。
     - `overrideKey`：配置后与 `window.$agentILS.logger.overrideKey` 匹配时强制启用日志，
@@ -85,7 +94,6 @@ applyTo: 'packages/logger/**'
       发送失败自动重置。状态在 `createBrowserLogger` 闭包外层共享，`child()` 共用。
 - `src/query.ts` — 读 + 过滤 + 格式化。`matchesRecord(record, range)` 只接
   range，不再接 options（`fix(logger)` 已删除未使用参数）。
-- `src/cli.ts` — cac CLI；无子命令时按 read flag 自动路由到 `read`。
 - `templates/llm/agent-ils-logger.skill.md` — 给 LLM 在自己 runtime 安装的
   recall 卡，build 时由 `scripts/copy-templates.mjs` 复制到 `dist/templates/`。
 
@@ -122,17 +130,21 @@ applyTo: 'packages/logger/**'
 - 在 collector 加远程 forward / 鉴权层 —— 超出包定位。
 - 改 README 但跳过 sandbox 跑通验证（违反 `package-readme-and-instruction-sync` skill）。
 - 改 CLI 但不更新 `LLM_USAGE.md` 的 Decision Table —— LLM 会按旧表选错命令。
+- 在 npm wrapper 的 PATH 扫描中执行 `node_modules/.bin/agent-ils-logger`。
+  这是 npx/pnpm/yarn/bun 生成的 JS shim，不是 Go 二进制；执行它会递归启动
+  wrapper 本身。
 
 ## 发布
 
 - 走 `chore/release-logger-<version>` 单独分支 + PR（参考 `npm-package-publish-checklist`）。
-- 当前已发布：`@agent-ils/logger@0.0.2`（tag `logger@0.0.2`，commit `d17e4da`）。
+- 当前 package version：`@agent-ils/logger@0.1.1`。
 
 ## 接手 checklist（< 2 分钟 onboard）
 
 1. 读本文件全部。
 2. 浏览 `packages/logger/README.md` 的 Common Commands + CLI Options 段。
-3. 看 `src/index.ts` 顶部常量、`src/query.ts` 顶部常量，确认默认值未变。
+3. 看 `src/cli.ts` wrapper、`packages/logger-collector/main.go`、`src/index.ts`
+   顶部常量、`src/query.ts` 顶部常量，确认 npm wrapper / Go CLI / SDK 默认值未漂移。
 4. 跑一遍：`pnpm --filter @agent-ils/logger build`、`pnpm --filter @agent-ils/logger typecheck`、`cd packages/logger && npm pack --dry-run`。
 5. 如果改了行为：在 `.tmp/logger-smoketest/` 跑一次 SDK 默认值 round-trip
    （`startHttpLogServer({})` → POST → `readLogRecords({})` 能拿到）。
