@@ -22,11 +22,14 @@
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex/Claude Code 读取。
 
+Ralph 多角色 custom agents 的真值源是 `docs/agents/ralph-*.md`；sync 脚本会分别生成 `.claude/agents/*.md`、`.github/agents/*.agent.md`、`.codex/agents/*.toml`。
+
 调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。
 
 ## Copilot 专属规则
 
 - 在 VS Code 中通过命令 `agentils.openPanel` 打开 AgentILS WebView；WebView 是主要输入输出界面，Copilot chat 输出保持最小化。
 - 要直接调 AgentILS LM tool，在 chat 里用 `#agentilsRequestUserClarification` 等 `toolReferenceName`（package.json `contributes.languageModelTools` 列出全部）；**没有** chat participant，**没有** slash command。
+- Ralph 角色化工作流通过 `.github/agents/ralph-*.agent.md` 暴露给 Copilot；使用 `/ralph` 或等价 custom-agent 入口时，保持 product/developer/ops/tester/contributor/beta 的 handoff 隔离。
 - 通过 AgentILS WebView 的 finish 操作结束会话，除非用户明确要求其他方式。
 - 项目通用规则（单向数据流、test-first、命令默认仓库根、不全仓扫描等）请直接读 `agentils.instructions.md` 的 Cardinal Rules，不要在此重复。

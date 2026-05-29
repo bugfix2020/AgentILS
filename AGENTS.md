@@ -23,9 +23,11 @@
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex/Claude Code 读取。
 
+Ralph 多角色 custom agents 的真值源是 `docs/agents/ralph-*.md`；sync 脚本会分别生成 `.claude/agents/*.md`、`.github/agents/*.agent.md`、`.codex/agents/*.toml`。
+
 调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。
 
 ## Codex / AGENTS 专属规则
 
-- Codex 当前没有 AgentILS 专属的运行时入口；项目通用规则全部走 `agentils.instructions.md` Cardinal Rules + 各子包 instruction。
-- 如未来引入 Codex 专属命令、quickfix、或 IDE 集成，再把对应入口写到这里；不要把通用规则下沉到此处（会与其它 audience 漂移）。
+- Codex 项目级 Ralph custom agents 由 `.codex/agents/ralph-*.toml` 提供；使用 `/ralph` 或等价触发词时，主代理只分发任务和汇总 handoff，不替子代理补证据。
+- 项目通用规则全部走 `agentils.instructions.md` Cardinal Rules + 各子包 instruction；不要把通用规则下沉到此处（会与其它 audience 漂移）。

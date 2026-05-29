@@ -1,6 +1,6 @@
 ---
 name: ralph
-description: '运行 Ralph 自治 AI agent 循环，逐一实现 prd.json 中的 user story，直到所有条目通过。触发词：run ralph、启动 ralph、执行 ralph、ralph loop。'
+description: 'Run the Ralph multi-agent workflow. Triggers: /ralph, run ralph, 启动 ralph, 执行 ralph, ralph loop.'
 user-invocable: true
 ---
 
@@ -8,80 +8,128 @@ user-invocable: true
 <!-- Source: docs/skills/ralph/SKILL.md -->
 <!-- DO NOT EDIT this generated target. Edit the source file instead. -->
 
-# Ralph — 自治 AI Agent 循环
+# Ralph — Multi-Agent Handoff Workflow
 
-Ralph 持续启动 Claude Code（或 Amp）实例，逐一完成 `prd.json` 中的 user story，直到全部通过。
+Ralph is the repository's role-isolated AI workflow. The orchestrating agent
+routes work to role-specific subagents, and each role writes its own handoff so
+the next role can verify evidence instead of trusting a single agent's summary.
 
----
+## Standard Trigger
 
-## 用法
+Use `/ralph` as the standard trigger across AI tools.
 
-```bash
-# 使用 Claude Code（默认 10 次迭代）
-./scripts/ralph/ralph.sh --tool claude
+- Claude Code reads generated agents from `.claude/agents/ralph-*.md`.
+- GitHub Copilot reads generated custom agents from `.github/agents/ralph-*.agent.md`.
+- Codex reads generated custom agents from `.codex/agents/ralph-*.toml`.
 
-# 指定最大迭代次数
-./scripts/ralph/ralph.sh --tool claude 20
+The source of truth for these agents is `docs/agents/ralph-*.md`; generated
+targets must not be hand-edited.
 
-# 使用 Amp（原始默认）
-./scripts/ralph/ralph.sh
+## When To Use Ralph
+
+`/ralph` is the primary workflow for non-trivial repository work:
+
+- implementing a plan
+- changing instructions, skills, agents, or sync behavior
+- preparing or verifying a package release
+- touching multiple files or multiple package boundaries
+- any task that needs independent product/developer/tester evidence
+
+Direct chat is only for plain tasks:
+
+- explanation or code reading
+- one-off command output
+- tiny text edits with no review or release impact
+- status checks that do not mutate tracked files
+
+If a direct chat request turns into non-trivial repo mutation, switch to the
+Ralph workflow before editing.
+
+## Core Chain
+
+```text
+product -> developer -> ops? -> tester -> contributor? -> beta -> done
 ```
 
----
+- `product` clarifies acceptance criteria, non-goals, edge cases, affected
+  surfaces, and `requiredStages`.
+- `developer` implements only after reading the product handoff.
+- `ops` handles CI/CD, changeset, release, or publish configuration when needed.
+- `tester` verifies implementation correctness and can send work back to
+  `developer` or `product`.
+- `contributor` checks docs and instructions from a new-developer perspective.
+- `beta` simulates a real user. Only beta may set `passes=true` and commit the
+  completed story.
 
-## 前置条件
+## Runtime Files
 
-1. **`jq`** 已安装（`brew install jq`）
-2. **Claude Code CLI** 已安装并登录（`claude --version`）
-3. **`scripts/ralph/prd.json`** 已存在（参考 `prd.json.example` 或用 `/prd` skill 生成）
-4. 当前目录为 git 仓库
+Use one run directory per task:
 
----
+```text
+scripts/ralph/runs/<run>/
+  prd.json
+  progress.txt
+  handoff/product.md
+  handoff/developer.md
+  handoff/ops.md
+  handoff/tester.md
+  handoff/contributor.md
+  handoff/beta.md
+```
 
-## 工作原理
+Each subagent may read `prd.json`, `progress.txt`, and its immediate
+predecessor's handoff. It writes only its own handoff.
 
-每次迭代：
+## PRD Shape
 
-1. 读取 `scripts/ralph/prd.json`，选取优先级最高的 `passes: false` story
-2. 实现该 story，运行质量检查（typecheck / lint / test）
-3. 检查通过后提交，将 story 标记为 `passes: true`
-4. 向 `scripts/ralph/progress.txt` 追加学习记录
-5. 若所有 story 完成，输出 `<promise>COMPLETE</promise>` 并退出
-
----
-
-## 创建 prd.json
-
-使用 `/ralph` skill 将现有 PRD 转换为 JSON 格式，或参考 `scripts/ralph/prd.json.example` 手动创建：
+Each story uses:
 
 ```json
 {
-    "project": "项目名",
-    "branchName": "ralph/feature-name",
-    "description": "功能描述",
-    "userStories": [
-        {
-            "id": "US-001",
-            "title": "story 标题",
-            "description": "As a user, I want ...",
-            "acceptanceCriteria": ["标准一", "Typecheck passes"],
-            "priority": 1,
-            "passes": false,
-            "notes": ""
-        }
-    ]
+    "id": "US-001",
+    "title": "Story title",
+    "description": "As a user, I want ...",
+    "acceptanceCriteria": ["Criterion one", "Typecheck passes"],
+    "priority": 1,
+    "stage": "product",
+    "requiredStages": [],
+    "passes": false,
+    "blocked": false,
+    "handoff": {
+        "product": false,
+        "developer": false,
+        "ops": false,
+        "tester": false,
+        "contributor": false,
+        "beta": false
+    },
+    "notes": ""
 }
 ```
 
----
+`product` chooses `requiredStages`. `developer` is always first after product;
+`beta` is always last.
 
-## 文件说明
+## Profiles
 
-| 文件                             | 说明                            |
-| -------------------------------- | ------------------------------- |
-| `scripts/ralph/ralph.sh`         | 主循环脚本                      |
-| `scripts/ralph/CLAUDE.md`        | 传给 Claude Code 的 prompt 模板 |
-| `scripts/ralph/prd.json`         | 当前 PRD（运行时创建）          |
-| `scripts/ralph/prd.json.example` | PRD 格式参考                    |
-| `scripts/ralph/progress.txt`     | 迭代进度日志（运行时创建）      |
-| `scripts/ralph/archive/`         | 归档的历史运行记录              |
+Profiles specialize the same role chain. The npm release profile is documented
+in `docs/ai-workflows/profiles/npm-release.md`.
+
+For release work:
+
+- New npm packages start at `0.0.1`.
+- Tags use `<full-npm-package-name>@<version>`.
+- Local verification is the main gate; CI/CD only backs it up.
+- If registry, `npx`/`dlx`, native asset, or GitHub Release behavior cannot be
+  fully verified before publish, use `alpha` or `beta` first.
+
+## Runtime Boundary
+
+`scripts/ralph/` is only runtime scaffolding: a PRD template, active run
+directories, progress logs, and handoff files. It is not the source of role
+behavior.
+
+Role behavior lives in `docs/agents/ralph-*.md` and is generated to each AI
+tool's custom-agent location. If the active tool cannot run an autonomous loop,
+the orchestrating agent should run the same stages manually and preserve the
+handoff contract.
