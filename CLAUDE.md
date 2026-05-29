@@ -23,6 +23,8 @@
 
 不要假设入口 stub 包含规则细节；规则的真值源是 `docs/instructions/*.instructions.md`，sync 脚本把它们复制到 `.github/instructions/` 供 Copilot/Codex/Claude Code 读取。
 
+Ralph 多角色 custom agents 的真值源是 `docs/agents/ralph-*.md`；sync 脚本会分别生成 `.claude/agents/*.md`、`.github/agents/*.agent.md`、`.codex/agents/*.toml`。
+
 调试工作区运行态文件由 `scripts/prepare-debug-workspace.cjs` 生成；不要手写或提交 `apps/vscode-debug/.vscode/mcp.json`、`WELCOME.md`、`.github/**`、`.vscode/settings.json` 的本机生成副本。
 
 ## Claude Code 专属规则
@@ -30,5 +32,6 @@
 - 非平凡改动先 `EnterPlanMode` 与用户对齐方案后再动代码；一行修补 / 纯研究 / 解释代码不需要进入 plan 模式。
 - 跨模块探索用 Explore subagent 并行最多 3 个；目标已知（具体文件 / 符号）时直接用 Read / Grep / Glob，避免子代理空跑。
 - 通过 Skill 工具调用本仓库已注册的 skills（在 `.claude/skills/` 下，与 `.github/skills/` `.agents/skills/` 同源生成）。
+- Ralph 角色化工作流通过 `.claude/agents/ralph-*.md` 提供；`/ralph` 应按 product/developer/ops/tester/contributor/beta 的 handoff 链路执行。
 - 项目通用规则（单向数据流、test-first、命令默认仓库根、不全仓扫描等）请直接读 `agentils.instructions.md` 的 Cardinal Rules，不要在此重复。
-- 修改任何 instructions / skills 必须改 `docs/instructions/` 或 `docs/skills/` 源 + 跑 `pnpm run sync:instructions`；**禁止手写 `CLAUDE.md` 入口或 `.claude/skills/` 下的任何 SKILL.md**（这两者都是 sync 产物）。
+- 修改任何 instructions / skills / custom agents 必须改 `docs/instructions/`、`docs/skills/` 或 `docs/agents/` 源 + 跑 `pnpm run sync:instructions`；**禁止手写 `CLAUDE.md` 入口、`.claude/skills/` 或 `.claude/agents/` 下的任何生成文件**。

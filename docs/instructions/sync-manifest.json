@@ -62,5 +62,37 @@
             "dir": "prd",
             "summary": "为新功能生成 PRD（Product Requirements Document）并保存到 tasks/"
         }
+    ],
+    "agents": [
+        {
+            "name": "ralph-product",
+            "file": "ralph-product.md",
+            "summary": "Ralph Product 角色：澄清目标、验收标准、非目标和 requiredStages"
+        },
+        {
+            "name": "ralph-developer",
+            "file": "ralph-developer.md",
+            "summary": "Ralph Developer 角色：读取 product handoff 后实现当前 story"
+        },
+        {
+            "name": "ralph-ops",
+            "file": "ralph-ops.md",
+            "summary": "Ralph Ops 角色：处理 CI/CD、changeset、release config"
+        },
+        {
+            "name": "ralph-tester",
+            "file": "ralph-tester.md",
+            "summary": "Ralph Tester 角色：验证实现并按证据打回或推进"
+        },
+        {
+            "name": "ralph-contributor",
+            "file": "ralph-contributor.md",
+            "summary": "Ralph Contributor 角色：以新开发者视角检查文档/代码漂移"
+        },
+        {
+            "name": "ralph-beta",
+            "file": "ralph-beta.md",
+            "summary": "Ralph Beta 角色：模拟真实用户并作为最终通过 gate"
+        }
     ]
 }
