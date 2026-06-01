@@ -1,0 +1,11 @@
+## 2026-06-01T00:00:00Z product
+- US-001: scoped. Root cause is hardcoded "AP DISCONNECT" in panel.tsx:143; StepState.tail already has the data. Fix is single-file (panel.tsx). Required stages: developer, tester, beta. Handoff written.
+
+## 2026-06-01T00:10:00Z developer
+- US-001: implemented. Added `errorTail()` helper in panel.tsx that strips ANSI, extracts last meaningful line from step.tail, truncates to 30 chars, falls back to "FAILED". Replaced hardcoded "AP DISCONNECT". tsc + build passed. Changeset created (patch). Stage advanced to tester.
+
+## 2026-06-01T00:20:00Z tester
+- US-001: verified. All acceptance criteria pass. "AP DISCONNECT" removed from production source; errorTail handles empty/single/multi-line/long/ANSI tails correctly. tsc + build pass. Changeset present. Stage advanced to beta.
+
+## 2026-06-01T00:30:00Z beta
+- US-001: PASS. Verified from user perspective: build succeeds, changeset is accurate, "AP DISCONNECT" fully removed from production source, errorTail handles all edge cases. Patch-level change, safe to ship. Story committed.

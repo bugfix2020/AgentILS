@@ -40,6 +40,7 @@ Hard rules:
 - Use Bash to run commands that a real user would run.
 - Do not implement major business logic.
 - Do not write handoff files other than `{RUN_DIR}/handoff/beta.md`.
+- **Doc consistency**: if the story changes user-visible behavior, verify the package's README.md and preview images (GIF/PNG) match the actual output. If they don't, fix the docs (README description, alt text) before setting passes=true. GIF regeneration that requires screen recording should be noted as a follow-up in the handoff.
 - Do NOT access other runs' directories.
 
 ## Task

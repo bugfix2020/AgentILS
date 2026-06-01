@@ -32,6 +32,9 @@ const C = {
     rst: '\x1b[0m',
 } as const
 
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g
+
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
 
 function visLen(s: string): number {
@@ -140,7 +143,7 @@ function stepRow(step: StepState, frame: number): string {
     const left = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
     let right = ''
     if (step.status === 'failed') {
-        right = `${C.amb}AP DISCONNECT${C.rst}`
+        right = `${C.red}FAILED${C.rst}`
     } else if (
         (step.status === 'running' || step.status === 'passed') &&
         typeof step.count === 'number' &&
@@ -167,6 +170,17 @@ function footerLine(failed: boolean): string {
     return rowLine(`  ${C.brt}T.O CONFIG  .  .  .  .  .  .  .  .  .  NORMAL${C.rst}`)
 }
 
+/**
+ * Extract the full error output from a failed step's tail for display below the
+ * panel. Strips ANSI escapes and returns up to 20 meaningful lines.
+ */
+function errorDetail(step: StepState): string[] {
+    if (!step.tail) return []
+    const stripped = step.tail.replace(ANSI_RE, '')
+    const lines = stripped.split('\n').filter((l) => l.trim().length > 0)
+    return lines.slice(-20)
+}
+
 export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React.JSX.Element {
     const lines: string[] = [...headerLines()]
     for (const step of steps) {
@@ -177,11 +191,29 @@ export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React
     }
     lines.push(BOT)
 
+    const failedStep = steps.find((s) => s.status === 'failed')
+    const errLines = failedStep ? errorDetail(failedStep) : []
+
     return (
         <Box flexDirection="column">
             {lines.map((l, i) => (
                 <Text key={i}>{l}</Text>
             ))}
+            {failedStep && (
+                <Box flexDirection="column" marginTop={1}>
+                    <Text>
+                        {C.red}[FAILED] {failedStep.label}
+                        {failedStep.exitCode != null ? ` (exit ${failedStep.exitCode})` : ''}
+                        {C.rst}
+                    </Text>
+                    {errLines.map((line, li) => (
+                        <Text key={li}>
+                            {C.gry} {line}
+                            {C.rst}
+                        </Text>
+                    ))}
+                </Box>
+            )}
         </Box>
     )
 }

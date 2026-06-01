@@ -41,6 +41,7 @@ Hard rules:
 - Do not mark `passes=true` — only the beta subagent may do this.
 - Do not commit — only the beta subagent may commit.
 - Do NOT access other runs' directories.
+- **Doc consistency**: if the story changes user-visible behavior, verify the package's README.md and preview images (GIF/PNG) reflect the new behavior. If the developer missed this, send work back to developer with the specific gap documented.
 
 ## Stage Advancement
 

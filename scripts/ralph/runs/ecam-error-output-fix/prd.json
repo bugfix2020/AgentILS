@@ -1,0 +1,28 @@
+{
+    "id": "US-001",
+    "title": "ECAM pre-commit panel: show actual error output instead of AP DISCONNECT",
+    "description": "When a pre-commit step fails (e.g., branch check, lint-staged), the ECAM panel shows 'AP DISCONNECT' instead of the actual error message from the subprocess. The panel should display the tail of the subprocess output so the developer can see what went wrong without re-running the command manually.",
+    "branch": "fix/ecam-error-output",
+    "acceptanceCriteria": [
+        "When a pre-commit step fails, the ECAM panel shows the last few lines of subprocess stderr/stdout",
+        "The actual error message (e.g., 'on protected branch main') is visible in the panel",
+        "The 'AP DISCONNECT' text is replaced with meaningful error content",
+        "The panel still shows the step label, status indicator, and duration",
+        "Typecheck passes for packages/quality-gate",
+        "Build passes for packages/quality-gate"
+    ],
+    "priority": 1,
+    "stage": "done",
+    "requiredStages": ["developer", "tester", "beta"],
+    "passes": true,
+    "blocked": false,
+    "handoff": {
+        "product": true,
+        "developer": true,
+        "ops": false,
+        "tester": true,
+        "contributor": false,
+        "beta": true
+    },
+    "notes": "The root cause is likely in packages/quality-gate/src/precommit/panel.tsx — the failed step rendering does not show the tail output from StepState."
+}

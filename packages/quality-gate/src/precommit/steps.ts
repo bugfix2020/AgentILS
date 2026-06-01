@@ -82,7 +82,7 @@ export const DRY_RUN_STEPS: StepDefinition[] = [
 
 /**
  * Dry-run demo pipeline that intentionally fails the second step so users can
- * preview the AP DISC / COMMIT BLOCKED failure state.
+ * preview the COMMIT BLOCKED failure state with realistic lint error output.
  */
 export const DRY_RUN_FAIL_STEPS: StepDefinition[] = [
     {
@@ -90,14 +90,52 @@ export const DRY_RUN_FAIL_STEPS: StepDefinition[] = [
         argv: dryArgv(900, 'sync ok'),
     },
     {
-        label: 'GENERATE FLOWCHARTS',
-        argv: dryArgv(1200, 'flowcharts FAIL', 1),
+        label: 'LINT-STAGED STAGED FILES',
+        argv: lintFailArgv(),
     },
     {
-        label: 'LINT-STAGED STAGED FILES',
-        argv: dryArgv(1000, 'lint-staged ok'),
+        label: 'TYPECHECK (TURBO CACHED)',
+        argv: dryArgv(1000, 'typecheck ok'),
     },
 ]
+
+/**
+ * Build an argv that simulates a lint-staged failure with realistic ESLint error
+ * output. The panel will show the last meaningful line (e.g. "no-unused-vars")
+ * in the error tail instead of a generic placeholder.
+ */
+function lintFailArgv(): { command: string; args: string[] } {
+    const snippet = `
+        const lines = [
+            '[1/3] packages/quality-gate/src/precommit/panel.tsx',
+            '[2/3] packages/quality-gate/src/precommit/runner.tsx',
+            '[3/3] packages/logger/src/browser.ts',
+            '',
+            '/Users/dev/AgentILS/packages/logger/src/browser.ts',
+            '  18:5  warning  Unexpected console statement  no-console',
+            '  42:7  error    \\'healthRetryTimer\\' is defined but never used  no-unused-vars',
+            '',
+            '/Users/dev/AgentILS/packages/quality-gate/src/precommit/panel.tsx',
+            '  91:14 error  \\'StepState\\' is defined but never used  no-unused-vars',
+            '',
+            '✖ 2 problems (1 error, 1 warning)',
+            '',
+            '  42:7  error  \\'healthRetryTimer\\' is defined but never used  no-unused-vars',
+        ];
+        let i = 0;
+        const tick = () => {
+            if (i < lines.length) {
+                process.stderr.write(lines[i] + '\\n');
+                i++;
+                setTimeout(tick, 180);
+                return;
+            }
+            process.exit(1);
+        };
+        tick();
+    `
+    return { command: process.execPath, args: ['-e', snippet] }
+}
 
 /**
  * Build an argv that streams a few synthetic "processing" lines, sleeping
