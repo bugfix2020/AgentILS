@@ -83,7 +83,7 @@ Verify the product handoff before writing any code.
 
 - [ ] Story ID and title match `prd.json`
 - [ ] Acceptance criteria are specific and testable (not vague like "should work
-  well" or "be fast")
+      well" or "be fast")
 - [ ] At least one affected file/surface is listed
 - [ ] `requiredStages` are set in `prd.json`
 - [ ] Non-goals are defined (what NOT to do)
@@ -105,17 +105,17 @@ developer claims they did.
 ### Checklist
 
 - [ ] Only files listed in developer's "Files Changed" were modified (check
-  `git diff --name-only`)
+      `git diff --name-only`)
 - [ ] Each acceptance criterion has a corresponding code change or test
 - [ ] `pnpm --filter <pkg> exec tsc --noEmit` passes (typecheck)
 - [ ] `pnpm --filter <pkg> build` passes
 - [ ] Changeset exists if a publishable package was affected (check
-  `.changeset/config.json` ignore list)
+      `.changeset/config.json` ignore list)
 - [ ] No secrets hardcoded (grep source for `API_KEY`, `TOKEN`, `PASSWORD`,
-  `SECRET` patterns)
+      `SECRET` patterns)
 - [ ] Docs updated if behavior changed (README, instructions, preview images)
 - [ ] `git diff` matches developer's "Files Changed" list — no hidden or
-  unreported changes
+      unreported changes
 
 ### On Failure
 
@@ -140,7 +140,7 @@ tester's perspective.
 - [ ] New features are discoverable from user perspective
 - [ ] Error messages are clear and actionable
 - [ ] Ralph run history files complete (`prd.json`, `progress.txt`, all handoffs
-  for completed stages)
+      for completed stages)
 
 ### On Failure
 
