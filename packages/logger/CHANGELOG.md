@@ -1,5 +1,11 @@
 # @agent-ils/logger
 
+## 0.2.0
+
+### Minor Changes
+
+- e10159d: Add `open` option to `createBrowserLogger` for zero-config collector startup. Health probe now runs in background `setInterval` instead of synchronous per-call fetch. Log directory auto-creates `.gitignore` to prevent accidental commits.
+
 ## 0.1.2
 
 ### Patch Changes
