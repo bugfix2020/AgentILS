@@ -39,7 +39,7 @@ Task:
     - State: "Readback confirmed. Mission: define product requirements for story [ID]. Restrictions: read-only analysis, no source modifications. Output: handoff/product.md."
 1. **Branch check** (before any work):
     - Run `git branch --show-current` to get the current branch name.
-    - If the branch is `main`, `master`, `develop`, or `dev`: **STOP**. Tell the orchestrator to create a feature branch first (`git checkout -b <type>/<short-kebab>` from `main`).
+    - If the branch is `main` or `master`: **STOP**. Tell the orchestrator to create a feature branch first (`git checkout -b <type>/<short-kebab>` from `main`).
     - Read `{RUN_DIR}/prd.json` title and description to infer the expected branch type prefix:
         - New feature / capability → `feat/`
         - Bug fix → `fix/`

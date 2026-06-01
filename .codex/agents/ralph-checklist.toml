@@ -174,7 +174,7 @@ Verify documentation from a new-developer perspective.
 ### Checklist
 
 - [ ] README reflects actual CLI commands and options
-- [ ] CHANGELOG/changeset matches actual changes
+- [ ] Affected package CHANGELOG/changeset matches actual changes
 - [ ] Instructions reference correct file paths
 - [ ] No stale references to removed features
 - [ ] New packages appear in relevant package lists

@@ -24,7 +24,7 @@ Allowed files:
 - `{RUN_DIR}/handoff/{predecessor}.md` (determined by requiredStages)
 - `{RUN_DIR}/handoff/ops.md`
 - `.github/workflows/*.yml`
-- `.goreleaser*`
+- `packages/logger-collector/.goreleaser.yml`
 - `.changeset/*`
 - `.changeset/config.json`
 - `docs/developer/ci-release-pipeline.md` (read-only reference)

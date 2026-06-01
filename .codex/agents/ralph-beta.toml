@@ -51,7 +51,7 @@ Hard rules:
 4. Read the predecessor's handoff and `{RUN_DIR}/progress.txt`.
 5. Inspect `git diff` to see all accumulated changes for this story.
 6. Simulate user discovery and validation:
-    - Read CHANGELOG/release notes — what's new?
+    - Read the affected package's CHANGELOG/release notes — what's new?
     - Run build commands to verify a user can build: `pnpm build` or equivalent.
     - Run relevant CLI commands with `--help` to check output.
     - If binary tools exist: run them and check output/formatting.

@@ -5,7 +5,7 @@ an npm package release.
 
 ## Release Rules
 
-- New npm packages start at `0.0.1`.
+- New npm packages start at `0.0.0` in `package.json`; changesets bump to `0.0.1` on first release.
 - Tags always use the full npm package name plus version:
   `<full-npm-package-name>@<version>`.
 - Every publishable package must have a package-level `CHANGELOG.md`.

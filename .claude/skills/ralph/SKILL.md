@@ -182,7 +182,7 @@ in `docs/ai-workflows/profiles/npm-release.md`.
 
 For release work:
 
-- New npm packages start at `0.0.1`.
+- New npm packages start at `0.0.0` in `package.json`; changesets bump to `0.0.1` on first release.
 - Tags use `<full-npm-package-name>@<version>`.
 - Local verification is the main gate; CI/CD only backs it up.
 - If registry, `npx`/`dlx`, native asset, or GitHub Release behavior cannot be

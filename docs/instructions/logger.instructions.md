@@ -144,7 +144,7 @@ applyTo: 'packages/logger/**'
 ## 发布
 
 - 走 `chore/release-logger-<version>` 单独分支 + PR（参考 `npm-package-publish-checklist`）。
-- 当前 package version：`@agent-ils/logger@0.1.1`。
+- 当前 package version：`@agent-ils/logger@0.2.0`。
 
 ## 接手 checklist（< 2 分钟 onboard）
 

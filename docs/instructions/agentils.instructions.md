@@ -45,7 +45,7 @@
 
 6. **文档分层与归属（README vs docs vs 子包 instruction）。**
     - **README 面向用户**：仓库根 `README.md` + 各 npm 包 `packages/<name>/README.md`，回答"这是什么 / 怎么装 / 怎么用 / 给我看个 example"。**双语对**（`README.md` + `README.zh-CN.md` 互相 cross-link，PR #12 立规），任何用户可见行为变化必须双语同步。
-    - **docs 面向开发者**：`docs/instructions/*.instructions.md` + `docs/agentils/*.md` + `docs/flowcharts/*.md` 等，回答"内部为什么这么设计 / 边界在哪 / 数据流怎么走 / 怎么调试"。中文单文件即可。
+    - **docs 面向开发者**：`docs/instructions/*.instructions.md` + `docs/developer/*.md` + `docs/flowcharts/*.md` 等，回答"内部为什么这么设计 / 边界在哪 / 数据流怎么走 / 怎么调试"。中文单文件即可。
     - **`docs/instructions/agentils.instructions.md` 是总则**：只放跨包通用规则（核心原则、分支流、发布流程、术语表、本节这 6 条总则等）。**禁止下沉子包细节**——`packages/mcp` / `extensions/agentils-vscode` / `packages/cli` / `packages/quality-gate` / `packages/logger` 等的内部协议、API、目录结构、调试方式只能写在各自的 `<name>.instructions.md` 里。
     - **跨包关联只在子包文档里互相提及**：例如 `mcp.instructions.md` 里说"扩展通过 HTTP 连本服务"，`vscode-ext.instructions.md` 里说"thin bridge 不做业务，所有状态查 mcp"。总则只承认关联存在，不重复细节。
     - **尺度判断**：写一行内容前先问"这是面向用户的 how-to-use，还是面向开发者的 how-it-works？哪个包独有？"。如果是某个包独有的内部细节，立刻搬到子包 instruction；如果是用户可感知的对外行为，写 README。
@@ -64,14 +64,14 @@
 
 ## 仓库结构
 
-| 包               | 路径                                  | 角色                                                                                            |
-| ---------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **MCP 控制平面** | `packages/mcp`                        | 唯一状态机真值源；同进程暴露 HTTP（默认 `http://127.0.0.1:8788/mcp`）+ stdio 两种 MCP transport |
-| **VS Code 扩展** | `packages/extensions/agentils-vscode` | thin bridge：in-process 启动 mcp + WebView 渲染 + 注册 LM tool 给 Copilot                       |
-| **CLI 配置工具** | `packages/cli`                        | 仅做 VS Code 配置注入（`init` / `uninstall`，写 `.vscode/mcp.json` stdio 条目）                 |
-| **质量门**       | `packages/quality-gate`               | 独立可发布 npm 包：husky pre-commit 的 ECAM panel + 配置加载器                                  |
-| **结构化日志**   | `packages/logger`                     | 独立可发布 npm 包：Browser/Node SDK + 本地 JSONL 收集 + 查询 CLI                                |
-| **Webview**      | `apps/webview`                        | React WebView 产物，扩展加载；其消息合同是产品真值源                                            |
+| 包               | 路径                                  | 角色                                                                                        |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **MCP 控制平面** | `packages/mcp`                        | 唯一状态机真值源；同进程暴露 HTTP（默认 `http://127.0.0.1:8788`）+ stdio 两种 MCP transport |
+| **VS Code 扩展** | `packages/extensions/agentils-vscode` | thin bridge：in-process 启动 mcp + WebView 渲染 + 注册 LM tool 给 Copilot                   |
+| **CLI 配置工具** | `packages/cli`                        | 仅做 VS Code 配置注入（`init` / `uninstall`，写 `.vscode/mcp.json` stdio 条目）             |
+| **质量门**       | `packages/quality-gate`               | 独立可发布 npm 包：husky pre-commit 的 ECAM panel + 配置加载器                              |
+| **结构化日志**   | `packages/logger`                     | 独立可发布 npm 包：Browser/Node SDK + 本地 JSONL 收集 + 查询 CLI                            |
+| **Webview**      | `apps/webview`                        | React WebView 产物，扩展加载；其消息合同是产品真值源                                        |
 
 ## 核心原则
 
@@ -121,8 +121,8 @@ SSE 广播 + 视图层订阅（WebView / Copilot）
 ## 命名约定
 
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
-- npm 包名（**仅 quality-gate 和 logger 实际发布**）：`@agent-ils/quality-gate`、`@agent-ils/logger`。`@agent-ils/mcp` / `@agent-ils/cli` 是仓库内部 workspace 包，标了 `"private": true`，**不发 npm**。扩展 publisher：`bugfix2020`。
-- HTTP MCP 端点：默认 `http://127.0.0.1:8788/mcp`，可通过 `AGENTILS_HTTP_PORT` / `AGENTILS_HTTP_HOST` 覆盖。
+- npm 包名（**quality-gate、logger、workflow-sdk 实际发布**）：`@agent-ils/quality-gate`、`@agent-ils/logger`、`@agent-ils/workflow-sdk`。`@agent-ils/mcp` / `@agent-ils/cli` 是仓库内部 workspace 包，标了 `"private": true`，**不发 npm**。扩展 publisher：`agentils`。
+- HTTP MCP 端点：默认 `http://127.0.0.1:8788`，可通过 `ServerOptions.httpPort` 覆盖。
 
 ## 分支与 PR 流（Branch Flow，**强约束**）
 
@@ -199,7 +199,7 @@ GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 
 **核心原则**：
 
-1. **面向开发者的文档（`docs/instructions/`、`docs/skills/`、`docs/flowcharts/`、`docs/agentils/` 等）默认中文**。代码标识符、CLI 名、错误关键字保留英文。
+1. **面向开发者的文档（`docs/instructions/`、`docs/skills/`、`docs/flowcharts/`、`docs/developer/` 等）默认中文**。代码标识符、CLI 名、错误关键字保留英文。
 2. **面向外部用户的文档（root `README.md`、各 `packages/*/README.md`）必须中英双语**：`README.md`（英文） + `README.zh-CN.md`（中文）成对出现，文件顶部互相链接。
 3. **当面向用户的文档（如 root `README.md`）引入了一份 `docs/` 下文档，那份 `docs/` 文档也必须是双语对**：`xxx.md`（英文） + `xxx.zh-CN.md`（中文），顶部互链。
 4. **同步规则**：改 `xxx.md` 的同时必须改 `xxx.zh-CN.md`（反之亦然）。新加段落必须在两份里都加。**禁止只改一份就提交**。

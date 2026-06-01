@@ -68,7 +68,7 @@ packages/cli/templates/
     agentils.subagent.opus.agent.md
     ... (共 25 个；agent.md / prompt.md / chatmode.md 三种扩展名)
   sample-prompts/     # 2 个示例（agentils.agent.md / agentils.prompt.md）
-  config.json         # VS Code settings 预设（agentils.templates.contact / .feedback / .input ... 等数组）
+  config.json         # VS Code settings 预设（agentils.templates.contact / .feedback / .clarification / .global ... 等数组）
 ```
 
 模板必须满足：

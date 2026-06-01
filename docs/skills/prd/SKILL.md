@@ -64,7 +64,7 @@ user-invocable: true
 
 - [ ] 具体可验证的标准
 - [ ] Typecheck passes
-- [ ] [UI story 必须包含] Verify in browser using dev-browser skill
+- [ ] [UI story 必须包含] Verify in browser
 
 ## 功能需求
 
@@ -128,7 +128,7 @@ UI/UX 要求，mockup 链接。
 **每个 story 必须包含：**
 
 - `Typecheck passes`
-- UI story 额外包含：`Verify in browser using dev-browser skill`
+- UI story 额外包含：`Verify in browser`
 
 ---
 

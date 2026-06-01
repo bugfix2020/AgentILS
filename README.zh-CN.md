@@ -43,7 +43,11 @@ AgentILS/
 │   ├── extensions/agentils-vscode/  # VS Code 扩展：MCP 的薄桥接，承载 webview
 │   ├── cli/                # `agentils` CLI：跨 IDE 的 VS Code 配置注入器
 │   ├── logger/             # @agent-ils/logger —— 本地 JSONL 收集 + 读取（已发 npm）
-│   └── quality-gate/       # @agent-ils/quality-gate —— ECAM 风格 pre-commit 面板（已发 npm）
+│   ├── quality-gate/       # @agent-ils/quality-gate —— ECAM 风格 pre-commit 面板（已发 npm）
+│   ├── workflow-sdk/       # @agent-ils/workflow-sdk —— 框架无关工作流引擎（已发 npm）
+│   ├── logger-collector/   # Go 二进制，日志收集器
+│   ├── impact-scope/       # Diff 感知静态影响分析器
+│   └── devtools/           # 开发者工具
 ├── docs/
 │   ├── instructions/       # 各模块开发规则的真值源（Copilot/Codex 等读这里）
 │   ├── skills/             # 可被 agent 主动调用的 skill 卡片真值源
@@ -57,8 +61,9 @@ AgentILS/
 
 | 包名                                               | 当前版本 | 用途                                                       |
 | -------------------------------------------------- | -------- | ---------------------------------------------------------- |
-| [`@agent-ils/logger`](packages/logger)             | `0.0.2`  | 本地 JSONL logger，浏览器/Node SDK + CLI，给 AI 调试日志用 |
-| [`@agent-ils/quality-gate`](packages/quality-gate) | `0.0.2`  | A320-ECAM 风格的 pre-commit 流水线 + 项目初始化器          |
+| [`@agent-ils/logger`](packages/logger)             | `0.2.0`  | 本地 JSONL logger，浏览器/Node SDK + CLI，给 AI 调试日志用 |
+| [`@agent-ils/quality-gate`](packages/quality-gate) | `0.0.3`  | A320-ECAM 风格的 pre-commit 流水线 + 项目初始化器          |
+| [`@agent-ils/workflow-sdk`](packages/workflow-sdk) | `0.0.4`  | 框架无关工作流引擎 + React hook / Vue composable           |
 
 ## 快速上手（开发者）
 
@@ -92,11 +97,12 @@ pnpm run sync:instructions
 
 ## Pre-commit 流水线
 
-`.husky/pre-commit` 跑 `node packages/quality-gate/dist/precommit.js`。它会向上找 `agentils-gate.config.mjs`（仓库根有一份），在 ECAM TUI 里按顺序执行三步：
+`.husky/pre-commit` 跑 `node packages/quality-gate/dist/precommit.js`。它会向上找 `agentils-gate.config.mjs`（仓库根有一份），在 ECAM TUI 里按顺序执行四步：
 
-1. 同步 agent instructions（`scripts/dev/sync-agent-instructions.mjs --stage`）
-2. 生成流程图 PNG（`pnpm run generate:flowcharts`）
+1. 分支检查（`scripts/dev/check-branch-for-prd.mjs`）
+2. 同步 agent instructions（`scripts/dev/sync-agent-instructions.mjs --stage`）
 3. 跑带进度的 lint-staged（`scripts/dev/run-lint-staged-with-progress.mjs`）
+4. 类型检查（`pnpm -s typecheck`）
 
 任何一步失败都会拦下 commit。不要在没讨论的情况下用 `--no-verify` 绕过。
 

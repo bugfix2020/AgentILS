@@ -19,12 +19,14 @@
 Two GitHub Actions workflows, one job each, running on every push to `main` (and
 PRs for CI):
 
-| Workflow                                                               | When                      | Node                   | Job                                                                    |
-| ---------------------------------------------------------------------- | ------------------------- | ---------------------- | ---------------------------------------------------------------------- |
-| [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)           | every PR + push to `main` | 22 LTS                 | quality gate (build → typecheck → lint → sync check → changeset check) |
-| [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | push to `main` only       | 24 (npm 11.5+ bundled) | `changesets/action`: open Version PR or publish to npm via OIDC        |
+| Workflow                                                                     | When                      | Node                   | Job                                                                    |
+| ---------------------------------------------------------------------------- | ------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)                 | every PR + push to `main` | 22 LTS                 | quality gate (build → typecheck → lint → sync check → changeset check) |
+| [`.github/workflows/release.yml`](../../.github/workflows/release.yml)       | push to `main` only       | 24 (npm 11.5+ bundled) | `changesets/action`: open Version PR or publish to npm via OIDC        |
+| [`.github/workflows/go-ci.yml`](../../.github/workflows/go-ci.yml)           | every PR + push to `main` | —                      | Go lint + test (`gofmt`, `golangci-lint`)                              |
+| [`.github/workflows/go-release.yml`](../../.github/workflows/go-release.yml) | push to `main` only       | —                      | Go binary release via GoReleaser                                       |
 
-Publishable packages: **`@agent-ils/quality-gate`**, **`@agent-ils/logger`**.
+Publishable packages: **`@agent-ils/quality-gate`**, **`@agent-ils/logger`**, **`@agent-ils/workflow-sdk`**.
 Everything else (`@agent-ils/mcp`, `@agent-ils/cli`, `agentils-vscode`,
 `agentils-vscode-webview`) is `"private": true` and never reaches npm.
 
@@ -173,7 +175,7 @@ If you want a package to never reach npm, set `"private": true` in its
 We currently keep both:
 
 - `package.json` `"private": true` (the load-bearing rule)
-- `.changeset/config.json` `ignore: ["@agent-ils/mcp", "@agent-ils/cli"]`
+- `.changeset/config.json` `ignore: ["@agent-ils/mcp", "@agent-ils/cli", "agentils-vscode"]`
   (defense in depth, in case someone toggles `private` off without thinking)
 
 ### OIDC Trusted Publisher
