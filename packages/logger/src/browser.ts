@@ -22,6 +22,8 @@ export interface BrowserLoggerOptions {
     fileName?: string
     timeoutMs?: number
     onDeliveryError?: (error: unknown, payload: BrowserLogPayload) => void
+    /** When true, start health probing immediately and auto-spawn collector in Node. */
+    open?: boolean
 }
 
 export interface BrowserLogOverrideConfig {
@@ -88,68 +90,123 @@ const DEFAULT_ENDPOINT = 'http://127.0.0.1:12138'
 const DEFAULT_SOURCE = 'browser'
 const DEFAULT_TIMEOUT_MS = 5_000
 const HEALTH_TIMEOUT_MS = 2_000
-const HEALTH_RETRY_MS = 10_000
+const HEALTH_PROBE_INTERVAL_MS = 10_000
+
+const isNode = typeof process !== 'undefined' && !!process.versions?.node
 
 export function createBrowserLogger(options: BrowserLoggerOptions = {}): BrowserLogger {
     // Shared collector readiness state across all child loggers
     let collectorReady = false
-    let healthInFlight: Promise<boolean> | null = null
-    let healthRetryTimer: ReturnType<typeof setTimeout> | null = null
+    let probeInterval: ReturnType<typeof setInterval> | null = null
+    let probeStarted = false
+    let collectorSpawned = false
 
-    const probeHealth = (fetchImpl: typeof fetch, endpoint: string): Promise<boolean> => {
-        if (healthInFlight) return healthInFlight
-
-        healthInFlight = (async () => {
-            const controller = new AbortController()
-            const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS)
-            try {
-                const res = await fetchImpl(new URL('/api/health', withTrailingSlash(endpoint)), {
-                    method: 'GET',
-                    signal: controller.signal,
-                })
-                return res.ok
-            } catch {
-                return false
-            } finally {
-                clearTimeout(timeout)
-                healthInFlight = null
-            }
-        })()
-
-        return healthInFlight
-    }
-
-    const scheduleHealthRetry = (fetchImpl: typeof fetch, endpoint: string) => {
-        if (healthRetryTimer) return
-        healthRetryTimer = setTimeout(async () => {
-            healthRetryTimer = null
-            const ok = await probeHealth(fetchImpl, endpoint)
-            if (ok) {
-                collectorReady = true
-            } else {
-                scheduleHealthRetry(fetchImpl, endpoint)
-            }
-        }, HEALTH_RETRY_MS)
-    }
-
-    const ensureReady = async (fetchImpl: typeof fetch, endpoint: string): Promise<boolean> => {
-        if (collectorReady) return true
-        const ok = await probeHealth(fetchImpl, endpoint)
-        if (ok) {
-            collectorReady = true
-            if (healthRetryTimer) {
-                clearTimeout(healthRetryTimer)
-                healthRetryTimer = null
-            }
-            return true
+    const probeHealthOnce = async (fetchImpl: typeof fetch, endpoint: string): Promise<boolean> => {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS)
+        try {
+            const res = await fetchImpl(new URL('/api/health', withTrailingSlash(endpoint)), {
+                method: 'GET',
+                signal: controller.signal,
+            })
+            return res.ok
+        } catch {
+            return false
+        } finally {
+            clearTimeout(timeout)
         }
-        scheduleHealthRetry(fetchImpl, endpoint)
-        return false
     }
 
-    const markUnready = (fetchImpl: typeof fetch, endpoint: string) => {
+    const startBackgroundProbe = (fetchImpl: typeof fetch, endpoint: string) => {
+        if (probeInterval) return
+        // Run an immediate probe, then repeat on interval
+        probeHealthOnce(fetchImpl, endpoint).then((ok) => {
+            collectorReady = ok
+        })
+        probeInterval = setInterval(() => {
+            probeHealthOnce(fetchImpl, endpoint).then((ok) => {
+                collectorReady = ok
+            })
+        }, HEALTH_PROBE_INTERVAL_MS)
+    }
+
+    const markUnready = () => {
         collectorReady = false
-        scheduleHealthRetry(fetchImpl, endpoint)
+        // Background probe continues running; no need to restart it
+    }
+
+    const findCollectorBinary = async (): Promise<string | null> => {
+        if (!isNode) return null
+        try {
+            const { existsSync } = await import('node:fs')
+            const { homedir } = await import('node:os')
+            const { join, delimiter } = await import('node:path')
+
+            const isWindows = process.platform === 'win32'
+            const binaryName = isWindows ? 'agent-ils-logger.exe' : 'agent-ils-logger'
+
+            // 1. Check PATH
+            const pathEnv = process.env.PATH
+            if (pathEnv) {
+                for (const dir of pathEnv.split(delimiter)) {
+                    const candidate = join(dir, binaryName)
+                    if (existsSync(candidate)) return candidate
+                }
+            }
+
+            // 2. Check cache dir
+            const platformArch =
+                process.platform === 'darwin'
+                    ? process.arch === 'arm64'
+                        ? 'darwin-arm64'
+                        : 'darwin-amd64'
+                    : process.platform === 'linux'
+                      ? 'linux-amd64'
+                      : process.platform === 'win32'
+                        ? 'windows-amd64'
+                        : null
+            if (platformArch) {
+                const cachedName = isWindows
+                    ? `agent-ils-logger-${platformArch}.exe`
+                    : `agent-ils-logger-${platformArch}`
+                const cachePath = join(homedir(), '.agent-ils', 'bin', cachedName)
+                if (existsSync(cachePath)) return cachePath
+            }
+
+            return null
+        } catch {
+            return null
+        }
+    }
+
+    const spawnCollector = async () => {
+        if (!isNode || collectorSpawned) return
+        collectorSpawned = true
+        try {
+            const { execFile } = await import('node:child_process')
+            const binaryPath = await findCollectorBinary()
+            if (!binaryPath) {
+                // eslint-disable-next-line no-console
+                console.warn('[agent-ils-logger] collector binary not found, open=true has no effect')
+                return
+            }
+            const child = execFile(binaryPath, ['serve', '--silent'], {
+                env: { ...process.env, AGENT_ILS_INVOKER: 'open' },
+            })
+            child.unref()
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('[agent-ils-logger] failed to spawn collector:', err)
+        }
+    }
+
+    const ensureCollector = (fetchImpl: typeof fetch, endpoint: string) => {
+        if (probeStarted) return
+        probeStarted = true
+        startBackgroundProbe(fetchImpl, endpoint)
+        if (options.open) {
+            void spawnCollector()
+        }
     }
 
     const make = (baseOptions: BrowserLoggerOptions): BrowserLogger => {
@@ -169,9 +226,11 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
             const fetchImpl = baseOptions.fetchImpl ?? globalThis.fetch?.bind(globalThis)
             if (!fetchImpl) return { ok: false, error: 'fetch is not available in this environment' }
 
-            // Collector readiness check
-            const ready = await ensureReady(fetchImpl, endpoint)
-            if (!ready) return { ok: true, status: 204 }
+            // Ensure background probe is running (and collector spawned if open=true)
+            ensureCollector(fetchImpl, endpoint)
+
+            // Collector readiness check — synchronous, no fetch
+            if (!collectorReady) return { ok: true, status: 204 }
 
             const payload: BrowserLogPayload = {
                 ts: new Date().toISOString(),
@@ -197,14 +256,14 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                     baseOptions.timeoutMs ?? DEFAULT_TIMEOUT_MS,
                 )
                 if (!response.ok) {
-                    markUnready(fetchImpl, endpoint)
+                    markUnready()
                     const body = (await response.json().catch(() => undefined)) as BrowserLogResult | undefined
                     return { ok: false, status: response.status, error: body?.error ?? `HTTP ${response.status}` }
                 }
                 const body = (await response.json().catch(() => undefined)) as BrowserLogResult | undefined
                 return { ok: true, status: response.status, record: body?.record, records: body?.records }
             } catch (error) {
-                markUnready(fetchImpl, endpoint)
+                markUnready()
                 baseOptions.onDeliveryError?.(error, payload)
                 return { ok: false, error: error instanceof Error ? error.message : String(error) }
             }
@@ -226,6 +285,14 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                     },
                 })
             },
+        }
+    }
+
+    // If open=true, start probing immediately (don't wait for first log call)
+    if (options.open) {
+        const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis)
+        if (fetchImpl) {
+            ensureCollector(fetchImpl, options.endpoint ?? DEFAULT_ENDPOINT)
         }
     }
 

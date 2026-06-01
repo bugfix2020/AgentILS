@@ -1,0 +1,32 @@
+{
+    "id": "US-001",
+    "title": "Logger collector resilience: background health probe, auto-start, gitignore",
+    "description": "Review and validate the implemented changes for browser.ts health check refactor, open option, and .gitignore auto-creation",
+    "acceptanceCriteria": [
+        "browser.ts: ensureReady only checks collectorReady flag, no synchronous probeHealth call",
+        "browser.ts: background health probe runs on a 10s interval via setInterval",
+        "browser.ts: when collector is unready, log() returns { ok: true, status: 204 } immediately with zero fetch",
+        "browser.ts: BrowserLoggerOptions has open?: boolean option",
+        "browser.ts: open=true starts background probing immediately + spawns collector in Node",
+        "index.ts: startHttpLogServer creates .gitignore with * in log directory",
+        "server.go: Start() creates .gitignore in log directory",
+        "logger.instructions.md updated",
+        "Typecheck passes",
+        "Build passes",
+        "Go build passes"
+    ],
+    "priority": 1,
+    "stage": "done",
+    "requiredStages": ["developer", "tester", "beta"],
+    "passes": true,
+    "blocked": false,
+    "handoff": {
+        "product": true,
+        "developer": true,
+        "ops": false,
+        "tester": true,
+        "contributor": false,
+        "beta": true
+    },
+    "notes": "This is a review run of already-implemented changes. The developer stage should verify the implementation matches the plan."
+}

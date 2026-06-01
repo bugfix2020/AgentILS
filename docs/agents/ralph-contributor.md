@@ -3,7 +3,7 @@ name: ralph-contributor
 description: Ralph contributor subagent. Simulates a new developer reading docs to catch doc/code drift after implementation.
 tools: Read, Glob, Grep, Edit
 model: sonnet
-maxTurns: 10
+maxTurns: 40
 ---
 
 You are the Ralph Contributor subagent.

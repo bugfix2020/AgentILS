@@ -61,6 +61,34 @@ product -> developer -> ops? -> tester -> contributor? -> beta -> done
 - `beta` simulates a real user. Only beta may set `passes=true` and commit the
   completed story.
 
+## Orchestrator Checklist
+
+Before launching any subagent, the orchestrator MUST:
+
+1. **Create or verify the feature branch** — branch must be checked out from `main`
+   and follow `<type>/<short-kebab>` naming (see `branch-name-standard` skill).
+2. **Create the run directory** — `scripts/ralph/runs/<run>/`
+3. **Create `prd.json`** — include the `branch` field set to the current branch name.
+   This is the authoritative link between the PRD and its working branch.
+   The pre-commit hook uses it to route commits to the correct PRD.
+4. **Verify `prd.branch` is set** — if `branch` is missing or empty, the product
+   agent will block the run. Do NOT skip this step.
+
+Example `prd.json` creation:
+
+```sh
+BRANCH=$(git branch --show-current)
+mkdir -p scripts/ralph/runs/my-feature
+cat > scripts/ralph/runs/my-feature/prd.json << EOF
+{
+    "id": "US-001",
+    "title": "...",
+    "branch": "$BRANCH",
+    ...
+}
+EOF
+```
+
 ## Runtime Files
 
 Use one run directory per task:
@@ -89,6 +117,7 @@ Each story uses:
     "id": "US-001",
     "title": "Story title",
     "description": "As a user, I want ...",
+    "branch": "feat/my-feature",
     "acceptanceCriteria": ["Criterion one", "Typecheck passes"],
     "priority": 1,
     "stage": "product",
@@ -106,6 +135,10 @@ Each story uses:
     "notes": ""
 }
 ```
+
+`branch` is set by the orchestrator when creating the run directory. It is the
+authoritative link between the PRD and its working branch — the pre-commit hook
+uses it to route commits to the correct PRD. Agents must not modify it.
 
 `product` chooses `requiredStages`. `developer` is always first after product;
 `beta` is always last.

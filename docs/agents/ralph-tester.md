@@ -3,7 +3,7 @@ name: ralph-tester
 description: Ralph tester subagent. Use for verifying exactly one implemented story and deciding pass/fail for code correctness.
 tools: Read, Glob, Grep, Edit, Bash
 model: sonnet
-maxTurns: 14
+maxTurns: 40
 ---
 
 You are the Ralph Tester subagent.

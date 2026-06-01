@@ -262,8 +262,11 @@ Common options:
 - `overrideKey`: when set and matching `window.$agentILS.logger.overrideKey`, force-enable logging even if `enabled: false`. Safe in SSR — no-ops when `window` is unavailable
 - `timeoutMs`: per-request timeout
 - `onDeliveryError`: callback when delivery fails
+- `open`: when `true`, start health probing immediately at construction time and auto-spawn the collector binary in Node environments (zero-config startup)
 
-**Collector readiness check**: the browser SDK probes `GET /api/health` before sending logs. If the collector is not running, logs are silently discarded (no 404 errors). On failure, health is retried every 10 s; on delivery error, readiness is reset and re-probed automatically.
+**Collector readiness check**: the browser SDK runs a background `setInterval` probe (`GET /api/health` every 10 s) independent of `log()` calls. When the collector is unready, `log()` returns `{ ok: true, status: 204 }` immediately with zero fetch calls — no CONNECTION_REFUSED errors. On delivery failure, readiness is reset and the background probe continues, so the logger self-heals automatically. Pass `open: true` to start probing (and auto-spawn the collector in Node) at construction time.
+
+**Log directory `.gitignore`**: the collector automatically creates a `.gitignore` with `*` in the log directory so log files are never accidentally committed.
 
 ## Node Writer API
 

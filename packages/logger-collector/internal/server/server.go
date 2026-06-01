@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -53,6 +54,14 @@ func (s *Server) Start(ctx context.Context, params banner.ServerParams, jsonOutp
 		if err != nil {
 			errCh <- fmt.Errorf("failed to listen on %s: %w", s.server.Addr, err)
 			return
+		}
+
+		// Prevent log directory from being committed
+		if mkErr := os.MkdirAll(s.LogDir, 0755); mkErr == nil {
+			gitignorePath := filepath.Join(s.LogDir, ".gitignore")
+			if _, statErr := os.Stat(gitignorePath); os.IsNotExist(statErr) {
+				_ = os.WriteFile(gitignorePath, []byte("*\n"), 0644)
+			}
 		}
 
 		endpoint := fmt.Sprintf("http://%s", s.server.Addr)
