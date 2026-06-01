@@ -35,6 +35,18 @@ Hard rules:
 
 Task:
 
+0. **Branch check** (before any work):
+    - Run `git branch --show-current` to get the current branch name.
+    - If the branch is `main`, `master`, `develop`, or `dev`: **STOP**. Tell the orchestrator to create a feature branch first (`git checkout -b <type>/<short-kebab>` from `main`).
+    - Read `{RUN_DIR}/prd.json` title and description to infer the expected branch type prefix:
+        - New feature / capability → `feat/`
+        - Bug fix → `fix/`
+        - Documentation only → `docs/`
+        - CI / build / tooling → `chore/` or `ci/`
+        - Refactor (no behavior change) → `refactor/`
+    - If the current branch name does not start with the expected prefix: **STOP**. Tell the orchestrator the branch name does not match the PRD work type and suggest the correct prefix.
+    - **Verify `branch` field exists in `{RUN_DIR}/prd.json`**: the orchestrator sets `prd.branch` when creating the run. If `prd.branch` is missing or empty, set `blocked=true` and ask the orchestrator to set it. Do NOT write or modify the `branch` field yourself — it is orchestrator-owned and read-only for agents.
+    - If no active PRD exists in the run directory, skip this check.
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=product`.
 3. Clarify product intent, acceptance criteria, non-goals, edge cases, and likely affected surfaces.

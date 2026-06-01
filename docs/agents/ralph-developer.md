@@ -37,6 +37,7 @@ Hard rules:
 - Do not update tester handoff; write only `{RUN_DIR}/handoff/developer.md`.
 - Do not rewrite architecture outside the selected story.
 - Do NOT access other runs' directories.
+- **Never write secrets**: do not hardcode API keys, tokens, passwords, or credentials in source code. Use environment variables or config files that are `.gitignore`d. If the story requires secret configuration, document the env var names in the handoff — never the values.
 
 Task:
 
@@ -49,12 +50,21 @@ Task:
     - package-specific lint if available
     - targeted tests if available
     - avoid full monorepo test runs unless necessary
-6. Write `{RUN_DIR}/handoff/developer.md`.
-7. Update the selected story in `{RUN_DIR}/prd.json`:
+6. **Changeset**: if the implementation modifies a publishable package (check `.changeset/config.json` for `ignore` list — packages NOT in ignore are publishable), create a changeset file under `.changeset/` with the appropriate bump level:
+    - `patch` — bug fix, internal refactor, no public API change
+    - `minor` — new feature, new option, behavior change
+    - `major` — breaking API change (removed export, renamed type, changed function signature)
+    - **Disambiguation**: when a change is both a fix AND adds new behavior, `minor` wins (new behavior is user-visible).
+    - **Pre-1.0 packages**: same rules apply. `0.x.y` → `0.x.(y+1)` for patch, `0.(x+1).0` for minor.
+    - **Validation**: after creating the changeset, verify the bump matches the actual diff — if you added a new export or option, it must be `minor` at minimum.
+    - Use a descriptive kebab-case filename (e.g., `.changeset/background-health-probe.md`).
+    - If multiple packages are affected, list them all in the changeset frontmatter.
+7. Write `{RUN_DIR}/handoff/developer.md`.
+8. Update the selected story in `{RUN_DIR}/prd.json`:
     - `handoff.developer = true`
     - `stage = <next stage from requiredStages>` (find "developer" in the list, set stage to the next one)
     - keep `passes = false`
-8. Append a compact developer summary to `{RUN_DIR}/progress.txt`.
+9. Append a compact developer summary to `{RUN_DIR}/progress.txt`.
 
 If product handoff is incomplete:
 

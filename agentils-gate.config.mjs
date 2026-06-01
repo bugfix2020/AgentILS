@@ -11,6 +11,10 @@
 export default {
     steps: [
         {
+            label: 'BRANCH CHECK',
+            cmd: 'node scripts/dev/check-branch-for-prd.mjs',
+        },
+        {
             label: 'SYNC COPILOT INSTRUCTIONS',
             cmd: 'node scripts/dev/sync-agent-instructions.mjs --stage',
         },
