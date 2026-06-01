@@ -61,6 +61,38 @@ product -> developer -> ops? -> tester -> contributor? -> beta -> done
 - `beta` simulates a real user. Only beta may set `passes=true` and commit the
   completed story.
 
+## Dispatch Protocol
+
+The orchestrator communicates with subagents in three phases, modeled after
+aviation TOWER ↔ PILOT communication:
+
+### Phase 1: Dispatch (ORCHESTRATOR → SUBAGENT)
+
+When launching a subagent, include these parameters in the prompt:
+
+```
+Clearance: <what to do>
+Working directory: <run dir>
+Restrictions: <read-only? allowed file scope?>
+Output: <handoff file path>
+```
+
+### Phase 2: Readback (SUBAGENT → ORCHESTRATOR)
+
+The subagent confirms understanding before starting work. This appears in the
+subagent's first output.
+
+### Phase 3: Completion (SUBAGENT → ORCHESTRATOR)
+
+The subagent reports completion with structured evidence.
+
+### Standard Checklists
+
+Each role has a **fixed, task-independent** verification checklist defined in
+`docs/agents/ralph-checklist.md`. The next role verifies against this standard,
+not against what the previous person wrote. See that file for the full
+checklists.
+
 ## Orchestrator Checklist
 
 Before launching any subagent, the orchestrator MUST:

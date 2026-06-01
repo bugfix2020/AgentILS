@@ -62,28 +62,31 @@ After completing your work, advance the stage dynamically:
 
 ## Task
 
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: verify documentation consistency for story [ID]. Restrictions: documentation files only, no source code. Output: handoff/contributor.md."
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=contributor`.
-3. Read the predecessor's handoff and `{RUN_DIR}/progress.txt`.
-4. Check `git diff --name-only` to see what files changed.
-5. Simulate new developer experience — read relevant docs as a newcomer:
+3. **Pre-flight check** — Read `docs/agents/ralph-checklist.md` → Contributor checklist. Verify each item against docs and code. If any item fails, document failures in handoff.
+4. Read the predecessor's handoff and `{RUN_DIR}/progress.txt`.
+5. Check `git diff --name-only` to see what files changed.
+6. Simulate new developer experience — read relevant docs as a newcomer:
     - Root `README.md`: does it mention the changed features/packages?
     - Package-level `README.md`: is it accurate for the changes?
     - `CHANGELOG.md`: is there an entry for this change?
     - `docs/instructions/*.instructions.md`: do instructions match current code?
     - `CLAUDE.md` entries: are they still accurate?
-6. Check for doc/code drift:
+7. Check for doc/code drift:
     - New CLI flags documented?
     - New packages listed in README?
     - Removed features cleaned from docs?
     - API changes reflected in instructions?
-7. Fix any documentation issues using Edit.
-8. Write `{RUN_DIR}/handoff/contributor.md`.
-9. Update the selected story in `{RUN_DIR}/prd.json`:
+8. Fix any documentation issues using Edit.
+9. Write `{RUN_DIR}/handoff/contributor.md`.
+10. Update the selected story in `{RUN_DIR}/prd.json`:
     - `handoff.contributor = true`
     - `stage = <next stage from requiredStages>`
     - keep `passes = false`
-10. Append a compact contributor summary to `{RUN_DIR}/progress.txt`.
+11. Append a compact contributor summary to `{RUN_DIR}/progress.txt`.
 
 If documentation is severely outdated (not just small omissions):
 
@@ -100,6 +103,20 @@ If documentation is severely outdated (not just small omissions):
 
 - id:
 - title:
+
+## Pre-flight Check
+
+Standard checklist from ralph-checklist.md → Contributor:
+
+- [x] README reflects actual CLI commands and options
+- [x] CHANGELOG/changeset matches actual changes
+- [x] Instructions reference correct file paths
+- [x] No stale references to removed features
+- [x] New packages appear in relevant package lists
+- [x] Preview images match current behavior
+
+Result: PASS
+Failures: None
 
 ## Doc Review Summary
 

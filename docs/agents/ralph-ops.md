@@ -51,21 +51,24 @@ After completing your work, advance the stage dynamically:
 
 ## Task
 
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: verify/update CI/CD config for story [ID]. Restrictions: CI/release config only, no source code. Output: handoff/ops.md."
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=ops`.
-3. Read the predecessor's handoff (determined by `requiredStages`) and `{RUN_DIR}/progress.txt`.
-4. Check `git diff --name-only` to see what files changed.
-5. Determine if CI/release config changes are needed:
+3. **Pre-flight check** — Read `docs/agents/ralph-checklist.md` → Ops checklist. Verify each item. If any item fails, document failures in handoff.
+4. Read the predecessor's handoff (determined by `requiredStages`) and `{RUN_DIR}/progress.txt`.
+5. Check `git diff --name-only` to see what files changed.
+6. Determine if CI/release config changes are needed:
     - If Go binary added/renamed → check/update `.goreleaser*` and `.github/workflows/go-release.yml`.
     - If publishable npm package added/modified → add a `.changeset/*.md` entry.
     - If build scripts or tooling changed → check `.github/workflows/ci.yml` and `.github/workflows/release.yml`.
     - If no CI impact → skip all edits and write minimal handoff.
-6. Write `{RUN_DIR}/handoff/ops.md`.
-7. Update the selected story in `{RUN_DIR}/prd.json`:
+7. Write `{RUN_DIR}/handoff/ops.md`.
+8. Update the selected story in `{RUN_DIR}/prd.json`:
     - `handoff.ops = true`
     - `stage = <next stage from requiredStages>`
     - keep `passes = false`
-8. Append a compact ops summary to `{RUN_DIR}/progress.txt`.
+9. Append a compact ops summary to `{RUN_DIR}/progress.txt`.
 
 If CI config requires a fundamentally different approach (e.g., entirely new publish pipeline):
 
@@ -82,6 +85,18 @@ If CI config requires a fundamentally different approach (e.g., entirely new pub
 
 - id:
 - title:
+
+## Pre-flight Check
+
+Standard checklist from ralph-checklist.md → Ops:
+
+- [x] Changeset bump level matches actual change scope
+- [x] Workflow triggers cover changed file paths
+- [x] GoReleaser config includes new binaries if applicable
+- [x] No hardcoded versions that should be dynamic
+
+Result: PASS
+Failures: None
 
 ## CI/CD Changes
 

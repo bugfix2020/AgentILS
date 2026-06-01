@@ -48,30 +48,33 @@ Hard rules:
 
 ## Task
 
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: validate story [ID] from user perspective. Restrictions: read-only UX verification, no business logic changes. Output: handoff/beta.md."
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=beta`.
-3. Read the predecessor's handoff and `{RUN_DIR}/progress.txt`.
-4. Inspect `git diff` to see all accumulated changes for this story.
-5. Simulate user discovery and validation:
+3. **Pre-flight check** — Read `docs/agents/ralph-checklist.md` → Beta checklist. Verify each item against evidence (build output, docs, changeset). If any item fails, document failures in handoff and route back (developer for usability issues, product for fundamental issues).
+4. Read the predecessor's handoff and `{RUN_DIR}/progress.txt`.
+5. Inspect `git diff` to see all accumulated changes for this story.
+6. Simulate user discovery and validation:
     - Read CHANGELOG/release notes — what's new?
     - Run build commands to verify a user can build: `pnpm build` or equivalent.
     - Run relevant CLI commands with `--help` to check output.
     - If binary tools exist: run them and check output/formatting.
     - Verify documentation matches user experience (can a user actually follow the docs?).
     - Check that new features are discoverable from the user's perspective.
-6. Write `{RUN_DIR}/handoff/beta.md`.
-7. **If verification passes**:
+7. Write `{RUN_DIR}/handoff/beta.md`.
+8. **If verification passes**:
     - set `handoff.beta = true`
     - set `passes = true`
     - set `stage = "done"`
     - append PASS summary to `{RUN_DIR}/progress.txt`
     - **commit** all story changes with message: `feat: <story id> <story title>`
-8. **If verification fails (usability bug)**:
+9. **If verification fails (usability bug)**:
     - set `stage = "developer"`
     - keep `passes = false`
     - write failure details and required fixes to `{RUN_DIR}/handoff/beta.md`
     - append FAIL summary to `{RUN_DIR}/progress.txt`
-9. **If verification fails (fundamental issue)**:
+10. **If verification fails (fundamental issue)**:
     - set `stage = "product"`
     - keep `passes = false`
     - write the problem description to `{RUN_DIR}/handoff/beta.md`
@@ -86,6 +89,22 @@ Hard rules:
 
 - id:
 - title:
+
+## Pre-flight Check
+
+Standard checklist from ralph-checklist.md → Beta:
+
+- [x] Build succeeds from clean state
+- [x] CLI --help output matches documentation
+- [x] Changeset accurately describes the change
+- [x] README description matches actual behavior
+- [x] Preview images match actual output
+- [x] New features discoverable from user perspective
+- [x] Error messages clear and actionable
+- [x] Ralph run history files complete
+
+Result: PASS
+Failures: None
 
 ## User Experience Summary
 

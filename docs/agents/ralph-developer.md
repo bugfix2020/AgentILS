@@ -41,16 +41,19 @@ Hard rules:
 
 Task:
 
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: implement story [ID]. Restrictions: source files listed in product handoff only. Output: handoff/developer.md."
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=developer`.
-3. Read `{RUN_DIR}/handoff/product.md` and `{RUN_DIR}/progress.txt`.
-4. Implement the story.
-5. Run the minimum relevant checks available in this repo:
+3. **Pre-flight check** — Read `docs/agents/ralph-checklist.md` → Developer checklist. Verify each item against the product handoff. If any item fails, set `stage = "product"`, document failures in handoff, and STOP.
+4. Read `{RUN_DIR}/handoff/product.md` and `{RUN_DIR}/progress.txt`.
+5. Implement the story.
+6. Run the minimum relevant checks available in this repo:
     - package-specific typecheck if available
     - package-specific lint if available
     - targeted tests if available
     - avoid full monorepo test runs unless necessary
-6. **Changeset**: if the implementation modifies a publishable package (check `.changeset/config.json` for `ignore` list — packages NOT in ignore are publishable), create a changeset file under `.changeset/` with the appropriate bump level:
+7. **Changeset**: if the implementation modifies a publishable package (check `.changeset/config.json` for `ignore` list — packages NOT in ignore are publishable), create a changeset file under `.changeset/` with the appropriate bump level:
     - `patch` — bug fix, internal refactor, no public API change
     - `minor` — new feature, new option, behavior change
     - `major` — breaking API change (removed export, renamed type, changed function signature)
@@ -59,12 +62,12 @@ Task:
     - **Validation**: after creating the changeset, verify the bump matches the actual diff — if you added a new export or option, it must be `minor` at minimum.
     - Use a descriptive kebab-case filename (e.g., `.changeset/background-health-probe.md`).
     - If multiple packages are affected, list them all in the changeset frontmatter.
-7. Write `{RUN_DIR}/handoff/developer.md`.
-8. Update the selected story in `{RUN_DIR}/prd.json`:
+8. Write `{RUN_DIR}/handoff/developer.md`.
+9. Update the selected story in `{RUN_DIR}/prd.json`:
     - `handoff.developer = true`
     - `stage = <next stage from requiredStages>` (find "developer" in the list, set stage to the next one)
     - keep `passes = false`
-9. Append a compact developer summary to `{RUN_DIR}/progress.txt`.
+10. Append a compact developer summary to `{RUN_DIR}/progress.txt`.
 
 If product handoff is incomplete:
 
@@ -87,6 +90,21 @@ If implementation is blocked:
 
 - id:
 - title:
+
+## Pre-flight Check
+
+Standard checklist from ralph-checklist.md → Developer:
+
+- [x] Story ID and title match prd.json
+- [x] Acceptance criteria are specific and testable
+- [x] At least one affected file/surface is listed
+- [x] Required stages are set in prd.json
+- [x] Non-goals defined
+- [x] Edge cases identified
+- [x] No acceptance criterion conflicts with a non-goal
+
+Result: PASS
+Failures: None
 
 ## Files Changed
 

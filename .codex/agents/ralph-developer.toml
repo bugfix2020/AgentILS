@@ -39,10 +39,13 @@ Hard rules:
 
 Task:
 
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: implement story [ID]. Restrictions: source files listed in product handoff only. Output: handoff/developer.md."
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=developer`.
-3. Read `{RUN_DIR}/handoff/product.md` and `{RUN_DIR}/progress.txt`.
-4. Implement the story.
+3. **Pre-flight check** — Read `docs/agents/ralph-checklist.md` → Developer checklist. Verify each item against the product handoff. If any item fails, set `stage = "product"`, document failures in handoff, and STOP.
+4. Read `{RUN_DIR}/handoff/product.md` and `{RUN_DIR}/progress.txt`.
+5. Implement the story.
 5. Run the minimum relevant checks available in this repo:
     - package-specific typecheck if available
     - package-specific lint if available
@@ -85,6 +88,21 @@ If implementation is blocked:
 
 - id:
 - title:
+
+## Pre-flight Check
+
+Standard checklist from ralph-checklist.md → Developer:
+
+- [x] Story ID and title match prd.json
+- [x] Acceptance criteria are specific and testable
+- [x] At least one affected file/surface is listed
+- [x] Required stages are set in prd.json
+- [x] Non-goals defined
+- [x] Edge cases identified
+- [x] No acceptance criterion conflicts with a non-goal
+
+Result: PASS
+Failures: None
 
 ## Files Changed
 

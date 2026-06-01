@@ -47,11 +47,14 @@ After completing your work, advance the stage dynamically:
 
 ## Task
 
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: verify story [ID] implementation. Restrictions: targeted checks only, no business logic changes. Output: handoff/tester.md."
 1. Read `{RUN_DIR}/prd.json`.
 2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=tester`.
-3. Read the predecessor's handoff (determined by `requiredStages`) and `{RUN_DIR}/progress.txt`.
-4. Inspect `git diff`.
-5. Run relevant checks.
+3. **Pre-flight check** — Read `docs/agents/ralph-checklist.md` → Tester checklist. Verify each item against the developer handoff and `git diff`. If any item fails, document failures in handoff and route back (developer for implementation issues, product for requirement issues).
+4. Read the predecessor's handoff (determined by `requiredStages`) and `{RUN_DIR}/progress.txt`.
+5. Inspect `git diff`.
+6. Run relevant checks.
 6. Write `{RUN_DIR}/handoff/tester.md`.
 7. If verification passes:
     - set `handoff.tester = true`
@@ -78,6 +81,22 @@ After completing your work, advance the stage dynamically:
 
 - id:
 - title:
+
+## Pre-flight Check
+
+Standard checklist from ralph-checklist.md → Tester:
+
+- [x] Only files listed in developer handoff were changed
+- [x] Each acceptance criterion has corresponding code change
+- [x] Typecheck passes
+- [x] Build passes
+- [x] Changeset exists if publishable package affected
+- [x] No secrets hardcoded
+- [x] Docs updated if behavior changed
+- [x] git diff matches developer's Files Changed list
+
+Result: PASS
+Failures: None
 
 ## Verification Summary
 
