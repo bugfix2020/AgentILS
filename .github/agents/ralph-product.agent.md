@@ -35,7 +35,9 @@ Hard rules:
 
 Task:
 
-0. **Branch check** (before any work):
+0. **Readback** — After receiving the dispatch, confirm understanding before any work:
+    - State: "Readback confirmed. Mission: define product requirements for story [ID]. Restrictions: read-only analysis, no source modifications. Output: handoff/product.md."
+1. **Branch check** (before any work):
     - Run `git branch --show-current` to get the current branch name.
     - If the branch is `main`, `master`, `develop`, or `dev`: **STOP**. Tell the orchestrator to create a feature branch first (`git checkout -b <type>/<short-kebab>` from `main`).
     - Read `{RUN_DIR}/prd.json` title and description to infer the expected branch type prefix:
@@ -48,9 +50,9 @@ Task:
     - **Verify `branch` field exists in `{RUN_DIR}/prd.json`**: the orchestrator sets `prd.branch` when creating the run. If `prd.branch` is missing or empty, set `blocked=true` and ask the orchestrator to set it. Do NOT write or modify the `branch` field yourself — it is orchestrator-owned and read-only for agents.
     - If no active PRD exists in the run directory, skip this check.
 1. Read `{RUN_DIR}/prd.json`.
-2. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=product`.
-3. Clarify product intent, acceptance criteria, non-goals, edge cases, and likely affected surfaces.
-4. **Assess story complexity and set `requiredStages`**:
+1. Select the highest-priority story where `passes=false`, `blocked=false`, and `stage=product`.
+1. Clarify product intent, acceptance criteria, non-goals, edge cases, and likely affected surfaces.
+1. **Assess story complexity and set `requiredStages`**:
     - Evaluate what types of changes this story needs (code, CI, docs, user-facing).
     - Set `requiredStages` accordingly:
         - Tiny (README typo, config tweak): `["developer", "beta"]`
@@ -58,13 +60,13 @@ Task:
         - Standard (new feature with CI changes): `["developer", "ops", "tester", "beta"]`
         - Full (new feature + doc updates): `["developer", "ops", "tester", "contributor", "beta"]`
     - `"beta"` is always last. `"developer"` is always first. `"product"` is never in the list (already running).
-5. Write `{RUN_DIR}/handoff/product.md`.
-6. Update the selected story in `{RUN_DIR}/prd.json`:
+1. Write `{RUN_DIR}/handoff/product.md`.
+1. Update the selected story in `{RUN_DIR}/prd.json`:
     - `handoff.product = true`
     - `stage = "developer"` (always the first stage after product)
     - `requiredStages = <assessed array>`
     - keep `passes = false`
-7. Append a compact product summary to `{RUN_DIR}/progress.txt`.
+1. Append a compact product summary to `{RUN_DIR}/progress.txt`.
 
 If requirements cannot be clarified without human input:
 

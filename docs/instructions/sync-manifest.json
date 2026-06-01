@@ -65,6 +65,11 @@
     ],
     "agents": [
         {
+            "name": "ralph-checklist",
+            "file": "ralph-checklist.md",
+            "summary": "Ralph 标准检查单：每个角色的固定接收检查项（任务无关）"
+        },
+        {
             "name": "ralph-product",
             "file": "ralph-product.md",
             "summary": "Ralph Product 角色：澄清目标、验收标准、非目标和 requiredStages"
