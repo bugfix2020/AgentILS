@@ -42,24 +42,6 @@ function visLen(s: string): number {
     return s.replace(/\x1b\[[0-9;]*m/g, '').length
 }
 
-/** Maximum visible width for the error tail shown on the right of a failed step row. */
-const ERR_TAIL_MAX = 30
-
-/**
- * Extract the last meaningful line from `step.tail`, strip ANSI escapes,
- * and truncate to `ERR_TAIL_MAX` visible characters.  Returns "FAILED" if
- * tail is empty / undefined.
- */
-function errorTail(step: StepState): string {
-    if (!step.tail) return 'FAILED'
-    const stripped = step.tail.replace(ANSI_RE, '')
-    const lines = stripped.split('\n').filter((l) => l.trim().length > 0)
-    const last = lines[lines.length - 1]?.trim()
-    if (!last) return 'FAILED'
-    if (last.length <= ERR_TAIL_MAX) return last
-    return last.slice(0, ERR_TAIL_MAX - 1) + '\u2026'
-}
-
 function pad(s: string, w: number): string {
     return s + ' '.repeat(Math.max(0, w - visLen(s)))
 }
@@ -161,7 +143,7 @@ function stepRow(step: StepState, frame: number): string {
     const left = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
     let right = ''
     if (step.status === 'failed') {
-        right = `${C.amb}${errorTail(step)}${C.rst}`
+        right = `${C.red}FAILED${C.rst}`
     } else if (
         (step.status === 'running' || step.status === 'passed') &&
         typeof step.count === 'number' &&
@@ -188,6 +170,17 @@ function footerLine(failed: boolean): string {
     return rowLine(`  ${C.brt}T.O CONFIG  .  .  .  .  .  .  .  .  .  NORMAL${C.rst}`)
 }
 
+/**
+ * Extract the full error output from a failed step's tail for display below the
+ * panel. Strips ANSI escapes and returns up to 20 meaningful lines.
+ */
+function errorDetail(step: StepState): string[] {
+    if (!step.tail) return []
+    const stripped = step.tail.replace(ANSI_RE, '')
+    const lines = stripped.split('\n').filter((l) => l.trim().length > 0)
+    return lines.slice(-20)
+}
+
 export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React.JSX.Element {
     const lines: string[] = [...headerLines()]
     for (const step of steps) {
@@ -198,10 +191,28 @@ export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React
     }
     lines.push(BOT)
 
+    // Render error details below the panel box for failed steps
+    const failedSteps = steps.filter((s) => s.status === 'failed')
+
     return (
         <Box flexDirection="column">
             {lines.map((l, i) => (
                 <Text key={i}>{l}</Text>
+            ))}
+            {failedSteps.map((step, idx) => (
+                <Box key={`err-${idx}`} flexDirection="column" marginTop={1}>
+                    <Text>
+                        {C.red}[FAILED] {step.label}
+                        {step.exitCode != null ? ` (exit ${step.exitCode})` : ''}
+                        {C.rst}
+                    </Text>
+                    {errorDetail(step).map((line, li) => (
+                        <Text key={li}>
+                            {C.gry} {line}
+                            {C.rst}
+                        </Text>
+                    ))}
+                </Box>
             ))}
         </Box>
     )
