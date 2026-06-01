@@ -15,7 +15,7 @@ export default {
             cmd: 'node scripts/dev/check-branch-for-prd.mjs',
         },
         {
-            label: 'SYNC COPILOT INSTRUCTIONS',
+            label: 'SYNC ALL AGENT INSTRUCTIONS',
             cmd: 'node scripts/dev/sync-agent-instructions.mjs --stage',
         },
         {

@@ -1,0 +1,26 @@
+{
+    "id": "US-001",
+    "title": "Rename sync step label to reflect all agents",
+    "description": "As a developer, I want the pre-commit pipeline step name to accurately reflect that it syncs all three agents (Copilot, Claude Code, Codex), not just Copilot.",
+    "branch": "chore/rename-sync-step-label",
+    "acceptanceCriteria": [
+        "Step label changed from 'SYNC COPILOT INSTRUCTIONS' to 'SYNC ALL AGENT INSTRUCTIONS'",
+        "Script command unchanged (node scripts/dev/sync-agent-instructions.mjs --stage)",
+        "pnpm run sync:instructions still works correctly",
+        "No other files modified"
+    ],
+    "priority": 2,
+    "stage": "beta",
+    "requiredStages": ["developer", "tester"],
+    "passes": true,
+    "blocked": false,
+    "handoff": {
+        "product": true,
+        "developer": true,
+        "ops": false,
+        "tester": true,
+        "contributor": false,
+        "beta": true
+    },
+    "notes": "Simple rename task. User chose option A (simple rename) over splitting into separate steps."
+}
