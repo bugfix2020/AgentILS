@@ -32,11 +32,32 @@ const C = {
     rst: '\x1b[0m',
 } as const
 
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g
+
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
 
 function visLen(s: string): number {
     // eslint-disable-next-line no-control-regex
     return s.replace(/\x1b\[[0-9;]*m/g, '').length
+}
+
+/** Maximum visible width for the error tail shown on the right of a failed step row. */
+const ERR_TAIL_MAX = 30
+
+/**
+ * Extract the last meaningful line from `step.tail`, strip ANSI escapes,
+ * and truncate to `ERR_TAIL_MAX` visible characters.  Returns "FAILED" if
+ * tail is empty / undefined.
+ */
+function errorTail(step: StepState): string {
+    if (!step.tail) return 'FAILED'
+    const stripped = step.tail.replace(ANSI_RE, '')
+    const lines = stripped.split('\n').filter((l) => l.trim().length > 0)
+    const last = lines[lines.length - 1]?.trim()
+    if (!last) return 'FAILED'
+    if (last.length <= ERR_TAIL_MAX) return last
+    return last.slice(0, ERR_TAIL_MAX - 1) + '\u2026'
 }
 
 function pad(s: string, w: number): string {
@@ -140,7 +161,7 @@ function stepRow(step: StepState, frame: number): string {
     const left = `  ${C.grn}[${C.rst}${indicator}${C.grn}]${C.rst} ${label}`
     let right = ''
     if (step.status === 'failed') {
-        right = `${C.amb}AP DISCONNECT${C.rst}`
+        right = `${C.amb}${errorTail(step)}${C.rst}`
     } else if (
         (step.status === 'running' || step.status === 'passed') &&
         typeof step.count === 'number' &&

@@ -1,0 +1,32 @@
+{
+    "id": "US-001",
+    "title": "Logger collector resilience: background health probe, auto-start, gitignore",
+    "description": "As a developer using @agent-ils/logger, I want the browser logger to not synchronously probe health on every log call when the collector is down, to auto-start the collector with an `open` option, and to have .gitignore auto-created in the log directory.",
+    "acceptanceCriteria": [
+        "browser.ts: ensureReady only checks collectorReady flag, no synchronous probeHealth call",
+        "browser.ts: background health probe runs on a 10s interval independently of log calls",
+        "browser.ts: when collector is unready, log() returns { ok: true, status: 204 } immediately with zero fetch calls",
+        "browser.ts: when postLog fails, markUnready sets collectorReady=false, background probe continues",
+        "browser.ts: BrowserLoggerOptions gains `open?: boolean` option",
+        "browser.ts: when open=true, background probing starts immediately on logger creation (not waiting for first log call)",
+        "browser.ts: when open=true and running in Node env, spawn the Go collector binary as child process",
+        "index.ts: startHttpLogServer creates .gitignore with `*` in the log directory after mkdir",
+        "Go collector server.go: create .gitignore in log directory on startup",
+        "logger.instructions.md updated to reflect new behavior",
+        "Typecheck passes for packages/logger"
+    ],
+    "priority": 1,
+    "stage": "developer",
+    "requiredStages": ["developer", "tester", "contributor", "beta"],
+    "passes": false,
+    "blocked": false,
+    "handoff": {
+        "product": true,
+        "developer": false,
+        "ops": false,
+        "tester": false,
+        "contributor": false,
+        "beta": false
+    },
+    "notes": "User explicitly requested these 3 features. The health check fix is the most critical - current behavior causes CONNECTION_REFUSED on every log call when collector is down."
+}
