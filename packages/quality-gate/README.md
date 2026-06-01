@@ -230,9 +230,9 @@ The package also installs a second bin, `agentils-precommit-gate`, which renders
 </p>
 
 <p align="center">
-  <img alt="error pipeline (a step fails)" src="https://raw.githubusercontent.com/bugfix2020/AgentILS/main/packages/quality-gate/preview/error.gif" width="640">
+  <img alt="error pipeline (a step fails, full error output shown below the panel)" src="https://raw.githubusercontent.com/bugfix2020/AgentILS/main/packages/quality-gate/preview/error.gif" width="640">
   <br>
-  <em>Failure path: the failing step turns red, shows the tail of the subprocess output (the actual error message), and the run exits non-zero.</em>
+  <em>Failure path: the failing step turns red, the panel shows COMMIT BLOCKED, and the full error output (lint errors with line numbers, file paths, and rule names) is rendered below the panel box.</em>
 </p>
 
 Wire it into Husky:

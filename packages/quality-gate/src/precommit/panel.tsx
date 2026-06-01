@@ -191,29 +191,29 @@ export function EcamPanel({ steps, frame, done, failed }: EcamPanelProps): React
     }
     lines.push(BOT)
 
-    // Render error details below the panel box for failed steps
-    const failedSteps = steps.filter((s) => s.status === 'failed')
+    const failedStep = steps.find((s) => s.status === 'failed')
+    const errLines = failedStep ? errorDetail(failedStep) : []
 
     return (
         <Box flexDirection="column">
             {lines.map((l, i) => (
                 <Text key={i}>{l}</Text>
             ))}
-            {failedSteps.map((step, idx) => (
-                <Box key={`err-${idx}`} flexDirection="column" marginTop={1}>
+            {failedStep && (
+                <Box flexDirection="column" marginTop={1}>
                     <Text>
-                        {C.red}[FAILED] {step.label}
-                        {step.exitCode != null ? ` (exit ${step.exitCode})` : ''}
+                        {C.red}[FAILED] {failedStep.label}
+                        {failedStep.exitCode != null ? ` (exit ${failedStep.exitCode})` : ''}
                         {C.rst}
                     </Text>
-                    {errorDetail(step).map((line, li) => (
+                    {errLines.map((line, li) => (
                         <Text key={li}>
                             {C.gry} {line}
                             {C.rst}
                         </Text>
                     ))}
                 </Box>
-            ))}
+            )}
         </Box>
     )
 }

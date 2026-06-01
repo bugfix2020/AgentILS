@@ -34,14 +34,17 @@ if (!name || !PRESETS[name]) {
 const argv = PRESETS[name]
 
 const cols = 70
-const rows = 22
+const rows = 36
+
+const spawnEnv = { ...process.env, FORCE_COLOR: '1', NODE_NO_WARNINGS: '1' }
+delete spawnEnv.NO_COLOR
 
 const ptyProcess = pty.spawn(argv[0], argv.slice(1), {
     name: 'xterm-256color',
     cols,
     rows,
     cwd: repoRoot,
-    env: { ...process.env, FORCE_COLOR: '1' },
+    env: spawnEnv,
 })
 
 const records = []
@@ -58,11 +61,11 @@ ptyProcess.onData((data) => {
 })
 
 ptyProcess.onExit(({ exitCode }) => {
-    // Hold the last frame visible for a moment by extending the previous frame's delay.
-    if (records.length > 0) records[records.length - 1].delay += 1500
-
+    const normalizedRecords = normalizeRecords(records)
+    // Hold the last frame visible for a moment.
+    if (normalizedRecords.length > 0) normalizedRecords[normalizedRecords.length - 1].delay += 1500
     const yml = renderYaml({
-        records,
+        records: normalizedRecords,
         config: {
             cols,
             rows,
@@ -71,7 +74,7 @@ ptyProcess.onExit(({ exitCode }) => {
     })
     const outFile = resolve(here, `${name}.yml`)
     writeFileSync(outFile, yml)
-    console.error(`\n[record.mjs] wrote ${outFile} (${records.length} frames, exit=${exitCode})`)
+    console.error(`\n[record.mjs] wrote ${outFile} (${normalizedRecords.length} frames, exit=${exitCode})`)
     process.exit(0)
 })
 
@@ -141,4 +144,33 @@ function renderYaml({ records, config }) {
         lines.push(`    content: ${yamlString(r.content)}`)
     }
     return lines.join('\n') + '\n'
+}
+
+function normalizeRecords(rawRecords) {
+    const filtered = rawRecords.filter((record) => record.content !== '\u001b[?25l' && record.content !== '\u001b[?25h')
+    const merged = []
+
+    for (const record of filtered) {
+        const previous = merged[merged.length - 1]
+        const isContinuation = record.delay <= 1 && !record.content.startsWith('\u001b[2K\u001b[1A')
+        if (previous && isContinuation) {
+            previous.delay += record.delay
+            previous.content += record.content
+            continue
+        }
+        merged.push({ delay: record.delay, content: record.content })
+    }
+
+    let start = 0
+    while (start < merged.length && !merged[start].content.startsWith('\u001b[2K\u001b[1A')) start += 1
+
+    const trimmed = start > 0 && start < merged.length ? merged.slice(start) : merged
+    if (
+        trimmed.length > 1 &&
+        trimmed[0].content.startsWith('\u001b[2K\u001b[1A') &&
+        trimmed[1].content.startsWith('\u001b[2K\u001b[1A')
+    ) {
+        return trimmed.slice(1)
+    }
+    return trimmed
 }
