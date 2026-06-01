@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from 'node:fs/promises'
+import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { join } from 'node:path'
 
@@ -203,6 +203,10 @@ export async function startHttpLogServer(options: HttpLogServerOptions = {}): Pr
     const logDir = options.logDir ?? defaultLogDir()
     const filePrefix = options.filePrefix ?? DEFAULT_LOG_FILE_PREFIX
     await mkdir(logDir, { recursive: true })
+    // Prevent log directory from being committed
+    await writeFile(join(logDir, '.gitignore'), '*\n', { flag: 'wx' }).catch(() => {
+        // file already exists — ignore
+    })
 
     const server = createServer((req, res) => {
         void handleLogRequest(req, res, logDir, filePrefix).catch((err) => {

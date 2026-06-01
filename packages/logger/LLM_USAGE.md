@@ -26,6 +26,7 @@ When the user says…
 | "Read logs in this time window"                | `npx @agent-ils/logger read --from <ISO> --to <ISO> --format json`                 |
 | "Why is endpoint X returning empty / failing?" | `read --tail 80 --format json`, then narrow with `--from / --to`, follow `traceId` |
 | "Add logging to my frontend"                   | Use Browser SDK (see below)                                                        |
+| "I want the logger to auto-start"              | Use Browser SDK with `open: true`; spawns collector automatically in Node          |
 | "Add logging to my Node / MCP / extension"     | Use Node SDK (see below)                                                           |
 | "I cannot install the SDK; just send raw HTTP" | Use the curl example below                                                         |
 
@@ -68,6 +69,7 @@ const logger = createBrowserLogger({
     defaultFields: { app: '<app-name>' },
     enabled: import.meta.env.DEV,
     overrideKey: 'optional-secret-key',
+    open: true, // auto-start collector in Node; start health probing immediately
 })
 
 await logger.info('api.response', { url: '/api/users', status: 200, empty: true }, { traceId: 'user-list-001' })
@@ -77,7 +79,9 @@ await logger.info('api.response', { url: '/api/users', status: 200, empty: true 
 
 **overrideKey**: when `overrideKey` is set and matches `window.$agentILS.logger.overrideKey`, logs are force-enabled even with `enabled: false`. No-ops when `window` is unavailable (SSR / Node).
 
-**Collector readiness**: the SDK probes `GET /api/health` before sending logs; silently discards if the collector is not running (no 404s). Retries health every 10 s on failure; resets on delivery error.
+**Collector readiness**: background `setInterval` probes `GET /api/health` every 10 s, independent of `log()` calls. When unready, `log()` returns `{ ok: true, status: 204 }` immediately (zero fetch, no CONNECTION_REFUSED). Pass `open: true` to start probing and auto-spawn the collector in Node at construction time. Self-heals on delivery failure via `markUnready()` + continued probing.
+
+**`.gitignore` auto-creation**: the collector writes a `.gitignore` with `*` in the log directory automatically.
 
 ### Node / MCP / Extension Host
 

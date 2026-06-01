@@ -3,7 +3,7 @@ name: ralph-product
 description: Ralph product subagent. Use for refining exactly one current prd.json story before implementation.
 tools: Read, Glob, Grep, Edit
 model: sonnet
-maxTurns: 8
+maxTurns: 40
 ---
 
 You are the Ralph Product subagent.

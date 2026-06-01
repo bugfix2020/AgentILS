@@ -37,7 +37,7 @@
 - **exports**：
     - `.` → Node 端：`createLogger` / `createChannelLogger` /
       `createHttpLogger` / `startHttpLogServer` / 默认值导出
-    - `./browser` → 浏览器端 `createBrowserLogger`（无 Node 依赖）
+    - `./browser` → 浏览器端 `createBrowserLogger`（无静态 Node 依赖；`open` 选项在 Node 环境下通过动态 import 启动收集器）
     - `./query` → 读取 + 过滤：`readLogRecords` / `formatLogRecords` /
       `DEFAULT_LOG_DIR` / `DEFAULT_FILE_PATTERN`
 - **环境变量**：
@@ -82,6 +82,9 @@
 
 模块分工：
 
+- `.gitignore` 自动创建：Node SDK 的 `startHttpLogServer` 和 Go collector 的 `Server.Start`
+  均在创建日志目录后自动写入 `.gitignore`（内容 `*`），使用 `O_EXCL` 模式不覆盖已有文件。
+
 - `src/cli.ts` — npm/npx wrapper，只负责定位 / 下载 / exec Go 原生二进制。
   **必须跳过 `node_modules/.bin` 下的 package-manager shim**，否则
   `npx @agent-ils/logger serve` 会找到并反复执行自己的 shim，造成进程递归、
@@ -90,11 +93,15 @@
   collector、打印 banner、读取 JSONL。
 - `src/index.ts` — Node 端 SDK + 兼容的 HTTP collector server。`createLogger`
   写本地文件；`createHttpLogger` 走 fetch；`startHttpLogServer` 起 server。
-- `src/browser.ts` — 纯浏览器 SDK（`fetch`），**不要**在这里 import 任何 `node:*`。
+- `src/browser.ts` — 纯浏览器 SDK（`fetch`），**不要**在这里 `import` 任何 `node:*`（静态导入）。
     - `overrideKey`：配置后与 `window.$agentILS.logger.overrideKey` 匹配时强制启用日志，
       `typeof window` 检测保证 SSR 安全。
-    - Collector 就绪探测：发日志前 `GET /api/health`，未就绪静默丢弃，失败 10s 重试，
-      发送失败自动重置。状态在 `createBrowserLogger` 闭包外层共享，`child()` 共用。
+    - `open`：设为 `true` 时立即启动后台健康探测（不等到首次 `log()` 调用）；
+      在 Node 环境下还会自动 spawn 收集器二进制（通过动态 `import('node:child_process')`）。
+    - Collector 就绪探测：后台 `setInterval` 每 10s 探测一次 `GET /api/health`，
+      与 `log()` 调用完全解耦。未就绪时 `log()` 直接返回 `{ ok: true, status: 204 }`，
+      零 fetch 调用。发送失败自动标记未就绪，后台探测继续运行。
+    - 状态在 `createBrowserLogger` 闭包外层共享，`child()` 共用。
 - `src/query.ts` — 读 + 过滤 + 格式化。`matchesRecord(record, range)` 只接
   range，不再接 options（`fix(logger)` 已删除未使用参数）。
 - `templates/llm/agent-ils-logger.skill.md` — 给 LLM 在自己 runtime 安装的

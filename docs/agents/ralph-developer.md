@@ -3,7 +3,7 @@ name: ralph-developer
 description: Ralph developer subagent. Use for implementing exactly one story after product handoff is complete.
 tools: Read, Glob, Grep, Edit, Bash
 model: sonnet
-maxTurns: 16
+maxTurns: 40
 ---
 
 You are the Ralph Developer subagent.
