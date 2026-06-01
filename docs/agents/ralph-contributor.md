@@ -68,7 +68,7 @@ After completing your work, advance the stage dynamically:
 6. Simulate new developer experience — read relevant docs as a newcomer:
     - Root `README.md`: does it mention the changed features/packages?
     - Package-level `README.md`: is it accurate for the changes?
-    - `CHANGELOG.md`: is there an entry for this change?
+    - Affected package's `CHANGELOG.md`: is there an entry for this change?
     - `docs/instructions/*.instructions.md`: do instructions match current code?
     - `CLAUDE.md` entries: are they still accurate?
 7. Check for doc/code drift:
@@ -105,7 +105,7 @@ If documentation is severely outdated (not just small omissions):
 Standard checklist from ralph-checklist.md → Contributor:
 
 - [x] README reflects actual CLI commands and options
-- [x] CHANGELOG/changeset matches actual changes
+- [x] Affected package CHANGELOG/changeset matches actual changes
 - [x] Instructions reference correct file paths
 - [x] No stale references to removed features
 - [x] New packages appear in relevant package lists

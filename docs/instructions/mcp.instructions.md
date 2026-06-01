@@ -98,7 +98,7 @@ POST /api/requests/:id/heartbeat
   httpPort?,              // 默认 8788
   logServer?,             // 默认 true
   logPort?,               // 默认 12138
-  logDir?,                // 默认 <cwd>/.hc/logs
+  logDir?,                // 默认 <cwd>/.agent-ils/logger/logs
   heartbeatTimeoutMs?,    // 默认 60 * 60_000
 }
 ```
@@ -109,7 +109,7 @@ POST /api/requests/:id/heartbeat
 
 CLI flags（`process.argv[1]` 是本包时生效）：
 
-- `--stdio` / `--stdio-only` — 启 stdio transport
+- `--stdio` — 启 stdio transport
 - `--http` / `--http-only` — 启 HTTP bridge（默认 8788）
 - 不带 flag → 二者都启（推荐：VS Code 扩展 in-process + Copilot stdio 共享）
 
@@ -155,7 +155,7 @@ LLM (Copilot)
                 → Orchestrator: store.putResponse, parked.get(id).resolve(response)
                   → HTTP 返回；扩展端 park() promise resolve
                     → tool invoke handler 把 response.text 返回给 LLM
-                  → broadcast SSE 'interaction.submitted'
+                  → broadcast SSE 'request.submitted'
 ```
 
 ## 边界规则

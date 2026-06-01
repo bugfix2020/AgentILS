@@ -36,7 +36,7 @@ Hard rules:
 - Do not rewrite architecture outside the selected story.
 - Do NOT access other runs' directories.
 - **Never write secrets**: do not hardcode API keys, tokens, passwords, or credentials in source code. Use environment variables or config files that are `.gitignore`d. If the story requires secret configuration, document the env var names in the handoff — never the values.
-- **Doc consistency**: if the implementation changes user-visible behavior (CLI output, API response, panel rendering, error messages), check if the package's README.md, LLM_USAGE.md, or preview images (GIF/PNG) reference the old behavior. If so, update them in the same commit. Do not leave stale documentation for tester/beta/user to catch.
+- **Doc consistency**: if the implementation changes user-visible behavior (CLI output, API response, panel rendering, error messages), check if the package's README.md (and LLM_USAGE.md if the package ships one), or preview images (GIF/PNG) reference the old behavior. If so, update them in the same commit. Do not leave stale documentation for tester/beta/user to catch.
 
 Task:
 

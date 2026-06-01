@@ -33,7 +33,7 @@ applyTo: 'packages/workflow-sdk/**'
 
 ```
 src/
-  index.ts              ← top barrel: re-export core + aliased react/vue
+  index.ts              ← top barrel: re-export core only; react/vue via package.json subpath exports
   core/
     types.ts            ← WorkflowNode / WorkflowDefinition / WorkflowSignal / WorkflowRunOptions / WorkflowRunResult / WorkflowHook
     defineNode.ts       ← identity helper

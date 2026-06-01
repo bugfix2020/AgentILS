@@ -43,7 +43,11 @@ AgentILS/
 │   ├── extensions/agentils-vscode/  # VS Code extension: thin bridge to MCP, hosts the webview
 │   ├── cli/                # `agentils` CLI: VS Code config injector for any IDE
 │   ├── logger/             # @agent-ils/logger — local JSONL collector + reader (npm published)
-│   └── quality-gate/       # @agent-ils/quality-gate — ECAM-style pre-commit panel (npm published)
+│   ├── quality-gate/       # @agent-ils/quality-gate — ECAM-style pre-commit panel (npm published)
+│   ├── workflow-sdk/       # @agent-ils/workflow-sdk — framework-agnostic workflow engine (npm published)
+│   ├── logger-collector/   # Go binary for collecting logs
+│   ├── impact-scope/       # Diff-aware static impact analyzer
+│   └── devtools/           # Developer tools
 ├── docs/
 │   ├── instructions/       # Source of truth for per-area dev rules (Copilot/Codex/etc.)
 │   ├── skills/             # Source of truth for agent-invokable skill cards
@@ -55,10 +59,11 @@ The single source of truth for derived state lives inside `packages/mcp` (`memor
 
 ## Published npm Packages
 
-| Package                                            | Latest  | Purpose                                                      |
-| -------------------------------------------------- | ------- | ------------------------------------------------------------ |
-| [`@agent-ils/logger`](packages/logger)             | `0.0.2` | Local JSONL logger, browser/Node SDK + CLI for AI debug logs |
-| [`@agent-ils/quality-gate`](packages/quality-gate) | `0.0.2` | A320-ECAM-style pre-commit pipeline + project initializer    |
+| Package                                            | Latest  | Purpose                                                          |
+| -------------------------------------------------- | ------- | ---------------------------------------------------------------- |
+| [`@agent-ils/logger`](packages/logger)             | `0.2.0` | Local JSONL logger, browser/Node SDK + CLI for AI debug logs     |
+| [`@agent-ils/quality-gate`](packages/quality-gate) | `0.0.3` | A320-ECAM-style pre-commit pipeline + project initializer        |
+| [`@agent-ils/workflow-sdk`](packages/workflow-sdk) | `0.0.4` | Framework-agnostic workflow engine + React hook / Vue composable |
 
 ## Quick Start (developer)
 
@@ -92,11 +97,12 @@ pnpm run sync:instructions
 
 ## Pre-commit Pipeline
 
-`.husky/pre-commit` runs `node packages/quality-gate/dist/precommit.js`, which discovers `agentils-gate.config.mjs` at the repo root and executes its three steps inside the ECAM TUI:
+`.husky/pre-commit` runs `node packages/quality-gate/dist/precommit.js`, which discovers `agentils-gate.config.mjs` at the repo root and executes its four steps inside the ECAM TUI:
 
-1. Sync agent instructions (`scripts/dev/sync-agent-instructions.mjs --stage`)
-2. Generate flowchart PNGs (`pnpm run generate:flowcharts`)
+1. Branch check (`scripts/dev/check-branch-for-prd.mjs`)
+2. Sync agent instructions (`scripts/dev/sync-agent-instructions.mjs --stage`)
 3. Run `lint-staged` with progress (`scripts/dev/run-lint-staged-with-progress.mjs`)
+4. Typecheck (`pnpm -s typecheck`)
 
 A failing step blocks the commit. Do not bypass with `--no-verify` without discussion.
 

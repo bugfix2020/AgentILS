@@ -16,12 +16,14 @@
 
 两个 GitHub Actions workflow，每个一个 job，每次 push 到 `main` 时触发（CI 还会在 PR 上跑）：
 
-| Workflow                                                               | 何时触发                 | Node                 | Job                                                              |
-| ---------------------------------------------------------------------- | ------------------------ | -------------------- | ---------------------------------------------------------------- |
-| [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)           | 每个 PR + push 到 `main` | 22 LTS               | 质量门禁（build → typecheck → lint → 同步检查 → changeset 检查） |
-| [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | 仅 push 到 `main`        | 24（自带 npm 11.5+） | `changesets/action`：开 Version PR 或通过 OIDC 发到 npm          |
+| Workflow                                                                     | 何时触发                 | Node                 | Job                                                              |
+| ---------------------------------------------------------------------------- | ------------------------ | -------------------- | ---------------------------------------------------------------- |
+| [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)                 | 每个 PR + push 到 `main` | 22 LTS               | 质量门禁（build → typecheck → lint → 同步检查 → changeset 检查） |
+| [`.github/workflows/release.yml`](../../.github/workflows/release.yml)       | 仅 push 到 `main`        | 24（自带 npm 11.5+） | `changesets/action`：开 Version PR 或通过 OIDC 发到 npm          |
+| [`.github/workflows/go-ci.yml`](../../.github/workflows/go-ci.yml)           | 每个 PR + push 到 `main` | —                    | Go lint + test（`gofmt`、`golangci-lint`）                       |
+| [`.github/workflows/go-release.yml`](../../.github/workflows/go-release.yml) | 仅 push 到 `main`        | —                    | GoReleaser 发布 Go 二进制                                        |
 
-可发布包：**`@agent-ils/quality-gate`**、**`@agent-ils/logger`**。
+可发布包：**`@agent-ils/quality-gate`**、**`@agent-ils/logger`**、**`@agent-ils/workflow-sdk`**。
 其余（`@agent-ils/mcp`、`@agent-ils/cli`、`agentils-vscode`、`agentils-vscode-webview`）均为 `"private": true`，永不上 npm。
 
 ---
@@ -144,7 +146,7 @@ changesets/action@v1
 我们当前两个都保留：
 
 - `package.json` `"private": true`（承重规则）
-- `.changeset/config.json` `ignore: ["@agent-ils/mcp", "@agent-ils/cli"]`（纵深防御，防止有人不假思索把 `private` 关掉）
+- `.changeset/config.json` `ignore: ["@agent-ils/mcp", "@agent-ils/cli", "agentils-vscode"]`（纵深防御，防止有人不假思索把 `private` 关掉）
 
 ### OIDC Trusted Publisher
 

@@ -47,8 +47,8 @@ packages/mcp store (InteractionStore: MemoryStore | JsonStore)
 ## SSE 与心跳
 
 - webview 通过 `new EventSource('/api/events')` 直连 mcp HTTP（baseUrl 由扩展 host 注入；in-process 模式下是 `http://127.0.0.1:<randomPort>`）
-- 收到 `request.created` / `request.updated` / `request.cancelled` / `state.snapshot` 等事件后：要么直接更新本地 `vm`，要么 fetch `GET /api/state` 拿全量
-- webview 必须周期性 `fetch POST /api/heartbeat`（或扩展 host 代发）保持 park 不被 `sweepExpired` 回收为 `heartbeat-timeout`
+- 收到 `request.created` / `request.submitted` / `request.cancelled` / `state.changed` 等事件后：要么直接更新本地 `vm`，要么 fetch `GET /api/state` 拿全量
+- webview 必须周期性 `fetch POST /api/requests/:id/heartbeat`（或扩展 host 代发）保持 park 不被 `sweepExpired` 回收为 `heartbeat-timeout`
 - 心跳超时阈值 = `ServerOptions.heartbeatTimeoutMs`；扫描间隔 = `sweepIntervalMs`；测试可用 env `AGENTILS_TEST_HEARTBEAT_MS` / `AGENTILS_TEST_SWEEP_MS`
 
 ## 4 个 elicitation tool 的 webview 渲染对应
