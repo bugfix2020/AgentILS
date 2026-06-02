@@ -34,21 +34,21 @@
 
 ## Matrix
 
-| Rule ID                                              | Source                                                    | Category                  | Current Type        | Enforcement Target  | Status        |
-| ---------------------------------------------------- | --------------------------------------------------------- | ------------------------- | ------------------- | ------------------- | ------------- |
-| agent.generated-targets.edit-source-only             | docs/skills/instructions-sync-discipline/SKILL.md         | pre-tool enforcement      | runtime-enforced    | runtime-pre-tool    | enforced      |
-| agent.private-memory.no-persistent-repo-rules        | docs/instructions/agentils.instructions.md                | pre-tool enforcement      | runtime-enforced    | runtime-pre-tool    | enforced      |
-| git.hook-bypass.forbidden                            | docs/instructions/agentils.instructions.md                | pre-tool enforcement      | runtime-enforced    | runtime-pre-tool    | enforced      |
-| instructions.generated-targets.require-source-change | docs/skills/instructions-sync-discipline/SKILL.md         | stop enforcement          | runtime-enforced    | runtime-stop        | enforced      |
-| instructions.sync.required-before-stop               | docs/instructions/agentils.instructions.md                | stop enforcement          | runtime-enforced    | runtime-stop        | enforced      |
-| docs.readme-pair.sync-required                       | docs/instructions/agentils.instructions.md                | stop enforcement          | runtime-enforced    | runtime-stop        | enforced      |
-| subagent.product.read-only-scope                     | docs/agents/ralph-product.md                              | subagent-stop enforcement | runtime-enforced    | subagent-stop       | enforced      |
-| subagent.ops.ci-only-scope                           | docs/agents/ralph-ops.md                                  | subagent-stop enforcement | runtime-enforced    | subagent-stop       | enforced      |
-| subagent.contributor.docs-only-scope                 | docs/agents/ralph-contributor.md                          | subagent-stop enforcement | runtime-enforced    | subagent-stop       | enforced      |
-| subagent.handoff.owner-only                          | docs/agents/ralph-developer.md                            | subagent-stop enforcement | runtime-enforced    | subagent-stop       | enforced      |
-| ci.readme-pair.sync-required                         | docs/instructions/agentils.instructions.md                | ci enforcement            | repository-enforced | repository-ci       | enforced      |
-| ci.publishable-package.requires-changeset            | docs/instructions/agentils.instructions.md                | ci enforcement            | repository-enforced | repository-ci       | enforced      |
-| git.protected-branch.no-direct-commit                | docs/skills/branch-name-standard/SKILL.md                 | git-hook enforcement      | repository-enforced | repository-git-hook | enforced      |
-| agent.chat-never-ends-implicitly                     | README.md                                                 | guidance-only             | guidance-only       | guidance            | guidance-only |
-| workflow.test-first.before-implementation            | docs/instructions/agentils.instructions.md                | guidance-only             | guidance-only       | guidance            | guidance-only |
-| webview.source-of-truth.no-business-state-in-webview | docs/instructions/webview-source-of-truth.instructions.md | manual-review             | manual-review       | manual-review       | manual-review |
+| Rule ID | Source | Category | Current Type | Enforcement Target | Status |
+| --- | --- | --- | --- | --- | --- |
+| agent.generated-targets.edit-source-only | docs/skills/instructions-sync-discipline/SKILL.md | pre-tool enforcement | runtime-enforced | runtime-pre-tool | enforced |
+| agent.private-memory.no-persistent-repo-rules | docs/instructions/agentils.instructions.md | pre-tool enforcement | runtime-enforced | runtime-pre-tool | enforced |
+| git.hook-bypass.forbidden | docs/instructions/agentils.instructions.md | pre-tool enforcement | runtime-enforced | runtime-pre-tool | enforced |
+| instructions.generated-targets.require-source-change | docs/skills/instructions-sync-discipline/SKILL.md | stop enforcement | runtime-enforced | runtime-stop | enforced |
+| instructions.sync.required-before-stop | docs/instructions/agentils.instructions.md | stop enforcement | runtime-enforced | runtime-stop | enforced |
+| docs.readme-pair.sync-required | docs/instructions/agentils.instructions.md | stop enforcement | runtime-enforced | runtime-stop | enforced |
+| subagent.product.read-only-scope | docs/agents/ralph-product.md | subagent-stop enforcement | runtime-enforced | subagent-stop | enforced |
+| subagent.ops.ci-only-scope | docs/agents/ralph-ops.md | subagent-stop enforcement | runtime-enforced | subagent-stop | enforced |
+| subagent.contributor.docs-only-scope | docs/agents/ralph-contributor.md | subagent-stop enforcement | runtime-enforced | subagent-stop | enforced |
+| subagent.handoff.owner-only | docs/agents/ralph-developer.md | subagent-stop enforcement | runtime-enforced | subagent-stop | enforced |
+| ci.readme-pair.sync-required | docs/instructions/agentils.instructions.md | ci enforcement | repository-enforced | repository-ci | enforced |
+| ci.publishable-package.requires-changeset | docs/instructions/agentils.instructions.md | ci enforcement | repository-enforced | repository-ci | enforced |
+| git.protected-branch.no-direct-commit | docs/skills/branch-name-standard/SKILL.md | git-hook enforcement | repository-enforced | repository-git-hook | enforced |
+| agent.chat-never-ends-implicitly | README.md | guidance-only | guidance-only | guidance | guidance-only |
+| workflow.test-first.before-implementation | docs/instructions/agentils.instructions.md | guidance-only | guidance-only | guidance | guidance-only |
+| webview.source-of-truth.no-business-state-in-webview | docs/instructions/webview-source-of-truth.instructions.md | manual-review | manual-review | manual-review | manual-review |
