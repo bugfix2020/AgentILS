@@ -95,6 +95,19 @@ When you are an LLM working on this repo, read **in this order**:
 pnpm run sync:instructions
 ```
 
+This repository also uses **native agent enforcement**, not just prompt guidance:
+
+- `scripts/agent-hooks/rules.mjs` — centralized rule registry sourced from existing repo guidance
+- `scripts/agent-hooks/engine.mjs` — provider-neutral policy engine
+- `scripts/agent-hooks/policy.mjs` — shared PreToolUse / Stop runtime hook entry
+- `scripts/agent-hooks/repo-check.mjs` — repository gate for CI / subagent-stop checks
+- `scripts/agent-hooks/adapters/*` — thin Claude / Codex / Copilot runtime adapters
+- `.github/hooks/agent-enforcement.json` — Copilot / VS Code hook entry
+- `.claude/settings.json` — Claude Code hooks + `autoMemoryEnabled: false`
+- `.codex/hooks.json` + `.codex/config.toml` — Codex hooks + repo-local memories disabled
+
+Those native layers block direct edits to generated agent targets, prevent repository rules from drifting into private memory/config files, and push repository-scoped checks into CI instead of relying on agent self-discipline.
+
 ## Pre-commit Pipeline
 
 `.husky/pre-commit` runs `node packages/quality-gate/dist/precommit.js`, which discovers `agentils-gate.config.mjs` at the repo root and executes its four steps inside the ECAM TUI:

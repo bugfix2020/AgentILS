@@ -16,6 +16,7 @@
     - 真值源永远是 `docs/instructions/*.instructions.md` + 各包 `README.md` / `README.zh-CN.md`，由 `scripts/dev/sync-agent-instructions.mjs` 同步到 `.github/instructions/`、`.github/skills/`、`.agents/skills/`、`.github/copilot-instructions.md`、`AGENTS.md`。
     - **禁止**把仓库级规则只写进 `/memories/repo/` 或单一 IDE 的 `.cursorrules` / `.clinerules` / 任意 agent 私有 store——切换 agent（如 Codex ↔ Copilot 混用）会立即丢失记忆，导致行为不一致。
     - 仅当信息是**单次会话临时上下文**（如本次任务的进度笔记）才允许放 session memory。仓库长期规则一律走文档 + 同步脚本。
+    - **强制层补充**：本仓库把这条规则进一步下沉到原生 hook / config。Claude 项目设置关闭 `autoMemoryEnabled`；Codex 项目级 `.codex/config.toml` 关闭 `memories` / `generate_memories` / `use_memories`；共享 hook 脚本 `scripts/agent-hooks/policy.mjs` 会阻止 agent 直接写 `~/.codex/memories/**`、`~/.claude/projects/*/memory/**`、`.claude/settings.local.json` 以及各类生成型 agent 目标文件。
 
 2. **代码提交流程：必须先自测再 commit。**
     - 仓库 husky pre-commit hook 链路：`@agent-ils/quality-gate` ECAM panel 串行跑 (a) `pnpm typecheck`、(b) `pnpm lint --filter <changed>`、(c) 受影响包 `pnpm build`、(d) `pnpm test --filter <changed>`（如配置）。任何一项 fail 都会阻止 commit。
@@ -28,6 +29,7 @@
     - 改了内部架构 / 数据流 / 边界 / 流程 → 改对应 `docs/instructions/*.instructions.md` 真值源，再跑 `node scripts/dev/sync-agent-instructions.mjs` 同步。
     - 改了仓库通用流程 / 分支策略 / 发布流程 → 改 `docs/instructions/agentils.instructions.md`。
     - 不确定时**默认改**——遗漏更新比误更新代价高得多（agent 后续会按过时文档行动）。
+    - 对于 agent customization / hook / memory enforcement 改动，除了更新本文件，还要同步维护原生配置入口：`.github/hooks/*.json`（Copilot / VS Code）、`.claude/settings.json`（Claude Code）和 `.codex/{hooks.json,config.toml}`（Codex）。
 
 4. **更新 README / instruction 之前必须先扫 legacy 内容，存在 legacy 则删除并基于实际代码重建。**
     - 扫法：先读对应文档全文 + 对应代码现状，比对差异，列出 legacy 段落（已废弃的术语、已删除的 tool 名、已改名的字段、已废弃的分支模型等）。
@@ -122,6 +124,47 @@ SSE 广播 + 视图层订阅（WebView / Copilot）
 - 修改前对齐上下游 I/O 合同；优先信类型，不靠运行时猜测。
 - 区分 task completion（任务终态）和 conversation completion（对话结束）；新任务入口必须显式。
 
+## Rule Enforcement Model
+
+- `AGENTS.md` / `CLAUDE.md` / `.github/copilot-instructions.md` 只负责**指导**；真正的强制层必须显式分层：
+    - **Guidance**：写给 LLM 的建议，不保证强制。
+    - **Runtime Enforcement**：由 hook 在 `PreToolUse` / `Stop` / `subagent-stop` 运行，可 `deny` / `block`。
+    - **Repository Enforcement**：由 git hook / CI / repo-check script 保证仓库状态。
+    - **External Enforcement**：由 sandbox、filesystem permission、branch protection、runtime config 等系统能力兜底。
+- 集中式规则治理入口位于 `scripts/agent-hooks/`：
+    - `rules.mjs` —— rule registry（rule id / source / category / phase / strategy / message / status）
+    - `engine.mjs` —— provider-neutral policy engine
+    - `adapters/*` —— Claude / Codex / Copilot 薄适配层，负责把各 runtime payload 归一化成 capability-based event（如 `write-targets`、`command-text`、`patch-text`、`dirty-files`、`changed-files`）
+    - `policy.mjs` —— runtime hook 入口
+    - `repo-check.mjs` —— CI / repository / subagent-stop gate
+    - `render-rule-matrix.mjs` —— 生成 `docs/developer/agent-rule-matrix.md`
+- 当前已升级为 enforcement 的规则：
+    - **PreToolUse**：阻止直接修改生成型 agent 目标与私有 memory / 本地私有规则文件；阻止 `--no-verify` / `HUSKY=0` / `core.hooksPath=/dev/null` 等绕过命令。
+    - **Stop**：当 instruction source 改了但 `sync:instructions` 未通过、或 generated target 漂移、或中英 README 只改一边时，阻止 agent 结束。
+    - **subagent-stop**：阻止 Ralph `product` / `ops` / `contributor` 越权改文件，并阻止任何 Ralph 角色改他人的 handoff。
+    - **CI**：阻止 publishable package 改动缺少 changeset；阻止 README 双语对只改一边。
+- runtime adapter 兼容原则：
+    - 不按 provider 名字写业务规则；核心层只识别统一语义能力（capabilities）。
+    - 新 runtime 接入时，优先补 adapter 的 capability 映射，而不是在 policy engine 里新增 provider 分支。
+    - `apply_patch` / shell command / structured path input 都属于不同输入形态，但最终都要归一化到统一的 `writeTargets` / `commandTexts` / `patchText` 语义。
+    - 自动化验证目标是：三家 runtime 都走同一个 `scripts/agent-hooks/policy.mjs`，同一语义输入必须得到同一条核心 verdict；差异只允许存在于 adapter 的 payload 解析与输出格式层。
+- 当前仍是 `guidance-only` / `manual-review` 的规则：
+    - chat 不得隐式结束（本地 hook 无法可靠观察完整会话生命周期）
+    - test-first 顺序（diff 无法稳定证明“先写测试还是先写实现”）
+    - webview 禁止自维护业务 state（需要架构级 review，而不是路径级 hook）
+- 现有 git hook / config 入口：
+    - Copilot / VS Code：`.github/hooks/agent-enforcement.json`
+    - Claude Code：`.claude/settings.json`
+    - Codex：`.codex/hooks.json` + `.codex/config.toml`
+    - pre-commit 分支门禁：`agentils-gate.config.mjs` → `scripts/dev/check-branch-for-prd.mjs`
+- 新增规则时流程固定：
+    1. 先把规则写进真实 guidance source（README / instructions / agents / skills）。
+    2. 判断能否稳定机器检查。
+    3. 能检查则加到 `scripts/agent-hooks/rules.mjs`，选择 `pre-tool` / `stop` / `subagent-stop` / `ci` / `git-hook`。
+    4. 补 `scripts/agent-hooks/test-policy.mjs` 样本。
+    5. 更新 `docs/developer/agent-rule-matrix.md`（通过 `render-rule-matrix.mjs` 生成）。
+    6. 跑 `pnpm check:agent-hooks` 与既有 sync / CI 检查。
+
 ## 命名约定
 
 - 项目名固定 **AgentILS**（不写成 Agentils / agentils 等变体）。
@@ -164,19 +207,19 @@ SSE 广播 + 视图层订阅（WebView / Copilot）
 **Changelog 由 release 流程驱动，不在 push 时生成。** 这是 monorepo 多 npm 包独立发版的正确边界。
 
 - 每个 npm 包应该有自己的 `packages/<name>/CHANGELOG.md`，记录该包的版本变更。**不要**在仓库根目录维护一个聚合 CHANGELOG。
-- **可发布到 npm 的包（2 个）**：`@agent-ils/quality-gate`、`@agent-ils/logger`。
+- **可发布到 npm 的包（3 个）**：`@agent-ils/quality-gate`、`@agent-ils/logger`、`@agent-ils/workflow-sdk`。
 - **不发布到 npm 的包**：`@agent-ils/mcp`、`@agent-ils/cli`（半成品，未来若要发先去掉 private）。**真正阻止 publish 的机制是 `package.json` `"private": true`**（changesets 官方文档明确：`ignore` 字段只影响 `version` 命令，**不影响 `publish`**）。`.changeset/config.json` 的 `ignore: ["@agent-ils/mcp", "@agent-ils/cli"]` 仅作冗余防护，不要依赖它单独生效。
 - **私有包（自动跳过）**：`packages/extensions/agentils-vscode`、`apps/webview`（`"private": true`）。
 - 工具：[`@changesets/cli`](https://github.com/changesets/changesets) 已在仓库落地，配置见 [`.changeset/config.json`](.changeset/config.json)（`baseBranch: main`、`access: public`、`fixed: []`、`ignore: ["@agent-ils/mcp", "@agent-ils/cli"]`）。
 - 工作流：
-    - 每个改动了**可发布**包（`packages/quality-gate/*` 或 `packages/logger/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。**CI 会强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），缺失则 PR 红灯。
+    - 每个改动了**可发布**包（`packages/quality-gate/*`、`packages/logger/*` 或 `packages/workflow-sdk/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。**CI 会强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），缺失则 PR 红灯。
     - 改动 `packages/mcp/*`、`packages/cli/*`、`packages/extensions/*`、`apps/*`、`scripts/*`、`docs/*` 或 `.changeset/` 配置本身可豁免（CI 自动跳过检查）。
     - Release **完全自动化**，不需要手动跑命令：
         - PR 合并到 `main` 后，[`.github/workflows/release.yml`](.github/workflows/release.yml) 触发 [`changesets/action`](https://github.com/changesets/action)：
             - 如果 `.changeset/*.md` 存在 → 自动开（或更新）一个 `chore(release): version packages` PR，PR 内容是 `pnpm changeset version` 的产物（bump version + 写 per-package CHANGELOG）。
             - 当那个 Version PR 被 merge 后（`.changeset/*.md` 全部消费完）→ action 自动跑 `pnpm changeset publish`：发布到 npm + 打 git tag + 推送。
         - 维护者**只需 review 并 merge Version PR**，不要在本地跑 `pnpm changeset version` / `publish`。
-    - 前置条件：每个**可发布**包（`@agent-ils/quality-gate`、`@agent-ils/logger`）必须在 npm 注册 **Trusted Publisher（OIDC）**，指向本仓库 + workflow `release.yml`。配置入口：`https://www.npmjs.com/package/<pkg>/access` → Trusted Publisher → GitHub Actions。**不需要** `NPM_TOKEN` secret，OIDC 直接通过 GitHub Actions `id-token` 完成认证，并自动带 `--provenance` 签名。
+    - 前置条件：每个**可发布**包（`@agent-ils/quality-gate`、`@agent-ils/logger`、`@agent-ils/workflow-sdk`）必须在 npm 注册 **Trusted Publisher（OIDC）**，指向本仓库 + workflow `release.yml`。配置入口：`https://www.npmjs.com/package/<pkg>/access` → Trusted Publisher → GitHub Actions。**不需要** `NPM_TOKEN` secret，OIDC 直接通过 GitHub Actions `id-token` 完成认证，并自动带 `--provenance` 签名。
 - **不要**在 pre-commit / pre-push 阶段跑 changelog 生成（这会污染 commit 范畴、产生噪音 chore 提交、模糊"已发布"语义）。仓库根的 `.husky/pre-push` 和 `package.json` 里曾经的 `changelog` / `generate:changelog*` 脚本均已废弃删除，不要复活。
 
 ## CI（**强约束**）
@@ -206,13 +249,13 @@ GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 1. **面向开发者的文档（`docs/instructions/`、`docs/skills/`、`docs/flowcharts/`、`docs/developer/` 等）默认中文**。代码标识符、CLI 名、错误关键字保留英文。
 2. **面向外部用户的文档（root `README.md`、各 `packages/*/README.md`）必须中英双语**：`README.md`（英文） + `README.zh-CN.md`（中文）成对出现，文件顶部互相链接。
 3. **当面向用户的文档（如 root `README.md`）引入了一份 `docs/` 下文档，那份 `docs/` 文档也必须是双语对**：`xxx.md`（英文） + `xxx.zh-CN.md`（中文），顶部互链。
-4. **同步规则**：改 `xxx.md` 的同时必须改 `xxx.zh-CN.md`（反之亦然）。新加段落必须在两份里都加。**禁止只改一份就提交**。
+4. **同步规则**：对已声明为双语对的用户文档（root `README*`、各 package 根 `README*`、以及被这些 README 直接引入的双语 docs）改 `xxx.md` 的同时必须改 `xxx.zh-CN.md`（反之亦然）。新加段落必须在两份里都加。**禁止只改一份就提交**。
 
 **触发判断**：
 
 - 新建 `docs/` 下文档 → 默认中文单文件。如果它会被 root `README.md` 或外部包 `README.md` 链接 → 升级为双语对。
-- 改 root `README.md` 或包 `README.md` → 必须同步改对应 `README.zh-CN.md`。
-- 改双语对中的任一文件 → 必须同步改另一份。
+- 改 root `README.md` 或包根 `packages/<name>/README.md` → 必须同步改对应 `README.zh-CN.md`。
+- 改已存在双语对中的任一文件 → 必须同步改另一份。
 - commit message：subject + body 必须**全英文**（受 commitlint conventional commits 约束 + 跨地域 reviewer 友好），禁止中文出现在任何 commit message 字段。
 
 **举例**：
