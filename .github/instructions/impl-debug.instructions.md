@@ -54,19 +54,19 @@
 
 ### 1. mcp 业务核心（`packages/mcp/src/`）
 
-| 文件                               | 角色                                                                                                                                                                                                                          |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp/index.ts`                     | `startAgentilsServer(opts)` 入口；导出 `Orchestrator` / `JsonStore` / `MemoryStore` / `createLogger` / `AgentilsClient` / 类型                                                                                                |
-| `mcp/orchestrator/orchestrator.ts` | parked promise map（`Map<requestId, {resolve, reject}>`）+ subscribers Set + version；`park` / `submit` / `cancel` / `pending` / `snapshot` / `sweepExpired`                                                                  |
-| `mcp/store/interaction-store.ts`   | `InteractionStore` 接口（store 真值源契约）                                                                                                                                                                                   |
-| `mcp/store/memory-store.ts`        | `MemoryStore` 默认实现（进程内）                                                                                                                                                                                              |
-| `mcp/store/json-store.ts`          | `JsonStore` 持久化到 `~/.agentils/state.json`（opt-in via `ServerOptions.statePath`）                                                                                                                                         |
-| `mcp/transport/http.ts`            | Express HTTP + SSE；`POST /api/requests` / `POST /api/requests/:id/response` / `DELETE /api/requests/:id` / `GET /api/state` / `GET /api/events`；`classifyParkRejection` 把 `'cancelled'` → 409，`'heartbeat-timeout'` → 408 |
-| `mcp/transport/stdio.ts`           | MCP stdio transport（Copilot 通过 `.vscode/mcp.json` 拉起）                                                                                                                                                                   |
-| `mcp/types/index.ts`               | `ToolName`(4)/`InteractionRequest`/`InteractionResponse`/`InteractionStatus`(`pending\|submitted\|cancelled\|expired`)/`StateSnapshot`/`StateChangedReason`(6)/`ServerOptions`                                                |
-| `mcp/client/index.ts`              | `AgentilsClient`：`health()` / `park({toolName, question, context?, placeholder?, action?, params?})`                                                                                                                         |
-| `mcp/interaction/response.ts`      | `cancelledInteractionResponse` / `timeoutInteractionResponse` / `normalizeInteractionResponse`                                                                                                                                |
-| `mcp/util/logger.ts`               | `createLogger` + `startHttpLogServer`（默认 12138，调试用）                                                                                                                                                                   |
+| 文件                               | 角色                                                                                                                                                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp/index.ts`                     | `startAgentilsServer(opts)` 入口；导出 `Orchestrator` / `JsonStore` / `MemoryStore` / `createLogger` / `AgentilsClient` / 类型                                                                                                   |
+| `mcp/orchestrator/orchestrator.ts` | parked promise map（`Map<requestId, {resolve, reject}>`）+ subscribers Set + version；`park` / `submit` / `cancel` / `pending` / `snapshot` / `sweepExpired`                                                                     |
+| `mcp/store/interaction-store.ts`   | `InteractionStore` 接口（store 真值源契约）                                                                                                                                                                                      |
+| `mcp/store/memory-store.ts`        | `MemoryStore` 默认实现（进程内）                                                                                                                                                                                                 |
+| `mcp/store/json-store.ts`          | `JsonStore` 持久化到 `~/.agentils/state.json`（opt-in via `ServerOptions.statePath`）                                                                                                                                            |
+| `mcp/transport/http.ts`            | Express HTTP + SSE；`POST /api/requests` / `POST /api/requests/:id/submit` / `POST /api/requests/:id/cancel` / `GET /api/state` / `GET /api/events`；`classifyParkRejection` 把 `'cancelled'` → 409，`'heartbeat-timeout'` → 408 |
+| `mcp/transport/stdio.ts`           | MCP stdio transport（Copilot 通过 `.vscode/mcp.json` 拉起）                                                                                                                                                                      |
+| `mcp/types/index.ts`               | `ToolName`(4)/`InteractionRequest`/`InteractionResponse`/`InteractionStatus`(`pending\|submitted\|cancelled\|expired`)/`StateSnapshot`/`StateChangedReason`(6)/`ServerOptions`                                                   |
+| `mcp/client/index.ts`              | `AgentilsClient`：`health()` / `park({toolName, question, context?, placeholder?, action?, params?})`                                                                                                                            |
+| `mcp/interaction/response.ts`      | `cancelledInteractionResponse` / `timeoutInteractionResponse` / `normalizeInteractionResponse`                                                                                                                                   |
+| `mcp/util/logger.ts`               | `createLogger` + `startHttpLogServer`（默认 12138，调试用）                                                                                                                                                                      |
 
 ### 2. VS Code 扩展（`packages/extensions/agentils-vscode/src/`）
 
@@ -119,8 +119,8 @@ Copilot LM
 ### 链路 B：响应回流（user 提交）
 
 ```
-webview submit → fetch POST /api/requests/:id/response
-  → mcp/transport/http.ts → orchestrator.resolve(requestId, response)
+webview submit → fetch POST /api/requests/:id/submit
+  → mcp/transport/http.ts → orchestrator.submit(requestId, response)
     → 写 store (status: 'submitted') → resolve parked promise
       → registerTools handler 收到 → buildToolResultFromResponse
         → return LanguageModelToolResult → Copilot LLM

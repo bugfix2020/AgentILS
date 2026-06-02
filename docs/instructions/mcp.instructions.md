@@ -110,6 +110,7 @@ POST /api/requests/:id/heartbeat
 CLI flags（`process.argv[1]` 是本包时生效）：
 
 - `--stdio` — 启 stdio transport
+- `--stdio-only` — 启 stdio transport 但禁用 HTTP bridge
 - `--http` / `--http-only` — 启 HTTP bridge（默认 8788）
 - 不带 flag → 二者都启（推荐：VS Code 扩展 in-process + Copilot stdio 共享）
 
