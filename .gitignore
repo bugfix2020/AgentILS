@@ -6,6 +6,7 @@ dist/
 .env
 .agentils-logs/
 .agent-ils/
+.claude/settings.local.json
 
 .tmp/
 *.log

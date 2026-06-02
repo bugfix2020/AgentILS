@@ -95,6 +95,19 @@ pnpm -r --filter "./packages/*" --filter "./apps/webview" build
 pnpm run sync:instructions
 ```
 
+本仓库同时启用了 **agent 原生强制层**，不只依赖 prompt guidance：
+
+- `scripts/agent-hooks/rules.mjs` —— 从仓库现有 guidance 提炼出的集中式规则注册表
+- `scripts/agent-hooks/engine.mjs` —— 与 provider 解耦的通用策略引擎
+- `scripts/agent-hooks/policy.mjs` —— 共享的 `PreToolUse` / `Stop` runtime hook 入口
+- `scripts/agent-hooks/repo-check.mjs` —— 给 CI / subagent-stop 用的仓库门禁脚本
+- `scripts/agent-hooks/adapters/*` —— Claude / Codex / Copilot 的薄适配层
+- `.github/hooks/agent-enforcement.json` —— Copilot / VS Code hook 入口
+- `.claude/settings.json` —— Claude Code hooks + `autoMemoryEnabled: false`
+- `.codex/hooks.json` + `.codex/config.toml` —— Codex hooks + 仓库级禁用 memories
+
+这些原生配置会阻止直接修改生成型 agent 目标文件，阻止把仓库规则漂移到私有 memory / 本地私有配置文件里，并把仓库级风险下沉到 CI，而不是依赖 agent 自觉遵守。
+
 ## Pre-commit 流水线
 
 `.husky/pre-commit` 跑 `node packages/quality-gate/dist/precommit.js`。它会向上找 `agentils-gate.config.mjs`（仓库根有一份），在 ECAM TUI 里按顺序执行四步：

@@ -56,30 +56,16 @@ jobs:
             - name: Verify instruction sync (no drift)
               run: pnpm sync:instructions:check
 
-            - name: Verify changeset present (PR only, when packages/* changed)
-              if: github.event_name == 'pull_request'
+            - name: Verify agent hook registry and policy tests
+              run: pnpm check:agent-hooks
+
+            - name: Verify repository rule enforcement
               run: |
-                  set -e
-                  # If a PR touches a publishable package but adds no .changeset/*.md, fail.
-                  # Publishable packages: @agent-ils/quality-gate, @agent-ils/logger.
-                  # Excluded: packages/extensions/* (private), packages/mcp, packages/cli
-                  # (kept in repo but not published to npm; see .changeset/config.json ignore).
-                  BASE_SHA="${{ github.event.pull_request.base.sha }}"
-                  HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-                  CHANGED_PKG=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'packages/**' \
-                    | grep -v '^packages/extensions/' \
-                    | grep -v '^packages/mcp/' \
-                    | grep -v '^packages/cli/' \
-                    | grep -v '^packages/mcp\.back/' \
-                    | grep -v '^packages/cli\.back/' \
-                    || true)
-                  if [ -z "$CHANGED_PKG" ]; then
-                    echo "No publishable package files touched. Skipping changeset check."
-                    exit 0
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                    BASE_SHA="${{ github.event.pull_request.base.sha }}"
+                    HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+                  else
+                    BASE_SHA="${{ github.event.before }}"
+                    HEAD_SHA="${{ github.sha }}"
                   fi
-                  ADDED_CHANGESET=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" -- '.changeset/*.md' | grep -v 'README.md' || true)
-                  if [ -z "$ADDED_CHANGESET" ]; then
-                    echo "::error::This PR modifies publishable packages/** but adds no .changeset/*.md. Run: pnpm changeset"
-                    exit 1
-                  fi
-                  echo "Found changeset: $ADDED_CHANGESET"
+                  node scripts/agent-hooks/repo-check.mjs ci --base "$BASE_SHA" --head "$HEAD_SHA"

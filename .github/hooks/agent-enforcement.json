@@ -1,0 +1,20 @@
+{
+    "hooks": {
+        "PreToolUse": [
+            {
+                "type": "command",
+                "command": "node scripts/agent-hooks/policy.mjs pretooluse copilot",
+                "cwd": ".",
+                "timeout": 15
+            }
+        ],
+        "Stop": [
+            {
+                "type": "command",
+                "command": "node scripts/agent-hooks/policy.mjs stop copilot",
+                "cwd": ".",
+                "timeout": 30
+            }
+        ]
+    }
+}

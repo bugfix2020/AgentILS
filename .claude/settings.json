@@ -1,0 +1,29 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "autoMemoryEnabled": false,
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|Edit|Write|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node scripts/agent-hooks/policy.mjs pretooluse claude",
+                        "timeout": 15
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node scripts/agent-hooks/policy.mjs stop claude",
+                        "timeout": 30
+                    }
+                ]
+            }
+        ]
+    }
+}

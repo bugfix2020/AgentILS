@@ -1,0 +1,29 @@
+{
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|Edit|Write|apply_patch",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node scripts/agent-hooks/policy.mjs pretooluse codex",
+                        "timeout": 15,
+                        "statusMessage": "Running AgentILS policy checks"
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node scripts/agent-hooks/policy.mjs stop codex",
+                        "timeout": 30,
+                        "statusMessage": "Checking AgentILS finish gates"
+                    }
+                ]
+            }
+        ]
+    }
+}
