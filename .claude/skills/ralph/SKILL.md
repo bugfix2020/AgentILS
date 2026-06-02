@@ -178,11 +178,11 @@ uses it to route commits to the correct PRD. Agents must not modify it.
 ## Profiles
 
 Profiles specialize the same role chain. The npm release profile is documented
-in `docs/ai-workflows/profiles/npm-release.md`.
+in `docs/skills/ralph/profiles/npm-release.md`.
 
 For release work:
 
-- New npm packages start at `0.0.0` in `package.json`; changesets bump to `0.0.1` on first release.
+- New npm packages start at `0.0.1` or `0.1.0` in `package.json` depending on maturity.
 - Tags use `<full-npm-package-name>@<version>`.
 - Local verification is the main gate; CI/CD only backs it up.
 - If registry, `npx`/`dlx`, native asset, or GitHub Release behavior cannot be

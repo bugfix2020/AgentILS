@@ -40,7 +40,7 @@ applyTo: 'packages/logger/**'
 - **环境变量**：
     - `AGENTILS_LOG_DIR` — 覆盖默认 logDir（CLI/SDK/query 共享）
 - **HTTP collector**：默认 `http://127.0.0.1:12138`，路径
-  `POST /api/logs`（单条）、`POST /api/logs/bulk`（数组）、`GET /api/health`。
+  `POST /api/logs`（单条或数组，数组由服务端内联判断）、`GET /api/health`。
 
 ## 文件 / 目录默认值（**所有入口必须一致**）
 
