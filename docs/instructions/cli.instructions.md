@@ -103,7 +103,7 @@ packages/cli/templates/
 
 ## settings 预设合并（workspace mode）
 
-`templates/config.json` 是一组 VS Code settings 预设（如 `agentils.templates.contact` / `.feedback` / `.input`），在 `injectSettings()` 里与 `<workspace>/.vscode/settings.json` 合并：数组按 `name` 字段去重并替换；非数组键保留 existing。
+`templates/config.json` 是一组 VS Code settings 预设（如 `agentils.templates.contact` / `.feedback` / `.clarification` / `.global`），在 `injectSettings()` 里与 `<workspace>/.vscode/settings.json` 合并：数组按 `name` 字段去重并替换；非数组键保留 existing。
 
 ## 安全校验（`copyTemplate` / `injectMcpJson` / `injectSettings`）
 

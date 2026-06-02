@@ -83,7 +83,7 @@ export interface ServerOptions {
     logServer?: boolean
     /** HTTP port for the shared JSONL logger. Defaults to 12138. */
     logPort?: number
-    /** Override log directory. Defaults to `<cwd>/.hc/logs`. */
+    /** Override log directory. Defaults to `<cwd>/.agent-ils/logger/logs`. */
     logDir?: string
     /** Heartbeat timeout in ms. Pending requests expire after this idle window. Default 5 min. */
     heartbeatTimeoutMs?: number

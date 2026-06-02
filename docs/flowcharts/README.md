@@ -1,5 +1,7 @@
 # AgentILS 流程图集合
 
+> **Deprecated** — 本目录的流程图描述的是 V1 中间形态，部分概念（`run_task_loop`、`ResourceNotifier`、HTTP lock 协调）已从当前主线删除。保留仅供参考；实现细节以 [`docs/instructions/mcp.instructions.md`](../instructions/mcp.instructions.md) 和 [`docs/instructions/impl-debug.instructions.md`](../instructions/impl-debug.instructions.md) 为准。
+
 > 用 Mermaid 静态图描绘 V1 / Plan C 的关键链路。
 > 想看更精美的章节图（含 SVG）请到 [docs/agentils/flowcharts/](../../docs/agentils/flowcharts) 查阅 ch2/ch3/ch4 章节图（来自 `scripts/flowcharts/` 生成）。
 
