@@ -73,3 +73,85 @@ jobs:
                   # then configure Trusted Publisher on the npm package settings page:
                   # https://www.npmjs.com/package/<name>/access
                   NPM_CONFIG_PROVENANCE: 'true'
+
+            - name: Derive logger collector release
+              id: logger-collector-release
+              if: steps.changesets.outputs.published == 'true'
+              shell: bash
+              env:
+                  PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+              run: |
+                  version="$(node <<'NODE'
+                  const packages = JSON.parse(process.env.PUBLISHED_PACKAGES || '[]')
+                  const logger = packages.find((pkg) => pkg.name === '@agent-ils/logger')
+                  process.stdout.write(logger?.version ?? '')
+                  NODE
+                  )"
+
+                  if [ -z "$version" ]; then
+                    echo "enabled=false" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+
+                  echo "enabled=true" >> "$GITHUB_OUTPUT"
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+                  echo "tag=@agent-ils/logger@$version" >> "$GITHUB_OUTPUT"
+
+            - name: Setup Go for logger collector
+              if: steps.logger-collector-release.outputs.enabled == 'true'
+              uses: actions/setup-go@v6
+              with:
+                  go-version: '1.22'
+
+            - name: Build logger collector binaries
+              if: steps.logger-collector-release.outputs.enabled == 'true'
+              shell: bash
+              working-directory: packages/logger-collector
+              env:
+                  VERSION: ${{ steps.logger-collector-release.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  rm -rf dist
+                  mkdir -p dist
+
+                  build() {
+                    local goos="$1"
+                    local goarch="$2"
+                    local out="$3"
+                    GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
+                      go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "dist/${out}" .
+                  }
+
+                  build darwin arm64 agent-ils-logger-darwin-arm64
+                  build darwin amd64 agent-ils-logger-darwin-amd64
+                  build linux amd64 agent-ils-logger-linux-amd64
+                  build windows amd64 agent-ils-logger-windows-amd64.exe
+
+                  (cd dist && shasum -a 256 agent-ils-logger-* > checksums.txt)
+
+            - name: Upload logger collector release assets
+              if: steps.logger-collector-release.outputs.enabled == 'true'
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ steps.logger-collector-release.outputs.tag }}
+              run: |
+                  set -euo pipefail
+                  for attempt in 1 2 3 4 5 6; do
+                    if gh release view "$TAG" >/dev/null 2>&1; then
+                      break
+                    fi
+                    if [ "$attempt" = "6" ]; then
+                      echo "GitHub release $TAG was not created by changesets publish" >&2
+                      exit 1
+                    fi
+                    sleep 5
+                  done
+
+                  gh release upload "$TAG" \
+                    packages/logger-collector/dist/agent-ils-logger-darwin-arm64 \
+                    packages/logger-collector/dist/agent-ils-logger-darwin-amd64 \
+                    packages/logger-collector/dist/agent-ils-logger-linux-amd64 \
+                    packages/logger-collector/dist/agent-ils-logger-windows-amd64.exe \
+                    packages/logger-collector/dist/checksums.txt \
+                    --clobber
