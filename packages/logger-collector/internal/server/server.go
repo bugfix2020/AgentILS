@@ -16,20 +16,22 @@ import (
 
 // Server encapsulates the HTTP log collector server.
 type Server struct {
-	Host       string
-	Port       int
-	LogDir     string
-	FilePrefix string
-	server     *http.Server
+	Host           string
+	Port           int
+	LogDir         string
+	FilePrefix     string
+	DisplayBaseDir string
+	server         *http.Server
 }
 
 // New creates a new Server with the given configuration.
-func New(host string, port int, logDir string, filePrefix string) *Server {
+func New(host string, port int, logDir string, filePrefix string, displayBaseDir string) *Server {
 	return &Server{
-		Host:       host,
-		Port:       port,
-		LogDir:     logDir,
-		FilePrefix: filePrefix,
+		Host:           host,
+		Port:           port,
+		LogDir:         logDir,
+		FilePrefix:     filePrefix,
+		DisplayBaseDir: displayBaseDir,
 	}
 }
 

@@ -58,7 +58,8 @@ Task:
     - package-specific lint if available
     - targeted tests if available
     - avoid full monorepo test runs unless necessary
-7. **Changeset**: if the implementation modifies a publishable package (check `.changeset/config.json` for `ignore` list — packages NOT in ignore are publishable), create a changeset file under `.changeset/` with the appropriate bump level:
+7. **Changeset**: if the implementation modifies a publishable package (check `.changeset/config.json` for `ignore` list — packages NOT in ignore are publishable) or a release-coupled path, create a changeset file under `.changeset/` with the appropriate bump level:
+    - `packages/logger-collector/**` is release-coupled to `@agent-ils/logger`; select `@agent-ils/logger` for collector changes.
     - `patch` — bug fix, internal refactor, no public API change
     - `minor` — new feature, new option, behavior change
     - `major` — breaking API change (removed export, renamed type, changed function signature)

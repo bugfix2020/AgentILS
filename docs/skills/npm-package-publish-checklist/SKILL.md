@@ -163,14 +163,16 @@ The CLI version should come from `package.json`, not a duplicated hard-coded con
 
 ## Changeset Gate (CI)
 
-CI enforces a changeset check on every PR that modifies files under `packages/**` (excluding `packages/extensions/*`, `packages/mcp/`, `packages/cli/`). If publishable packages are changed but no new `.changeset/*.md` file is added, CI fails.
+CI enforces a changeset check on every PR that modifies publishable package release scope. This includes `packages/quality-gate/**`, `packages/logger/**`, `packages/workflow-sdk/**`, and `packages/logger-collector/**` because the collector binary is released from `@agent-ils/logger@*` tags. If release-scoped files are changed but no new `.changeset/*.md` file is added, CI fails.
 
-Before pushing a PR that touches `packages/*`:
+Before pushing a PR that touches release-scoped files:
 
 ```sh
 pnpm changeset
 # Select the affected package(s), choose bump type (patch/minor/major), write a summary.
 ```
+
+For `packages/logger-collector/**`, select `@agent-ils/logger`.
 
 The generated `.changeset/*.md` must be committed alongside the code changes. This applies to feature branches too — do not wait until the release branch.
 

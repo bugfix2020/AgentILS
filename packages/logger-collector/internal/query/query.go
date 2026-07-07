@@ -32,17 +32,22 @@ var timeUnitMs = map[string]int64{
 // ReadableLogRecord matches the Node ReadableLogRecord interface.
 // Fields that may be absent use pointer types.
 type ReadableLogRecord struct {
-	Ts        string      `json:"ts"`
-	Seq       *int64      `json:"seq,omitempty"`
-	Pid       *int        `json:"pid,omitempty"`
-	Source    string      `json:"source"`
-	Namespace *string     `json:"namespace,omitempty"`
-	Level     string      `json:"level"`
-	Event     *string     `json:"event,omitempty"`
-	Message   string      `json:"message"`
-	Fields    interface{} `json:"fields,omitempty"`
-	TraceID   *string     `json:"traceId,omitempty"`
-	FileName  *string     `json:"fileName,omitempty"`
+	Ts               string      `json:"ts"`
+	Seq              *int64      `json:"seq,omitempty"`
+	Pid              *int        `json:"pid,omitempty"`
+	Source           string      `json:"source"`
+	Namespace        *string     `json:"namespace,omitempty"`
+	Level            string      `json:"level"`
+	Event            *string     `json:"event,omitempty"`
+	Message          string      `json:"message"`
+	Fields           interface{} `json:"fields,omitempty"`
+	TraceID          *string     `json:"traceId,omitempty"`
+	FileName         *string     `json:"fileName,omitempty"`
+	FilePath         *string     `json:"filePath,omitempty"`
+	RelativePath     *string     `json:"relativePath,omitempty"`
+	Line             *int        `json:"line,omitempty"`
+	Location         *string     `json:"location,omitempty"`
+	RelativeLocation *string     `json:"relativeLocation,omitempty"`
 }
 
 // ReadOptions holds all CLI flags for the read subcommand.
@@ -60,7 +65,7 @@ type ReadOptions struct {
 
 // parseLogLine parses a single JSONL line into a ReadableLogRecord.
 // Returns nil if the line is blank, fails JSON parse, or lacks ts/level.
-func parseLogLine(line string, fileName string) *ReadableLogRecord {
+func parseLogLine(line string, fileName string, filePath string, lineNumber int, cwd string) *ReadableLogRecord {
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &parsed); err != nil {
 		return nil
@@ -131,6 +136,36 @@ func parseLogLine(line string, fileName string) *ReadableLogRecord {
 	} else {
 		rec.FileName = &fileName
 	}
+
+	resolvedFilePath := filePath
+	if v, ok := parsed["filePath"].(string); ok && v != "" {
+		resolvedFilePath = v
+	}
+	rec.FilePath = &resolvedFilePath
+
+	resolvedLine := lineNumber
+	if v, ok := numberAsInt(parsed["line"]); ok {
+		resolvedLine = v
+	}
+	rec.Line = &resolvedLine
+
+	resolvedRelativePath := displayRelativePath(cwd, resolvedFilePath)
+	if v, ok := parsed["relativePath"].(string); ok && v != "" {
+		resolvedRelativePath = v
+	}
+	rec.RelativePath = &resolvedRelativePath
+
+	location := fmt.Sprintf("%s:%d", resolvedFilePath, resolvedLine)
+	if v, ok := parsed["location"].(string); ok && v != "" {
+		location = v
+	}
+	rec.Location = &location
+
+	relativeLocation := fmt.Sprintf("%s:%d", resolvedRelativePath, resolvedLine)
+	if v, ok := parsed["relativeLocation"].(string); ok && v != "" {
+		relativeLocation = v
+	}
+	rec.RelativeLocation = &relativeLocation
 
 	return rec
 }
@@ -288,16 +323,17 @@ func ReadLogRecords(opts ReadOptions) ([]*ReadableLogRecord, error) {
 	// Read and parse all records
 	records := make([]*ReadableLogRecord, 0)
 	for _, fileName := range files {
-		data, err := os.ReadFile(filepath.Join(logDir, fileName))
+		filePath := filepath.Join(logDir, fileName)
+		data, err := os.ReadFile(filePath)
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for idx, line := range strings.Split(string(data), "\n") {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == "" {
 				continue
 			}
-			rec := parseLogLine(trimmed, fileName)
+			rec := parseLogLine(trimmed, fileName, filePath, idx+1, opts.Cwd)
 			if rec == nil {
 				continue
 			}
@@ -422,6 +458,17 @@ func formatRecordSummary(rec *ReadableLogRecord, includeFields bool) string {
 		}
 	}
 
+	location := ""
+	if rec.RelativeLocation != nil && *rec.RelativeLocation != "" {
+		location = *rec.RelativeLocation
+	} else if rec.Location != nil && *rec.Location != "" {
+		location = *rec.Location
+	}
+	if location != "" {
+		sb.WriteString(" location=")
+		sb.WriteString(location)
+	}
+
 	return strings.TrimSpace(sb.String())
 }
 
@@ -438,4 +485,35 @@ func truncate(value string, maxLength int) string {
 // ResolveEffectiveLogDir is exported for main.go usage.
 func ResolveEffectiveLogDir(cwd string, logDir string) string {
 	return resolveLogDir(cwd, logDir)
+}
+
+func numberAsInt(value interface{}) (int, bool) {
+	switch n := value.(type) {
+	case float64:
+		return int(n), true
+	case json.Number:
+		iv, err := n.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return int(iv), true
+	default:
+		return 0, false
+	}
+}
+
+func displayRelativePath(cwd string, filePath string) string {
+	if cwd == "" {
+		var err error
+		cwd, err = os.Getwd()
+		if err != nil {
+			return filePath
+		}
+	}
+	rel, err := filepath.Rel(cwd, filePath)
+	rel = filepath.ToSlash(rel)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+		return filePath
+	}
+	return "./" + rel
 }

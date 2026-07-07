@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, createWriteStream, renameSync, mkdirSync, chmodSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { get } from 'node:https'
@@ -60,9 +60,9 @@ function getBinaryName(platformArch: string): string {
     return isWindows ? 'agent-ils-logger.exe' : 'agent-ils-logger'
 }
 
-function getCachedBinaryName(platformArch: string): string {
+function getCachedBinaryName(platformArch: string, version: string): string {
     const isWindows = platformArch.startsWith('windows')
-    return isWindows ? `agent-ils-logger-${platformArch}.exe` : `agent-ils-logger-${platformArch}`
+    return isWindows ? `agent-ils-logger-${platformArch}-${version}.exe` : `agent-ils-logger-${platformArch}-${version}`
 }
 
 function getCacheDir(): string {
@@ -73,7 +73,7 @@ function getCacheDir(): string {
 // Locate binary: PATH scan -> cache dir
 // ---------------------------------------------------------------------------
 
-function findInPath(binaryName: string): string | null {
+function findInPath(binaryName: string, expectedVersion: string): string | null {
     const pathEnv = process.env.PATH
     if (!pathEnv) return null
     const dirs = pathEnv.split(delimiter)
@@ -81,6 +81,7 @@ function findInPath(binaryName: string): string | null {
         const candidate = join(dir, binaryName)
         if (!existsSync(candidate)) continue
         if (isPackageManagerShim(candidate) || isCurrentWrapper(candidate)) continue
+        if (!binaryMatchesVersion(candidate, expectedVersion)) continue
         return candidate
     }
     return null
@@ -101,10 +102,27 @@ function isCurrentWrapper(candidate: string): boolean {
     }
 }
 
-function findInCache(cachedBinaryName: string): string | null {
+function findInCache(cachedBinaryName: string, expectedVersion: string): string | null {
     const cachePath = join(getCacheDir(), cachedBinaryName)
-    if (existsSync(cachePath)) return cachePath
+    if (existsSync(cachePath) && binaryMatchesVersion(cachePath, expectedVersion)) return cachePath
     return null
+}
+
+function binaryMatchesVersion(candidate: string, expectedVersion: string): boolean {
+    try {
+        const output = execFileSync(candidate, ['--version'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: 3_000,
+        })
+        return new RegExp(`\\b${escapeRegExp(expectedVersion)}\\b`).test(output)
+    } catch {
+        return false
+    }
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 // ---------------------------------------------------------------------------
@@ -168,19 +186,19 @@ function printInstallHelp(): void {
 async function main(): Promise<void> {
     const platformArch = getPlatformArch()
     const binaryName = getBinaryName(platformArch)
-    const cachedBinaryName = getCachedBinaryName(platformArch)
+    const version = readPackageVersion()
+    const cachedBinaryName = getCachedBinaryName(platformArch, version)
 
     // 1. Check PATH
-    let binaryPath = findInPath(binaryName)
+    let binaryPath = findInPath(binaryName, version)
 
     // 2. Check cache dir
     if (!binaryPath) {
-        binaryPath = findInCache(cachedBinaryName)
+        binaryPath = findInCache(cachedBinaryName, version)
     }
 
     // 3. Download if not found
     if (!binaryPath) {
-        const version = readPackageVersion()
         const downloadName = platformArch.startsWith('windows')
             ? `agent-ils-logger-${platformArch}.exe`
             : `agent-ils-logger-${platformArch}`

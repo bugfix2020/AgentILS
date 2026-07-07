@@ -1,4 +1,4 @@
-import { cp, rm } from 'node:fs/promises'
+import { cp, mkdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -9,4 +9,5 @@ const source = join(packageRoot, 'templates')
 const target = join(packageRoot, 'dist', 'templates')
 
 await rm(target, { recursive: true, force: true })
-await cp(source, target, { recursive: true })
+await mkdir(dirname(target), { recursive: true })
+await cp(source, target, { recursive: true, force: true })

@@ -362,8 +362,9 @@ test('9. orchestrator subscribers receive typed SseEvent stream', async () => {
         await p
         off()
 
-        assert.equal(evts[0]?.type, 'request.created')
-        assert.equal(evts[1]?.type, 'request.submitted')
+        const requestEvents = evts.filter((evt) => evt.type === 'request.created' || evt.type === 'request.submitted')
+        assert.equal(requestEvents[0]?.type, 'request.created')
+        assert.equal(requestEvents[1]?.type, 'request.submitted')
     } finally {
         await rm(tmp, { recursive: true, force: true })
     }

@@ -1,6 +1,7 @@
+import { createReadStream } from 'node:fs'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 
 export type Level = 'debug' | 'info' | 'warn' | 'error'
 
@@ -46,7 +47,13 @@ export interface Logger {
     info: (msg: string, fields?: Record<string, unknown>) => void
     warn: (msg: string, fields?: Record<string, unknown>) => void
     error: (msg: string, fields?: Record<string, unknown>) => void
+    group: (label: string, fields?: Record<string, unknown>) => void
+    groupEnd: (fields?: Record<string, unknown>) => void
     child: (subNs: string) => Logger
+}
+
+interface LoggerGroupState {
+    stack: string[]
 }
 
 /** Minimal shape of a sink (VS Code's `OutputChannel` satisfies this). */
@@ -81,6 +88,11 @@ export interface JsonlLogRecord {
     fields: unknown
     traceId?: string
     fileName: string
+    filePath: string
+    relativePath: string
+    line: number
+    location: string
+    relativeLocation: string
 }
 
 export interface HttpLogServerOptions {
@@ -104,28 +116,41 @@ export interface HttpLoggerOptions {
     endpoint?: string
     fallback?: Logger
     defaultFields?: Record<string, unknown>
+    traceId?: string
     filePrefix?: string
     fileName?: string
     respectDebugEnv?: boolean
 }
 
 let sequence = 0
+const fileWriteQueues = new Map<string, Promise<void>>()
+const fileAppendStates = new Map<string, JsonlAppendState>()
 
-function build(ns: string, sink: LogSink): Logger {
+interface JsonlAppendState {
+    nextLine: number
+    needsPrefix: boolean
+}
+
+function build(ns: string, sink: LogSink, groupState: LoggerGroupState = { stack: [] }): Logger {
+    const emit = (level: Level, msg: string, fields?: Record<string, unknown>) => {
+        if (shouldLog(ns, level)) sink.appendLine(format(ns, level, msg, withGroupFields(fields, groupState)))
+    }
+
     return {
-        debug: (msg, fields) => {
-            if (shouldLog(ns, 'debug')) sink.appendLine(format(ns, 'debug', msg, fields))
+        debug: (msg, fields) => emit('debug', msg, fields),
+        info: (msg, fields) => emit('info', msg, fields),
+        warn: (msg, fields) => emit('warn', msg, fields),
+        error: (msg, fields) => emit('error', msg, fields),
+        group: (label, fields) => {
+            groupState.stack.push(label)
+            emit('info', 'group.start', fields)
         },
-        info: (msg, fields) => {
-            if (shouldLog(ns, 'info')) sink.appendLine(format(ns, 'info', msg, fields))
+        groupEnd: (fields) => {
+            if (!groupState.stack.length) return
+            emit('info', 'group.end', fields)
+            groupState.stack.pop()
         },
-        warn: (msg, fields) => {
-            if (shouldLog(ns, 'warn')) sink.appendLine(format(ns, 'warn', msg, fields))
-        },
-        error: (msg, fields) => {
-            if (shouldLog(ns, 'error')) sink.appendLine(format(ns, 'error', msg, fields))
-        },
-        child: (subNs) => build(`${ns}:${subNs}`, sink),
+        child: (subNs) => build(`${ns}:${subNs}`, sink, groupState),
     }
 }
 
@@ -156,22 +181,22 @@ export function createHttpLogger(options: HttpLoggerOptions): Logger {
     const endpoint = options.endpoint ?? process.env.AGENTILS_LOG_URL ?? defaultHttpLogEndpoint()
     const fallback = options.fallback ?? createLogger(`http-client:${namespace}`)
     const respectDebugEnv = options.respectDebugEnv ?? false
+    const groupState: LoggerGroupState = { stack: [] }
 
     const emit = (ns: string, level: Level, message: string, fields?: Record<string, unknown>) => {
         if (respectDebugEnv && !shouldLog(ns, level)) return
+        const mergedFields = withGroupFields(
+            options.defaultFields || fields ? { ...(options.defaultFields ?? {}), ...(fields ?? {}) } : undefined,
+            groupState,
+        )
         const body: HttpLogPayload = {
             source: options.source,
             namespace: ns,
             level,
+            event: message,
             message,
-            fields:
-                options.defaultFields || fields ? { ...(options.defaultFields ?? {}), ...(fields ?? {}) } : undefined,
-            traceId:
-                typeof fields?.traceId === 'string'
-                    ? fields.traceId
-                    : typeof options.defaultFields?.traceId === 'string'
-                      ? options.defaultFields.traceId
-                      : undefined,
+            fields: mergedFields,
+            traceId: typeof fields?.traceId === 'string' ? fields.traceId : options.traceId,
             ts: new Date().toISOString(),
             filePrefix: options.filePrefix,
             fileName: options.fileName,
@@ -191,6 +216,15 @@ export function createHttpLogger(options: HttpLoggerOptions): Logger {
         info: (msg, fields) => emit(ns, 'info', msg, fields),
         warn: (msg, fields) => emit(ns, 'warn', msg, fields),
         error: (msg, fields) => emit(ns, 'error', msg, fields),
+        group: (label, fields) => {
+            groupState.stack.push(label)
+            emit(ns, 'info', 'group.start', fields)
+        },
+        groupEnd: (fields) => {
+            if (!groupState.stack.length) return
+            emit(ns, 'info', 'group.end', fields)
+            groupState.stack.pop()
+        },
         child: (subNs) => make(`${ns}:${subNs}`),
     })
 
@@ -200,7 +234,7 @@ export function createHttpLogger(options: HttpLoggerOptions): Logger {
 export async function startHttpLogServer(options: HttpLogServerOptions = {}): Promise<HttpLogServerHandle> {
     const host = options.host ?? DEFAULT_HTTP_LOG_HOST
     const port = options.port ?? DEFAULT_HTTP_LOG_PORT
-    const logDir = options.logDir ?? defaultLogDir()
+    const logDir = resolve(options.logDir ?? defaultLogDir())
     const filePrefix = options.filePrefix ?? DEFAULT_LOG_FILE_PREFIX
     await mkdir(logDir, { recursive: true })
     // Prevent log directory from being committed
@@ -267,6 +301,16 @@ export function safeSerialize(value: unknown): unknown {
     return walk(value)
 }
 
+function withGroupFields(fields: Record<string, unknown> | undefined, groupState: LoggerGroupState) {
+    if (!groupState.stack.length) return fields
+    return {
+        ...(fields ?? {}),
+        group: groupState.stack[groupState.stack.length - 1],
+        groupPath: [...groupState.stack],
+        groupDepth: groupState.stack.length,
+    }
+}
+
 async function postHttpLog(endpoint: string, payload: HttpLogPayload): Promise<void> {
     const response = await fetch(new URL('/api/logs', withTrailingSlash(endpoint)), {
         method: 'POST',
@@ -313,22 +357,107 @@ async function writeLogRecord(logDir: string, filePrefix: string, payload: HttpL
     const ts = payload.ts ?? new Date().toISOString()
     const source = payload.source ?? 'unknown'
     const fileName = logFileName(filePrefix, payload, source, ts)
-    const record: JsonlLogRecord = {
-        ts,
-        seq: ++sequence,
-        pid: process.pid,
-        source,
-        namespace: payload.namespace ?? source,
-        level: isLevel(payload.level) ? payload.level : 'info',
-        event: payload.event,
-        message: payload.message ?? '',
-        fields: safeSerialize(payload.fields ?? {}),
-        traceId: payload.traceId,
-        fileName,
+    const absoluteLogDir = resolve(logDir)
+    const filePath = resolve(absoluteLogDir, fileName)
+    await mkdir(absoluteLogDir, { recursive: true })
+
+    return withFileWriteQueue(filePath, async () => {
+        const { line, prefix } = await nextJsonlAppend(filePath)
+        const relativePath = displayRelativePath(filePath)
+        const record: JsonlLogRecord = {
+            ts,
+            seq: ++sequence,
+            pid: process.pid,
+            source,
+            namespace: payload.namespace ?? source,
+            level: isLevel(payload.level) ? payload.level : 'info',
+            event: payload.event,
+            message: payload.message ?? '',
+            fields: safeSerialize(payload.fields ?? {}),
+            traceId: payload.traceId,
+            fileName,
+            filePath,
+            relativePath,
+            line,
+            location: `${filePath}:${line}`,
+            relativeLocation: `${relativePath}:${line}`,
+        }
+        await appendFile(filePath, `${prefix}${JSON.stringify(record)}\n`, 'utf8')
+        markJsonlAppendCommitted(filePath)
+        return record
+    })
+}
+
+async function withFileWriteQueue<T>(filePath: string, operation: () => Promise<T>): Promise<T> {
+    const previous = fileWriteQueues.get(filePath) ?? Promise.resolve()
+    let releaseCurrent!: () => void
+    const current = new Promise<void>((resolveCurrent) => {
+        releaseCurrent = resolveCurrent
+    })
+    const chain = previous.catch(() => undefined).then(() => current)
+    fileWriteQueues.set(filePath, chain)
+
+    await previous.catch(() => undefined)
+    try {
+        return await operation()
+    } finally {
+        releaseCurrent()
+        if (fileWriteQueues.get(filePath) === chain) {
+            fileWriteQueues.delete(filePath)
+        }
     }
-    await mkdir(logDir, { recursive: true })
-    await appendFile(join(logDir, fileName), `${JSON.stringify(record)}\n`, 'utf8')
-    return record
+}
+
+async function nextJsonlAppend(filePath: string): Promise<{ line: number; prefix: string }> {
+    let state = fileAppendStates.get(filePath)
+    if (!state) {
+        state = await readJsonlAppendState(filePath)
+        fileAppendStates.set(filePath, state)
+    }
+    return { line: state.nextLine, prefix: state.needsPrefix ? '\n' : '' }
+}
+
+function markJsonlAppendCommitted(filePath: string): void {
+    const state = fileAppendStates.get(filePath) ?? { nextLine: 1, needsPrefix: false }
+    state.nextLine += 1
+    state.needsPrefix = false
+    fileAppendStates.set(filePath, state)
+}
+
+function readJsonlAppendState(filePath: string): Promise<JsonlAppendState> {
+    return new Promise((resolveState, reject) => {
+        const stream = createReadStream(filePath)
+        let byteCount = 0
+        let newlineCount = 0
+        let lastByte: number | undefined
+
+        stream.on('data', (chunk: Buffer | string) => {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+            byteCount += buffer.length
+            for (const byte of buffer) {
+                if (byte === 10) newlineCount += 1
+            }
+            lastByte = buffer[buffer.length - 1]
+        })
+        stream.once('error', (error) => {
+            if (isNodeError(error) && error.code === 'ENOENT') {
+                resolveState({ nextLine: 1, needsPrefix: false })
+                return
+            }
+            reject(error)
+        })
+        stream.once('end', () => {
+            if (!byteCount) {
+                resolveState({ nextLine: 1, needsPrefix: false })
+                return
+            }
+            if (lastByte === 10) {
+                resolveState({ nextLine: newlineCount + 1, needsPrefix: false })
+                return
+            }
+            resolveState({ nextLine: newlineCount + 2, needsPrefix: true })
+        })
+    })
 }
 
 async function readRequestBody(req: IncomingMessage): Promise<string> {
@@ -372,6 +501,18 @@ function sanitizeFilePart(value: string): string {
 
 function ensureJsonl(fileName: string): string {
     return fileName.endsWith('.jsonl') ? fileName : `${fileName}.jsonl`
+}
+
+function displayRelativePath(filePath: string): string {
+    const relativePath = relative(process.cwd(), filePath).replace(/\\/g, '/')
+    if (!relativePath || relativePath === '..' || relativePath.startsWith('../') || isAbsolute(relativePath)) {
+        return filePath
+    }
+    return `./${relativePath}`
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+    return error instanceof Error && 'code' in error
 }
 
 function setCorsHeaders(res: ServerResponse): void {

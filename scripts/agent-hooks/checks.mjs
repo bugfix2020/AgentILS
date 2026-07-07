@@ -114,10 +114,20 @@ function checkChangesetRequired(rule, event) {
     const changedFiles = event.changedFiles ?? []
     const publishablePackages = new Set(rule.checkStrategy.publishablePackages ?? [])
     const publishableDirs = getPublishablePackageDirs(publishablePackages)
-    const touchedPublishableDirs = changedFiles.filter((file) =>
-        publishableDirs.some((dir) => file === dir || file.startsWith(`${dir}/`)),
-    )
-    if (!touchedPublishableDirs.length) return null
+    const releaseCoupledDirs = (rule.checkStrategy.releaseCoupledDirs ?? []).map((entry) => ({
+        dir: normalizeRepoPath(entry.dir),
+        packageName: entry.packageName,
+    }))
+    const touchedPublishableDirs = changedFiles.filter((file) => {
+        const normalized = normalizeRepoPath(file)
+        return publishableDirs.some((dir) => normalized === dir || normalized.startsWith(`${dir}/`))
+    })
+    const touchedReleaseCoupledDirs = changedFiles.filter((file) => {
+        const normalized = normalizeRepoPath(file)
+        return releaseCoupledDirs.some((entry) => normalized === entry.dir || normalized.startsWith(`${entry.dir}/`))
+    })
+    const touchedReleaseScope = [...touchedPublishableDirs, ...touchedReleaseCoupledDirs]
+    if (!touchedReleaseScope.length) return null
 
     const addedFiles = event.addedFiles ?? []
     const hasChangeset = addedFiles.some(
@@ -125,7 +135,7 @@ function checkChangesetRequired(rule, event) {
     )
     if (hasChangeset) return null
 
-    return { detail: touchedPublishableDirs.join(', ') }
+    return { detail: touchedReleaseScope.join(', ') }
 }
 
 function checkSubagentRoleAllowlist(rule, event) {

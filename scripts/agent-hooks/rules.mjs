@@ -304,15 +304,16 @@ export const RULE_REGISTRY = [
         currentType: 'repository-enforced',
         sourceDocument: 'docs/instructions/agentils.instructions.md',
         originalGuidance:
-            '每个改动了**可发布**包（`packages/quality-gate/*`、`packages/logger/*` 或 `packages/workflow-sdk/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。**CI 会强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），缺失则 PR 红灯。',
+            '每个改动了**可发布**包（`packages/quality-gate/*`、`packages/logger/*` 或 `packages/workflow-sdk/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。`packages/logger-collector/**` 是 `@agent-ils/logger` 的 release-coupled path，改 collector 也必须给 `@agent-ils/logger` 加 changeset。**CI 只在 PR 上强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）；changesets 生成的 Version PR 合并到 `main` 后不会再要求新增 `.changeset/*.md`。',
         enforcementLevel: 'block',
         enforcementPhase: 'ci',
         enforcementTarget: 'repository-ci',
         applicableRuntime: ['repository'],
-        requiredCapabilitiesAll: ['repository-ci', 'changed-files', 'added-files'],
+        requiredCapabilitiesAll: ['repository-ci', 'pull-request', 'changed-files', 'added-files'],
         checkStrategy: {
             kind: 'changeset-required',
             publishablePackages: ['@agent-ils/quality-gate', '@agent-ils/logger', '@agent-ils/workflow-sdk'],
+            releaseCoupledDirs: [{ dir: 'packages/logger-collector', packageName: '@agent-ils/logger' }],
         },
         failureMessage: 'Publishable package changes were detected without a matching changeset entry.',
         fixHint: 'Run `pnpm changeset` and commit the generated `.changeset/*.md` file.',

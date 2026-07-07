@@ -42,6 +42,7 @@ function buildEvent(phase, cliArgs) {
         return {
             phase: 'ci',
             runtime: 'repository',
+            eventName: cliArgs['event-name'],
             changedFiles,
             addedFiles,
             capabilities: ['repository-ci', 'changed-files', 'added-files'],

@@ -27,29 +27,44 @@ applyTo: 'packages/logger/**'
 - **bin** `agent-ils-logger`（npm 包内 `packages/logger/src/cli.ts` 是 Node wrapper；
   真正的 CLI/collector 在 `packages/logger-collector` Go 二进制）
     - wrapper 顺序：查找已安装的原生 `agent-ils-logger` → 查
-      `~/.agent-ils/bin/agent-ils-logger-<platform>` → 从 GitHub Release 下载。
+      `~/.agent-ils/bin/agent-ils-logger-<platform>-<version>` → 从 GitHub Release 下载。
+    - wrapper 只会复用 `--version` 输出与当前 npm package version 匹配的原生二进制；
+      PATH 或 cache 中的旧版本必须跳过，避免 `@agent-ils/logger@0.2.0`
+      继续执行 `0.1.2` collector。
     - 子命令：`serve`（启 HTTP collector）/ `read`（流式查询 + 过滤）
     - 无子命令但带 read flag（如 `--tail`）时自动路由到 `read`
     - 历史命名 `start` / `write` 已**删除**，文档与 LLM_USAGE 不得再引用
 - **exports**：
     - `.` → Node 端：`createLogger` / `createChannelLogger` /
-      `createHttpLogger` / `startHttpLogServer` / 默认值导出
+      `createHttpLogger` / `startHttpLogServer` / 默认值导出；logger 实例支持
+      `debug/info/warn/error`、`group/groupEnd`、`child`
     - `./browser` → 浏览器端 `createBrowserLogger`（无静态 Node 依赖；`open` 选项在 Node 环境下通过动态 import 启动收集器）
     - `./query` → 读取 + 过滤：`readLogRecords` / `formatLogRecords` /
-      `DEFAULT_LOG_DIR` / `DEFAULT_FILE_PATTERN`
+      `resolveLoggerPaths` / `ensureLogDir` / `parseTimeInput` / `parseTimeRange`
 - **环境变量**：
-    - `AGENTILS_LOG_DIR` — 覆盖默认 logDir（CLI/SDK/query 共享）
+    - `AGENTILS_DEBUG` — `createLogger()` / `createChannelLogger()` 用于过滤
+      `debug` / `info`（`warn` / `error` 始终写出）；`createHttpLogger()` 只有
+      `respectDebugEnv: true` 时才读取它。
+    - `AGENTILS_LOG_URL` — `createHttpLogger()` 的默认 endpoint；VS Code
+      extension logger 也用它覆盖默认本地 collector 地址。
+    - `AGENTILS_LOG_DIR` — 只覆盖 Node `defaultLogDir()` / `startHttpLogServer()`
+      默认目录；Go CLI collector 使用 `--log-dir`，`src/query.ts` 使用
+      `readLogRecords({ logDir })` / `resolveLoggerPaths({ logDir })`
+    - `src/browser.ts` 不读取这些环境变量；浏览器端必须用 options 显式传
+      `enabled` / `endpoint` / `open`。
 - **HTTP collector**：默认 `http://127.0.0.1:12138`，路径
   `POST /api/logs`（单条或数组，数组由服务端内联判断）、`GET /api/health`。
 
 ## 文件 / 目录默认值（**所有入口必须一致**）
 
-| 项                 | 值                                                                                | 来自                                                               |
-| ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 默认 logDir        | `<cwd>/.agent-ils/logger/logs` (除非 env 覆盖)                                    | `src/index.ts DEFAULT_LOG_DIR_REL`、`src/query.ts DEFAULT_LOG_DIR` |
-| 默认 file prefix   | `agent-ils`                                                                       | `src/index.ts DEFAULT_LOG_FILE_PREFIX` + `src/cli.ts`              |
-| 默认文件名 pattern | `agent-ils-YYYY-MM-DD.jsonl`（无 source 时）                                      | `src/query.ts DEFAULT_FILE_PATTERN`                                |
-| 带 source 时       | `agent-ils-<source>-YYYY-MM-DD.jsonl`（如 `agent-ils-frontend-2026-05-06.jsonl`） | `src/index.ts logFileName()`                                       |
+| 项                 | 值                                                                                | 来自                                                                                     |
+| ------------------ | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 默认 logDir        | `<cwd>/.agent-ils/logger/logs`                                                    | `src/index.ts DEFAULT_LOG_DIR_REL`、`src/query.ts DEFAULT_LOG_DIR`、Go `resolveLogDir()` |
+| Node env 覆盖      | `AGENTILS_LOG_DIR` 只影响 Node `defaultLogDir()` / `startHttpLogServer()` 默认值  | `src/index.ts defaultLogDir()`                                                           |
+| HTTP endpoint env  | `AGENTILS_LOG_URL` 只影响 Node/extension HTTP writer 默认 endpoint                | `src/index.ts createHttpLogger()`、`extensions/agentils-vscode/src/logging.ts`           |
+| 默认 file prefix   | `agent-ils`                                                                       | `src/index.ts DEFAULT_LOG_FILE_PREFIX` + `src/cli.ts` + Go `runServe`                    |
+| 默认文件名 pattern | `agent-ils-YYYY-MM-DD.jsonl`（无 source 时）                                      | `src/query.ts DEFAULT_FILE_PATTERN`                                                      |
+| 带 source 时       | `agent-ils-<source>-YYYY-MM-DD.jsonl`（如 `agent-ils-frontend-2026-05-06.jsonl`） | `src/index.ts logFileName()` + Go `jsonl.LogFileName()`                                  |
 
 **反模式 #1（已踩坑）**：`src/index.ts` 与 `src/query.ts` 的默认 logDir / prefix
 **必须**完全一致。曾经 `index.ts` 默认 `.hc/logs` + `agentils`，`query.ts`
@@ -66,12 +81,12 @@ applyTo: 'packages/logger/**'
                        ▼
                   POST /api/logs
                        │
-            startHttpLogServer (node:http)
-                       │  writeLogRecord
+            HTTP collector (Go serve / Node startHttpLogServer)
+                       │  WriteRecord / writeLogRecord
                        ▼
        <logDir>/agent-ils-<source>-<date>.jsonl
                        │
-            readLogRecords (query.ts, 流式 readline)
+            readLogRecords (Node query.ts / Go read)
                        │
                        ▼
             formatLogRecords  →  LLM / 用户
@@ -85,22 +100,38 @@ applyTo: 'packages/logger/**'
 - `src/cli.ts` — npm/npx wrapper，只负责定位 / 下载 / exec Go 原生二进制。
   **必须跳过 `node_modules/.bin` 下的 package-manager shim**，否则
   `npx @agent-ils/logger serve` 会找到并反复执行自己的 shim，造成进程递归、
-  CPU / 内存暴涨。
+  CPU / 内存暴涨。还必须校验原生二进制 `--version` 与当前 package version
+  一致；cache 文件名带 `<version>`，不能复用旧版本 collector。
 - `packages/logger-collector` — Go 原生 CLI。实现 `serve` / `read`、启动 HTTP
-  collector、打印 banner、读取 JSONL。
+  collector、打印 banner、读取 JSONL。它是 `npx @agent-ils/logger serve`
+  实际使用的收集器，`payload.JsonlLogRecord`、写入成功返回体和 `read`
+  输出必须与 Node collector 的定位字段保持一致。
 - `src/index.ts` — Node 端 SDK + 兼容的 HTTP collector server。`createLogger`
-  写本地文件；`createHttpLogger` 走 fetch；`startHttpLogServer` 起 server。
+  写 stderr；`createChannelLogger` 写传入 sink；`createHttpLogger` 是
+  fire-and-forget HTTP writer，方法返回 `void`，不暴露写入响应；
+  `startHttpLogServer` 起 Node 兼容 server 并负责写 JSONL。
+  `group/groupEnd` 不改变 JSONL schema，而是写 `group.start` / `group.end`
+  事件，并给组内记录注入 `fields.group`、`fields.groupPath`、`fields.groupDepth`。
+  HTTP 写入成功返回的 `record` 必须包含 `filePath`、`relativePath`、`line`、
+  `location`、`relativeLocation`，其中 `location` 是绝对 `path:line`，
+  `relativeLocation` 是面向 LLM/用户展示的仓库相对 `path:line`。
 - `src/browser.ts` — 纯浏览器 SDK（`fetch`），**不要**在这里 `import` 任何 `node:*`（静态导入）。
     - `overrideKey`：配置后与 `window.$agentILS.logger.overrideKey` 匹配时强制启用日志，
       `typeof window` 检测保证 SSR 安全。
     - `open`：设为 `true` 时立即启动后台健康探测（不等到首次 `log()` 调用）；
-      在 Node 环境下还会自动 spawn 收集器二进制（通过动态 `import('node:child_process')`）。
+      在 Node 环境下还会自动 spawn 版本匹配的收集器二进制（通过动态 `import('node:child_process')`）。
     - Collector 就绪探测：后台 `setInterval` 每 10s 探测一次 `GET /api/health`，
+      且必须校验响应 body 为 `ok: true` + `name: "agentils-logger"`。同端口其它
+      服务返回 2xx 也不能算 ready。
       与 `log()` 调用完全解耦。未就绪时 `log()` 直接返回 `{ ok: true, status: 204 }`，
-      零 fetch 调用。发送失败自动标记未就绪，后台探测继续运行。
+      零 `/api/logs` fetch 调用。发送失败自动标记未就绪，后台探测继续运行。
+      `status: 204` 表示没有写入 JSONL，不能声称有 `location`。
+    - 顶层 `traceId` 只来自 logger option 或每次调用的 override config；
+      `defaultFields.traceId` / `child({ traceId })` 只会进入 `fields`。
     - 状态在 `createBrowserLogger` 闭包外层共享，`child()` 共用。
 - `src/query.ts` — 读 + 过滤 + 格式化。`matchesRecord(record, range)` 只接
-  range，不再接 options（`fix(logger)` 已删除未使用参数）。
+  range，不再接 options（`fix(logger)` 已删除未使用参数）。读取旧 JSONL 时
+  要用当前文件路径与物理行号补齐 `location` / `relativeLocation`。
 - `templates/llm/agent-ils-logger.skill.md` — 给 LLM 在自己 runtime 安装的
   recall 卡，build 时由 `scripts/copy-templates.mjs` 复制到 `dist/templates/`。
 
@@ -108,9 +139,11 @@ applyTo: 'packages/logger/**'
 
 - `agent-ils-logger serve [--port N] [--host H] [--log-dir D] [--file-prefix P]`
   — 启动 collector，前台进程，`Ctrl+C` 退出。
-- `agent-ils-logger read [--tail N] [--from <duration|ISO>] [--until ...]
+- `agent-ils-logger read [--tail N] [--from <duration|ISO>] [--to ...]
 [--source S] [--level L] [--event E] [--format text|json|jsonl]`
-  — 读取并过滤；`--tail` 模式按 DESC，`--from/--until` 模式按 ASC。
+  — 读取并过滤；`--tail` 模式按 DESC，`--from/--to` 模式按 ASC。
+  Go CLI 的 format 是 `text` / `json` / `jsonl`；Node
+  `formatLogRecords()` 额外支持 `markdown`，不要把 markdown 写进 CLI 文档。
 - 无子命令但带 read flags 时自动路由到 `read`（用户视角"少打字"）。
 - 任何 CLI 改动**必须**让 `--help` 反映；不要硬编码 version，让 cac 从
   package.json 读。
@@ -123,11 +156,13 @@ applyTo: 'packages/logger/**'
   `node ../../packages/logger/dist/cli.js` 跑通 README 全部例子，
   包括 SDK 调用 `startHttpLogServer({})` + `readLogRecords({})`
   默认参数能对得上（这是 fix 分支引入的回归点）。
-- 任何对默认值 / 文件命名 / HTTP 路径的修改都要同步：
+- 任何对默认值 / 文件命名 / HTTP 路径 / record 定位字段的修改都要同步：
     1. `src/index.ts`、`src/query.ts`、`src/cli.ts` 三处
     2. `README.md` + `README.zh-CN.md`
     3. `LLM_USAGE.md`
     4. 本 instructions 文件的"文件 / 目录默认值"表
+- SDK 行为或 wrapper 解析改动要跑 `pnpm --filter @agent-ils/logger test`。
+- collector schema / read 行为改动还要跑 `cd packages/logger-collector && go test ./...`。
 
 ## 反模式（禁止）
 
@@ -137,13 +172,21 @@ applyTo: 'packages/logger/**'
 - 在 collector 加远程 forward / 鉴权层 —— 超出包定位。
 - 改 README 但跳过 sandbox 跑通验证（违反 `package-readme-and-instruction-sync` skill）。
 - 改 CLI 但不更新 `LLM_USAGE.md` 的 Decision Table —— LLM 会按旧表选错命令。
+- 在文档里暗示 `createHttpLogger()` 会返回写入位置。它是 fire-and-forget；
+  只有 Browser SDK / raw HTTP 返回体会立即暴露 `record.location`。
 - 在 npm wrapper 的 PATH 扫描中执行 `node_modules/.bin/agent-ils-logger`。
   这是 npx/pnpm/yarn/bun 生成的 JS shim，不是 Go 二进制；执行它会递归启动
   wrapper 本身。
+- 复用版本不匹配的原生 collector。`@agent-ils/logger` 的 npm version 是
+  下载 tag 和 Go collector `-ldflags main.version` 的唯一真值源。
 
 ## 发布
 
 - 走 `chore/release-logger-<version>` 单独分支 + PR（参考 `npm-package-publish-checklist`）。
+- `packages/logger-collector/**` 是 `@agent-ils/logger` 的 release-coupled path：
+  修改 collector 必须给 `@agent-ils/logger` 加 changeset。Version PR merge 后
+  `release.yml` 发布 npm 并推 `@agent-ils/logger@<version>` tag，`go-release.yml`
+  再用同一个 tag 构建 collector binary。
 - 当前 package version：`@agent-ils/logger@0.2.0`。
 
 ## 接手 checklist（< 2 分钟 onboard）
@@ -152,6 +195,6 @@ applyTo: 'packages/logger/**'
 2. 浏览 `packages/logger/README.md` 的 Common Commands + CLI Options 段。
 3. 看 `src/cli.ts` wrapper、`packages/logger-collector/main.go`、`src/index.ts`
    顶部常量、`src/query.ts` 顶部常量，确认 npm wrapper / Go CLI / SDK 默认值未漂移。
-4. 跑一遍：`pnpm --filter @agent-ils/logger build`、`pnpm --filter @agent-ils/logger typecheck`、`cd packages/logger && npm pack --dry-run`。
+4. 跑一遍：`pnpm --filter @agent-ils/logger typecheck`、`pnpm --filter @agent-ils/logger test`、`cd packages/logger && npm pack --dry-run`。
 5. 如果改了行为：在 `.tmp/logger-smoketest/` 跑一次 SDK 默认值 round-trip
    （`startHttpLogServer({})` → POST → `readLogRecords({})` 能拿到）。

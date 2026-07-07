@@ -32,6 +32,8 @@ const noopLogger: Logger = {
     info: () => {},
     warn: () => {},
     error: () => {},
+    group: () => {},
+    groupEnd: () => {},
     child: () => noopLogger,
 }
 
@@ -63,6 +65,14 @@ function combineLoggers(stderr: Logger, http: Logger): Logger {
         error: (msg, fields) => {
             stderr.error(msg, fields)
             http.error(msg, fields)
+        },
+        group: (label, fields) => {
+            stderr.group(label, fields)
+            http.group(label, fields)
+        },
+        groupEnd: (fields) => {
+            stderr.groupEnd(fields)
+            http.groupEnd(fields)
         },
         child: (subNs) => combineLoggers(stderr.child(subNs), http.child(subNs)),
     }

@@ -94,7 +94,9 @@ adapter 的职责是把各 runtime 的 payload 提升成统一语义事件，例
 - instruction source 改动后必须通过 `sync:instructions`
 - root `README*`、package 根 `README*`、以及这些 README 直接链接的双语 `docs/*` 必须成对修改
 - Ralph product / ops / contributor 不能越权改文件
-- publishable package 改动必须带 changeset；当前 publishable set 是 `quality-gate`、`logger`、`workflow-sdk`
+- release-scoped package 改动必须带 changeset；当前 publishable set 是
+  `quality-gate`、`logger`、`workflow-sdk`，且 `packages/logger-collector/**`
+  归属 `@agent-ils/logger` release scope
 
 ## 为什么有些规则仍然不是强制层
 

@@ -102,7 +102,7 @@ func runServe(args []string) {
 	// Resolve logDir
 	effectiveLogDir := query.ResolveEffectiveLogDir(effectiveCwd, *logDir)
 
-	srv := server.New(*host, *port, effectiveLogDir, *filePrefix)
+	srv := server.New(*host, *port, effectiveLogDir, *filePrefix, effectiveCwd)
 
 	mode := banner.DetectInvoker()
 	readCmd := banner.InvokePrefix(mode) + " read --tail 50"

@@ -68,4 +68,4 @@ jobs:
                     BASE_SHA="${{ github.event.before }}"
                     HEAD_SHA="${{ github.sha }}"
                   fi
-                  node scripts/agent-hooks/repo-check.mjs ci --base "$BASE_SHA" --head "$HEAD_SHA"
+                  node scripts/agent-hooks/repo-check.mjs ci --event-name "${{ github.event_name }}" --base "$BASE_SHA" --head "$HEAD_SHA"

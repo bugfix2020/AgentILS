@@ -91,7 +91,7 @@ Standard checklist from ralph-checklist.md → Tester:
 - [x] Each acceptance criterion has corresponding code change
 - [x] Typecheck passes
 - [x] Build passes
-- [x] Changeset exists if publishable package affected
+- [x] Changeset exists if publishable package or release-coupled path affected
 - [x] No secrets hardcoded
 - [x] Docs updated if behavior changed
 - [x] git diff matches developer's Files Changed list

@@ -46,7 +46,11 @@ export default tseslint.config(
         },
     },
     {
-        files: ['apps/e2e-userflow/test/**/*.{ts,mjs,cjs}', 'packages/mcp/test/**/*.ts'],
+        files: [
+            'apps/e2e-userflow/test/**/*.{ts,mjs,cjs}',
+            'packages/logger/test/**/*.mjs',
+            'packages/mcp/test/**/*.ts',
+        ],
         languageOptions: {
             globals: {
                 AbortSignal: 'readonly',

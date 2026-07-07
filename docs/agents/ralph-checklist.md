@@ -103,8 +103,8 @@ developer claims they did.
 - [ ] Each acceptance criterion has a corresponding code change or test
 - [ ] `pnpm --filter <pkg> exec tsc --noEmit` passes (typecheck)
 - [ ] `pnpm --filter <pkg> build` passes
-- [ ] Changeset exists if a publishable package was affected (check
-      `.changeset/config.json` ignore list)
+- [ ] Changeset exists if a publishable package or release-coupled path was
+      affected (`packages/logger-collector/**` belongs to `@agent-ils/logger`)
 - [ ] No secrets hardcoded (grep source for `API_KEY`, `TOKEN`, `PASSWORD`,
       `SECRET` patterns)
 - [ ] Docs updated if behavior changed (README, instructions, preview images)

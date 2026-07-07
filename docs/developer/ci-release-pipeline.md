@@ -71,8 +71,10 @@ pnpm sync:instructions:check
   ↓
 .changeset presence check
                           # if the PR touched packages/quality-gate/* or
-                          # packages/logger/* but didn't add a .changeset/*.md,
-                          # CI fails. Other paths exempt.
+                          # packages/logger/* or the logger collector release
+                          # path, but didn't add a .changeset/*.md, CI fails.
+                          # The check is PR-only so Version Package commits on
+                          # main are not asked to add a fresh changeset.
   ↓
 (test step is currently commented — TODO inside workflow points at a
  pre-existing mcp e2e test drift. Track in
@@ -234,6 +236,9 @@ introduces a credential to rotate.
      - packages/logger/package.json   version bumped
      - packages/logger/CHANGELOG.md   new entry prepended
      - .changeset/<random>.md         deleted
+     - if the original PR changed packages/logger-collector/*, the bump still
+       belongs to @agent-ils/logger because the Go release is driven by the
+       @agent-ils/logger@<new> tag
 
 9. Squash-merge the Version PR.
 

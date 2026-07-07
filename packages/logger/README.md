@@ -128,6 +128,12 @@ Read tail records:
 npx @agent-ils/logger read --tail 80 --format json
 ```
 
+Filter records by stable fields:
+
+```sh
+npx @agent-ils/logger read --tail 80 --source frontend --level warn --event api.slow --format json
+```
+
 Read by time range:
 
 ```sh
@@ -185,7 +191,10 @@ Options for read:
   --tail <n>             read the tail n records, defaults to 50
   --from <time>          start time: ISO timestamp, epoch ms, or relative like 10m / 2h / 1d
   --to <time>            end time; omit to read up to the latest record
-  --format <format>      text, json, jsonl, or markdown; defaults to text
+  --source <source>      filter by source field
+  --level <level>        filter by level field, case-insensitive
+  --event <event>        filter by event field
+  --format <format>      text, json, or jsonl; defaults to text
 ```
 
 ## Log Record Shape
@@ -208,9 +217,21 @@ Each JSONL record stays human-readable, searchable, and directly quotable by an 
         "empty": true
     },
     "traceId": "user-list-001",
-    "fileName": "frontend-2026-04-30.jsonl"
+    "fileName": "frontend-2026-04-30.jsonl",
+    "filePath": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+    "relativePath": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+    "line": 34,
+    "location": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34",
+    "relativeLocation": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34"
 }
 ```
+
+On successful writes, the HTTP response includes the written record. Use
+`record.location` when a tool needs an absolute `path:line`, and
+`record.relativeLocation` when showing a concise project-local location to a
+human or LLM. Reads also include these fields; old JSONL records that do not
+store them are backfilled from the file path and physical line number while
+reading.
 
 Recommended fields:
 
@@ -236,15 +257,30 @@ const logger = createBrowserLogger({
 })
 
 await logger.debug('state.transition', { from: 'idle', to: 'loading' })
-await logger.info('api.response', { url: '/api/users', status: 200 })
+const result = await logger.info('api.response', { url: '/api/users', status: 200 }, { traceId: 'user-list-001' })
+if (result.record) console.log(result.record.relativeLocation ?? result.record.location)
 await logger.warn('api.slow', { url: '/api/users', costMs: 3500 })
 await logger.error('api.error', { url: '/api/users', message: 'timeout' })
 ```
 
+Group related records with `group` / `groupEnd`, similar to `console.group`:
+
+```ts
+const trace = { traceId: 'user-list-001' }
+await logger.group('load users', { screen: 'users' }, trace)
+await logger.info('api.request', { url: '/api/users' }, trace)
+await logger.info('api.response', { url: '/api/users', status: 200 }, trace)
+await logger.groupEnd(undefined, trace)
+```
+
+Grouped records carry `group`, `groupPath`, and `groupDepth` in `fields`.
+`group()` writes a `group.start` record and `groupEnd()` writes a `group.end`
+record.
+
 Reuse context fields with `child`:
 
 ```ts
-const taskLogger = logger.child({ traceId: 'task-001', page: 'users' })
+const taskLogger = logger.child({ page: 'users' })
 
 await taskLogger.info('ui.click', { button: 'refresh' })
 await taskLogger.info('api.request', { url: '/api/users' })
@@ -255,7 +291,7 @@ Common options:
 - `endpoint`: local collector address
 - `source`: log origin for this writer
 - `defaultFields`: fields attached to every record
-- `traceId`: default trace id
+- `traceId`: default top-level trace id. For browser per-call trace ids, pass `{ traceId }` as the third argument; `defaultFields.traceId` stays inside `fields`
 - `filePrefix`: JSONL file name prefix
 - `fileName`: explicit JSONL file name
 - `enabled`: turn delivery off without removing call sites
@@ -264,7 +300,11 @@ Common options:
 - `onDeliveryError`: callback when delivery fails
 - `open`: when `true`, start health probing immediately at construction time and auto-spawn the collector binary in Node environments (zero-config startup)
 
-**Collector readiness check**: the browser SDK runs a background `setInterval` probe (`GET /api/health` every 10 s) independent of `log()` calls. When the collector is unready, `log()` returns `{ ok: true, status: 204 }` immediately with zero fetch calls — no CONNECTION_REFUSED errors. On delivery failure, readiness is reset and the background probe continues, so the logger self-heals automatically. Pass `open: true` to start probing (and auto-spawn the collector in Node) at construction time.
+**Write result**: a successful browser write returns `{ ok: true, status: 200, record }`. If delivery is disabled or the collector is not ready yet, it returns `{ ok: true, status: 204 }`; no JSONL line was written and `record` is absent. On delivery failure it returns `{ ok: false, error }`.
+
+**Collector readiness check**: the browser SDK runs a background `setInterval` probe (`GET /api/health` every 10 s) independent of `log()` calls. Readiness requires a JSON response with `{ "ok": true, "name": "agentils-logger" }`; another service returning 2xx on the same port is treated as unready. When the collector is unready, `log()` returns `{ ok: true, status: 204 }` immediately with zero `/api/logs` fetch calls, so there are no CONNECTION_REFUSED or wrong-service 404 errors. On delivery failure, readiness is reset and the background probe continues, so the logger self-heals automatically. Pass `open: true` to start probing (and auto-spawn the collector in Node) at construction time. Because the first health probe is asynchronous, start the collector or check the `/api/health` JSON body before expecting a `record` from the first browser log.
+
+**Environment behavior**: the Browser SDK does not read `AGENTILS_DEBUG`, `AGENTILS_LOG_URL`, or `AGENTILS_LOG_DIR`; pass `enabled`, `endpoint`, and `open` explicitly. `createLogger()` and `createChannelLogger()` use `AGENTILS_DEBUG` for `debug` / `info` filtering (`warn` / `error` always write). `createHttpLogger()` defaults its endpoint from `AGENTILS_LOG_URL` and only honors `AGENTILS_DEBUG` when `respectDebugEnv: true`. `AGENTILS_LOG_DIR` only changes the Node `defaultLogDir()` / `startHttpLogServer()` default; the native Go CLI uses `--cwd` and `--log-dir`.
 
 **Log directory `.gitignore`**: the collector automatically creates a `.gitignore` with `*` in the log directory so log files are never accidentally committed.
 
@@ -281,10 +321,23 @@ stderrLogger.warn('tool failed', { toolName: 'request_user_clarification' })
 const httpLogger = createHttpLogger({
     source: 'mcp',
     endpoint: 'http://127.0.0.1:12138',
+    traceId: 'feedback-001',
+    defaultFields: { component: 'mcp' },
 })
 
+httpLogger.group('feedback flow')
 httpLogger.info('interaction.submitted', { toolName: 'request_user_feedback', textLen: 42 })
+httpLogger.groupEnd()
 ```
+
+For Node HTTP logs, the `traceId` option sets the default top-level trace id;
+`fields.traceId` on a single call overrides it. `defaultFields.traceId` remains
+inside `fields`.
+
+`createHttpLogger()` is fire-and-forget: its methods return `void` and do not
+expose the collector response. Use the Browser SDK or raw HTTP API when the
+caller needs the write result immediately, or read the JSONL records back with
+`@agent-ils/logger/query`.
 
 ## HTTP Write API
 
@@ -306,10 +359,34 @@ curl -X POST http://127.0.0.1:12138/api/logs \
 
 `POST /api/logs` accepts a single payload or an array of payloads.
 
+A single payload returns:
+
+```json
+{
+    "ok": true,
+    "record": {
+        "event": "api.response",
+        "filePath": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+        "relativePath": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+        "line": 34,
+        "location": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34",
+        "relativeLocation": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34"
+    }
+}
+```
+
+An array payload returns `{ "ok": true, "records": [...] }`.
+
 Health check:
 
 ```sh
 curl http://127.0.0.1:12138/api/health
+```
+
+A valid collector health response looks like:
+
+```json
+{ "ok": true, "name": "agentils-logger", "logDir": "/abs/project/.agent-ils/logger/logs" }
 ```
 
 ## Read API
@@ -327,7 +404,9 @@ const records = await readLogRecords({
 console.log(formatLogRecords(records, 'json'))
 ```
 
-The read parameters mirror the CLI: `tail`, `from`, `to`, `format`.
+The read parameters mirror the CLI: `tail`, `from`, `to`, `format`. The
+programmatic formatter also supports `markdown`; the Go CLI supports
+`text`, `json`, and `jsonl`.
 
 ## What It Does Not Do
 
