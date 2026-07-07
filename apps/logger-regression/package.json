@@ -1,6 +1,6 @@
 {
     "name": "agentils-logger-regression",
-    "version": "0.0.0",
+    "version": "0.0.1",
     "private": true,
     "type": "module",
     "description": "Interactive and automated regression harness for @agent-ils/logger.",
