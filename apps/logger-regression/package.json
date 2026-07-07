@@ -1,0 +1,29 @@
+{
+    "name": "agentils-logger-regression",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Interactive and automated regression harness for @agent-ils/logger.",
+    "scripts": {
+        "dev": "pnpm --filter @agent-ils/logger build && vite --host 127.0.0.1 --port 5188",
+        "start": "pnpm run dev",
+        "build": "vite build",
+        "preview": "vite preview --host 127.0.0.1 --port 4188",
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/**/*.test.ts"
+    },
+    "dependencies": {
+        "@agent-ils/logger": "workspace:*",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1"
+    },
+    "devDependencies": {
+        "@types/node": "^22.19.17",
+        "@types/react": "^18.3.12",
+        "@types/react-dom": "^18.3.1",
+        "@vitejs/plugin-react": "^4.4.1",
+        "tsx": "^4.21.0",
+        "typescript": "^5.8.3",
+        "vite": "^5.4.14"
+    }
+}

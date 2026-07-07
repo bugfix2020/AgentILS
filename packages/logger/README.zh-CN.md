@@ -128,6 +128,12 @@ npx @agent-ils/logger serve --json
 npx @agent-ils/logger read --tail 80 --format json
 ```
 
+按稳定字段过滤日志：
+
+```sh
+npx @agent-ils/logger read --tail 80 --source frontend --level warn --event api.slow --format json
+```
+
 按时间范围读取：
 
 ```sh
@@ -184,7 +190,10 @@ Options for read:
   --tail <n>             读取尾部 n 条记录，默认 50
   --from <time>          开始时间：ISO 时间、epoch ms，或 10m / 2h / 1d 这类相对时间
   --to <time>            结束时间；省略时表示从 --from 读到最新记录
-  --format <format>      text、json、jsonl 或 markdown，默认 text
+  --source <source>      按 source 字段过滤
+  --level <level>        按 level 字段过滤，大小写不敏感
+  --event <event>        按 event 字段过滤
+  --format <format>      text、json 或 jsonl，默认 text
 ```
 
 ## 日志记录结构
@@ -207,9 +216,19 @@ Options for read:
         "empty": true
     },
     "traceId": "user-list-001",
-    "fileName": "frontend-2026-04-30.jsonl"
+    "fileName": "frontend-2026-04-30.jsonl",
+    "filePath": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+    "relativePath": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+    "line": 34,
+    "location": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34",
+    "relativeLocation": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34"
 }
 ```
+
+写入成功后，HTTP 返回体会带上实际写入的 `record`。工具需要稳定打开文件时用
+`record.location`（绝对 `path:line`）；展示给人或 LLM 时优先用
+`record.relativeLocation`，更短也更符合仓库上下文。读取日志时也会带上这些字段；
+旧 JSONL 没有存这些字段时，读取逻辑会用当前文件路径和物理行号补齐。
 
 推荐写入字段：
 
@@ -235,15 +254,29 @@ const logger = createBrowserLogger({
 })
 
 await logger.debug('state.transition', { from: 'idle', to: 'loading' })
-await logger.info('api.response', { url: '/api/users', status: 200 })
+const result = await logger.info('api.response', { url: '/api/users', status: 200 }, { traceId: 'user-list-001' })
+if (result.record) console.log(result.record.relativeLocation ?? result.record.location)
 await logger.warn('api.slow', { url: '/api/users', costMs: 3500 })
 await logger.error('api.error', { url: '/api/users', message: 'timeout' })
 ```
 
+可以用 `group` / `groupEnd` 把相关日志圈成一组，语义类似 `console.group`：
+
+```ts
+const trace = { traceId: 'user-list-001' }
+await logger.group('load users', { screen: 'users' }, trace)
+await logger.info('api.request', { url: '/api/users' }, trace)
+await logger.info('api.response', { url: '/api/users', status: 200 }, trace)
+await logger.groupEnd(undefined, trace)
+```
+
+组内日志会在 `fields` 里自动带上 `group`、`groupPath`、`groupDepth`。
+`group()` 会写一条 `group.start` 记录，`groupEnd()` 会写一条 `group.end` 记录。
+
 可以用 `child` 复用上下文字段：
 
 ```ts
-const taskLogger = logger.child({ traceId: 'task-001', page: 'users' })
+const taskLogger = logger.child({ page: 'users' })
 
 await taskLogger.info('ui.click', { button: 'refresh' })
 await taskLogger.info('api.request', { url: '/api/users' })
@@ -254,15 +287,22 @@ await taskLogger.info('api.request', { url: '/api/users' })
 - `endpoint`：本地收集器地址
 - `source`：当前 writer 的日志来源
 - `defaultFields`：每条日志都会带上的字段
-- `traceId`：默认 trace id
+- `traceId`：默认顶层 trace id。浏览器端如果要按单次调用设置顶层 trace id，请把 `{ traceId }` 作为第三个参数传入；`defaultFields.traceId` 只会留在 `fields` 内
 - `filePrefix`：JSONL 文件名前缀
 - `fileName`：指定 JSONL 文件名
 - `enabled`：关闭投递但保留调用点
 - `overrideKey`：当配置值与 `window.$agentILS.logger.overrideKey` 匹配时，即使 `enabled: false` 也强制记录日志。SSR 环境下 `window` 不可用时不生效，直接走 `enabled` 原逻辑
 - `timeoutMs`：每次写日志请求的超时时间
 - `onDeliveryError`：写入失败时的回调
+- `open`：为 `true` 时构造 logger 后立即启动健康探测，并在 Node 环境自动拉起 collector
 
-**Collector 就绪检测**：Browser SDK 在发送日志前会先探测 `GET /api/health`，collector 未运行时静默丢弃日志（不会产生 404 请求）。探测失败后每 10 秒自动重试；日志发送失败时自动重置就绪状态并重新探测。
+**写入结果**：浏览器端成功写入时返回 `{ ok: true, status: 200, record }`。如果投递被关闭或 collector 尚未就绪，会返回 `{ ok: true, status: 204 }`；此时没有写入 JSONL，`record` 也不存在。发送失败时返回 `{ ok: false, error }`。
+
+**Collector 就绪检测**：Browser SDK 会在后台每 10 秒探测 `GET /api/health`，与 `log()` 调用解耦。只有健康响应 JSON 包含 `{ "ok": true, "name": "agentils-logger" }` 时才算就绪；同端口上其它服务即使返回 2xx，也会被当作未就绪。collector 未就绪时 `log()` 立即返回 `{ ok: true, status: 204 }`，不会请求 `/api/logs`，因此不会产生 CONNECTION_REFUSED 或误打到其它服务的 404 噪音；发送失败会重置就绪状态并继续后台探测。传入 `open: true` 可以在构造时就开始探测，并在 Node 环境自动拉起 collector。首次健康探测是异步的；如果第一条浏览器日志就必须拿到 `record`，请先启动 collector 或先确认 `/api/health` 的 JSON body 正确。
+
+**环境变量行为**：Browser SDK 不读取 `AGENTILS_DEBUG`、`AGENTILS_LOG_URL` 或 `AGENTILS_LOG_DIR`；浏览器端请显式传 `enabled`、`endpoint` 和 `open`。`createLogger()` / `createChannelLogger()` 会用 `AGENTILS_DEBUG` 过滤 `debug` / `info`（`warn` / `error` 始终写出）。`createHttpLogger()` 默认 endpoint 来自 `AGENTILS_LOG_URL`，并且只有设置 `respectDebugEnv: true` 时才尊重 `AGENTILS_DEBUG`。`AGENTILS_LOG_DIR` 只影响 Node `defaultLogDir()` / `startHttpLogServer()` 默认值；原生 Go CLI 使用 `--cwd` 和 `--log-dir`。
+
+**日志目录 `.gitignore`**：collector 会在日志目录自动创建内容为 `*` 的 `.gitignore`，避免日志文件被误提交。
 
 ## Node 写入 API
 
@@ -277,10 +317,21 @@ stderrLogger.warn('tool failed', { toolName: 'request_user_clarification' })
 const httpLogger = createHttpLogger({
     source: 'mcp',
     endpoint: 'http://127.0.0.1:12138',
+    traceId: 'feedback-001',
+    defaultFields: { component: 'mcp' },
 })
 
+httpLogger.group('feedback flow')
 httpLogger.info('interaction.submitted', { toolName: 'request_user_feedback', textLen: 42 })
+httpLogger.groupEnd()
 ```
+
+Node HTTP 日志中，`traceId` 选项会设置默认顶层 trace id；单次调用的
+`fields.traceId` 会覆盖它。`defaultFields.traceId` 只保留在 `fields` 内。
+
+`createHttpLogger()` 是 fire-and-forget：它的方法返回 `void`，不会把 collector
+响应体直接暴露给调用方。如果调用方需要马上拿到写入结果，请使用 Browser SDK
+或 raw HTTP API；也可以之后用 `@agent-ils/logger/query` 把 JSONL 读回来。
 
 ## HTTP 写入 API
 
@@ -302,10 +353,34 @@ curl -X POST http://127.0.0.1:12138/api/logs \
 
 `POST /api/logs` 支持单条 payload，也支持 payload 数组。
 
+单条 payload 成功时返回：
+
+```json
+{
+    "ok": true,
+    "record": {
+        "event": "api.response",
+        "filePath": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+        "relativePath": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl",
+        "line": 34,
+        "location": "/Users/me/project/.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34",
+        "relativeLocation": "./.agent-ils/logger/logs/frontend-2026-04-30.jsonl:34"
+    }
+}
+```
+
+数组 payload 成功时返回 `{ "ok": true, "records": [...] }`。
+
 健康检查：
 
 ```sh
 curl http://127.0.0.1:12138/api/health
+```
+
+有效的 collector 健康响应类似：
+
+```json
+{ "ok": true, "name": "agentils-logger", "logDir": "/abs/project/.agent-ils/logger/logs" }
 ```
 
 ## 读取 API
@@ -323,7 +398,8 @@ const records = await readLogRecords({
 console.log(formatLogRecords(records, 'json'))
 ```
 
-读取参数与 CLI 保持一致：`tail`、`from`、`to`、`format`。
+读取参数与 CLI 保持一致：`tail`、`from`、`to`、`format`。程序化 formatter
+额外支持 `markdown`；Go CLI 支持 `text`、`json`、`jsonl`。
 
 ## 不做什么
 

@@ -97,7 +97,7 @@ func (s *Server) handlePostLogs(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			seq := atomic.AddInt64(&sequenceCounter, 1)
-			rec, err := jsonl.WriteRecord(s.LogDir, s.FilePrefix, p, seq, pid)
+			rec, err := jsonl.WriteRecordWithBaseDir(s.LogDir, s.DisplayBaseDir, s.FilePrefix, p, seq, pid)
 			if err != nil {
 				sendJSON(w, http.StatusInternalServerError, map[string]interface{}{
 					"ok":    false,
@@ -121,7 +121,7 @@ func (s *Server) handlePostLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seq := atomic.AddInt64(&sequenceCounter, 1)
-		rec, err := jsonl.WriteRecord(s.LogDir, s.FilePrefix, p, seq, pid)
+		rec, err := jsonl.WriteRecordWithBaseDir(s.LogDir, s.DisplayBaseDir, s.FilePrefix, p, seq, pid)
 		if err != nil {
 			sendJSON(w, http.StatusInternalServerError, map[string]interface{}{
 				"ok":    false,

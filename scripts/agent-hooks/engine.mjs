@@ -78,11 +78,16 @@ function capabilitiesApply(rule, event) {
 
 function withDerivedCapabilities(event) {
     const capabilities = new Set(event.capabilities ?? [])
+    const eventName = String(event.eventName ?? '')
+        .trim()
+        .toLowerCase()
 
     if (event.phase === 'pre-tool') capabilities.add('runtime-pre-tool')
     if (event.phase === 'stop') capabilities.add('runtime-stop')
     if (event.phase === 'ci') capabilities.add('repository-ci')
     if (event.phase === 'subagent-stop') capabilities.add('subagent-stop')
+    if (eventName === 'pull_request' || eventName === 'pull-request') capabilities.add('pull-request')
+    if (eventName === 'push') capabilities.add('push')
     if (event.role) capabilities.add('subagent-role')
     if (event.patchText) capabilities.add('patch-text')
     if ((event.writeTargets ?? event.candidatePaths ?? []).length) capabilities.add('write-targets')

@@ -48,11 +48,31 @@ export interface BrowserLogPayload {
     fileName?: string
 }
 
+export interface BrowserLogRecord {
+    ts?: string
+    seq?: number
+    pid?: number
+    source?: string
+    namespace?: string
+    level?: BrowserLogLevel
+    event?: string
+    message?: string
+    fields?: unknown
+    traceId?: string
+    fileName?: string
+    filePath?: string
+    relativePath?: string
+    line?: number
+    location?: string
+    relativeLocation?: string
+    [key: string]: unknown
+}
+
 export interface BrowserLogResult {
     ok: boolean
     status?: number
-    record?: unknown
-    records?: unknown[]
+    record?: BrowserLogRecord
+    records?: BrowserLogRecord[]
     error?: string
 }
 
@@ -83,6 +103,12 @@ export interface BrowserLogger {
         fields?: Record<string, unknown>,
         overrideConfig?: BrowserLogOverrideConfig,
     ) => Promise<BrowserLogResult>
+    group: (
+        label: string,
+        fields?: Record<string, unknown>,
+        overrideConfig?: BrowserLogOverrideConfig,
+    ) => Promise<BrowserLogResult>
+    groupEnd: (fields?: Record<string, unknown>, overrideConfig?: BrowserLogOverrideConfig) => Promise<BrowserLogResult>
     child: (sourceOrFields: string | Record<string, unknown>) => BrowserLogger
 }
 
@@ -100,6 +126,7 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
     let probeInterval: ReturnType<typeof setInterval> | null = null
     let probeStarted = false
     let collectorSpawned = false
+    const groupStack: string[] = []
 
     const probeHealthOnce = async (fetchImpl: typeof fetch, endpoint: string): Promise<boolean> => {
         const controller = new AbortController()
@@ -109,7 +136,9 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                 method: 'GET',
                 signal: controller.signal,
             })
-            return res.ok
+            if (!res.ok) return false
+            const body = (await res.json().catch(() => undefined)) as { ok?: unknown; name?: unknown } | undefined
+            return body?.ok === true && body.name === 'agentils-logger'
         } catch {
             return false
         } finally {
@@ -128,6 +157,7 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                 collectorReady = ok
             })
         }, HEALTH_PROBE_INTERVAL_MS)
+        probeInterval.unref?.()
     }
 
     const markUnready = () => {
@@ -139,18 +169,23 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
         if (!isNode) return null
         try {
             const { existsSync } = await import('node:fs')
+            const { execFileSync } = await import('node:child_process')
+            const { createRequire } = await import('node:module')
             const { homedir } = await import('node:os')
             const { join, delimiter } = await import('node:path')
 
             const isWindows = process.platform === 'win32'
             const binaryName = isWindows ? 'agent-ils-logger.exe' : 'agent-ils-logger'
+            const expectedVersion = readPackageVersion(createRequire(import.meta.url))
 
             // 1. Check PATH
             const pathEnv = process.env.PATH
             if (pathEnv) {
                 for (const dir of pathEnv.split(delimiter)) {
                     const candidate = join(dir, binaryName)
-                    if (existsSync(candidate)) return candidate
+                    if (existsSync(candidate) && binaryMatchesVersion(execFileSync, candidate, expectedVersion)) {
+                        return candidate
+                    }
                 }
             }
 
@@ -167,10 +202,12 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                         : null
             if (platformArch) {
                 const cachedName = isWindows
-                    ? `agent-ils-logger-${platformArch}.exe`
-                    : `agent-ils-logger-${platformArch}`
+                    ? `agent-ils-logger-${platformArch}-${expectedVersion}.exe`
+                    : `agent-ils-logger-${platformArch}-${expectedVersion}`
                 const cachePath = join(homedir(), '.agent-ils', 'bin', cachedName)
-                if (existsSync(cachePath)) return cachePath
+                if (existsSync(cachePath) && binaryMatchesVersion(execFileSync, cachePath, expectedVersion)) {
+                    return cachePath
+                }
             }
 
             return null
@@ -242,6 +279,7 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
                     ...(baseOptions.defaultFields ?? {}),
                     ...(overrideConfig.defaultFields ?? {}),
                     ...(fields ?? {}),
+                    ...activeGroupFields(groupStack),
                 }),
                 traceId: overrideConfig.traceId ?? baseOptions.traceId,
                 filePrefix: overrideConfig.filePrefix ?? baseOptions.filePrefix,
@@ -275,6 +313,16 @@ export function createBrowserLogger(options: BrowserLoggerOptions = {}): Browser
             warn: (event, fields, overrideConfig) => log('warn', event, fields, overrideConfig),
             error: (event, fields, overrideConfig) => log('error', event, fields, overrideConfig),
             log,
+            group: (label, fields, overrideConfig) => {
+                groupStack.push(label)
+                return log('info', 'group.start', fields, overrideConfig)
+            },
+            groupEnd: (fields, overrideConfig) => {
+                if (!groupStack.length) return Promise.resolve({ ok: true, status: 204 })
+                const result = log('info', 'group.end', fields, overrideConfig)
+                groupStack.pop()
+                return result
+            },
             child: (sourceOrFields) => {
                 if (typeof sourceOrFields === 'string') return make({ ...baseOptions, source: sourceOrFields })
                 return make({
@@ -325,6 +373,45 @@ function withTrailingSlash(endpoint: string): string {
 
 function safeSerializeRecord(value: Record<string, unknown>): Record<string, unknown> {
     return safeSerialize(value) as Record<string, unknown>
+}
+
+function activeGroupFields(groupStack: string[]): Record<string, unknown> {
+    if (!groupStack.length) return {}
+    return {
+        group: groupStack[groupStack.length - 1],
+        groupPath: [...groupStack],
+        groupDepth: groupStack.length,
+    }
+}
+
+function readPackageVersion(require: NodeRequire): string {
+    try {
+        const packageJson = require('../package.json') as { version?: unknown }
+        return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0'
+    } catch {
+        return '0.0.0'
+    }
+}
+
+function binaryMatchesVersion(
+    execFileSync: typeof import('node:child_process').execFileSync,
+    candidate: string,
+    expectedVersion: string,
+): boolean {
+    try {
+        const output = execFileSync(candidate, ['--version'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: 3_000,
+        })
+        return new RegExp(`\\b${escapeRegExp(expectedVersion)}\\b`).test(output)
+    } catch {
+        return false
+    }
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function safeSerialize(value: unknown): unknown {

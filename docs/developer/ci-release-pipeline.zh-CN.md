@@ -64,8 +64,10 @@ pnpm sync:instructions:check
   ↓
 .changeset 存在性检查
                           # PR 改了 packages/quality-gate/* 或
-                          # packages/logger/* 但没加 .changeset/*.md，
-                          # CI 失败。其他路径不要求。
+                          # packages/logger/*，或 logger collector release
+                          # path，但没加 .changeset/*.md，CI 失败。
+                          # 这个检查只针对 PR，main 上的 Version Packages
+                          # commit 不会被要求再新增 changeset。
   ↓
 （test step 当前注释 —— workflow 里 TODO 指向 mcp e2e 测试 pre-existing
  漂移，跟踪在 packages/mcp/test/e2e/agentils-vsix-parity.test.ts。）
@@ -197,6 +199,8 @@ changesets/action@v1
      - packages/logger/package.json   version bumped
      - packages/logger/CHANGELOG.md   新条目插在前面
      - .changeset/<random>.md         被删掉
+     - 如果原 PR 改的是 packages/logger-collector/*，bump 仍然归属
+       @agent-ils/logger，因为 Go release 由 @agent-ils/logger@<new> tag 触发
 
 9. Squash-merge Version PR。
 

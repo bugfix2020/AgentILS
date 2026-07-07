@@ -212,7 +212,7 @@ SSE 广播 + 视图层订阅（WebView / Copilot）
 - **私有包（自动跳过）**：`packages/extensions/agentils-vscode`、`apps/webview`（`"private": true`）。
 - 工具：[`@changesets/cli`](https://github.com/changesets/changesets) 已在仓库落地，配置见 [`.changeset/config.json`](.changeset/config.json)（`baseBranch: main`、`access: public`、`fixed: []`、`ignore: ["@agent-ils/mcp", "@agent-ils/cli"]`）。
 - 工作流：
-    - 每个改动了**可发布**包（`packages/quality-gate/*`、`packages/logger/*` 或 `packages/workflow-sdk/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。**CI 会强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），缺失则 PR 红灯。
+    - 每个改动了**可发布**包（`packages/quality-gate/*`、`packages/logger/*` 或 `packages/workflow-sdk/*`）的 PR 必须配套运行 `pnpm changeset`，按交互提示选择受影响的包和 bump 类型（patch / minor / major），生成 `.changeset/<name>.md` 并随 PR 提交。`packages/logger-collector/**` 是 `@agent-ils/logger` 的 release-coupled path，改 collector 也必须给 `@agent-ils/logger` 加 changeset。**CI 只在 PR 上强制检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）；changesets 生成的 Version PR 合并到 `main` 后不会再要求新增 `.changeset/*.md`。
     - 改动 `packages/mcp/*`、`packages/cli/*`、`packages/extensions/*`、`apps/*`、`scripts/*`、`docs/*` 或 `.changeset/` 配置本身可豁免（CI 自动跳过检查）。
     - Release **完全自动化**，不需要手动跑命令：
         - PR 合并到 `main` 后，[`.github/workflows/release.yml`](.github/workflows/release.yml) 触发 [`changesets/action`](https://github.com/changesets/action)：
@@ -226,7 +226,7 @@ SSE 广播 + 视图层订阅（WebView / Copilot）
 
 GitHub Actions 工作流位于 [`.github/workflows/`](.github/workflows/)：
 
-- **`ci.yml`** — PR 与 `main` push 触发：install / **build → typecheck**（顺序固定，typecheck 必须在 build 后，因为 workspace 间类型解析依赖 d.ts；turbo `typecheck.dependsOn` 包含 `^build`）/ lint / `sync:instructions:check` / changeset 存在性检查。所有 PR 必须全绿才能合并。test 步骤当前**注释**，TODO 在 workflow 内（pre-existing mcp e2e drift：`packages/mcp/test/e2e/agentils-vsix-parity.test.ts`）。
+- **`ci.yml`** — PR 与 `main` push 触发：install / **build → typecheck**（顺序固定，typecheck 必须在 build 后，因为 workspace 间类型解析依赖 d.ts；turbo `typecheck.dependsOn` 包含 `^build`）/ lint / `sync:instructions:check` / repository rule enforcement。changeset 存在性检查只对 PR 生效；`main` push 仍跑其它 repository rule，但不会阻断 changesets 生成的 Version Packages commit。所有 PR 必须全绿才能合并。test 步骤当前**注释**，TODO 在 workflow 内（pre-existing mcp e2e drift：`packages/mcp/test/e2e/agentils-vsix-parity.test.ts`）。
 - **`release.yml`** — `main` push 触发：跑 `changesets/action`，自动管理 Version PR + npm publish + git tag。详见上方 changelog 章节。
 
 ### CI 内部约束（**避免重新踩坑**）

@@ -65,6 +65,7 @@ After completing your work, advance the stage dynamically:
 6. Determine if CI/release config changes are needed:
     - If Go binary added/renamed → check/update `.goreleaser*` and `.github/workflows/go-release.yml`.
     - If publishable npm package added/modified → add a `.changeset/*.md` entry.
+    - If `packages/logger-collector/**` changed → ensure the changeset selects `@agent-ils/logger`.
     - If build scripts or tooling changed → check `.github/workflows/ci.yml` and `.github/workflows/release.yml`.
     - If no CI impact → skip all edits and write minimal handoff.
 7. Write `{RUN_DIR}/handoff/ops.md`.

@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, stat } from 'node:fs/promises'
-import { isAbsolute, resolve } from 'node:path'
+import { isAbsolute, relative, resolve } from 'node:path'
 import type { Level } from './index.js'
 
 export type LogOutputFormat = 'text' | 'json' | 'jsonl' | 'markdown'
@@ -40,6 +40,11 @@ export interface ReadableLogRecord {
     fields?: unknown
     traceId?: string
     fileName?: string
+    filePath?: string
+    relativePath?: string
+    line?: number
+    location?: string
+    relativeLocation?: string
 }
 
 const DEFAULT_LOG_DIR = '.agent-ils/logger/logs'
@@ -105,11 +110,13 @@ export async function readLogRecords(options: ReadLogOptions = {}): Promise<Read
     const records: ReadableLogRecord[] = []
 
     for (const fileName of files) {
-        const raw = await readFile(resolve(paths.logDir, fileName), 'utf8')
-        for (const line of raw.split('\n')) {
-            const trimmed = line.trim()
+        const filePath = resolve(paths.logDir, fileName)
+        const raw = await readFile(filePath, 'utf8')
+        const lines = raw.split('\n')
+        for (let index = 0; index < lines.length; index += 1) {
+            const trimmed = lines[index].trim()
             if (!trimmed) continue
-            const record = parseLogLine(trimmed, fileName)
+            const record = parseLogLine(trimmed, fileName, filePath, index + 1, paths.cwd)
             if (!record || !matchesRecord(record, range)) continue
             records.push(record)
         }
@@ -150,10 +157,19 @@ async function listJsonlFiles(logDir: string): Promise<string[]> {
     }
 }
 
-function parseLogLine(line: string, fileName: string): ReadableLogRecord | undefined {
+function parseLogLine(
+    line: string,
+    fileName: string,
+    filePath: string,
+    lineNumber: number,
+    cwd: string,
+): ReadableLogRecord | undefined {
     try {
         const parsed = JSON.parse(line) as Partial<ReadableLogRecord>
         if (!parsed.ts || !parsed.level) return undefined
+        const resolvedFilePath = parsed.filePath ?? filePath
+        const resolvedLine = parsed.line ?? lineNumber
+        const resolvedRelativePath = parsed.relativePath ?? displayRelativePath(cwd, resolvedFilePath)
         return {
             ts: parsed.ts,
             seq: parsed.seq,
@@ -166,6 +182,11 @@ function parseLogLine(line: string, fileName: string): ReadableLogRecord | undef
             fields: parsed.fields,
             traceId: parsed.traceId,
             fileName: parsed.fileName ?? fileName,
+            filePath: resolvedFilePath,
+            relativePath: resolvedRelativePath,
+            line: resolvedLine,
+            location: parsed.location ?? `${resolvedFilePath}:${resolvedLine}`,
+            relativeLocation: parsed.relativeLocation ?? `${resolvedRelativePath}:${resolvedLine}`,
         }
     } catch {
         return undefined
@@ -205,10 +226,20 @@ function formatRecordSummary(record: ReadableLogRecord, includeFields = false): 
     const event = record.event ? ` ${record.event}` : ''
     const trace = record.traceId ? ` trace=${record.traceId}` : ''
     const fields = includeFields && record.fields ? ` ${truncate(JSON.stringify(record.fields), MAX_FIELD_CHARS)}` : ''
-    return `[${record.ts}] ${record.level.toUpperCase()} ${record.source}${event}${trace} ${record.message}${fields}`.trim()
+    const location = record.relativeLocation ?? record.location
+    const locationText = location ? ` location=${location}` : ''
+    return `[${record.ts}] ${record.level.toUpperCase()} ${record.source}${event}${trace} ${record.message}${fields}${locationText}`.trim()
 }
 
 function truncate(value: string, maxLength: number): string {
     if (value.length <= maxLength) return value
     return `${value.slice(0, maxLength - 1)}...`
+}
+
+function displayRelativePath(cwd: string, filePath: string): string {
+    const relativePath = relative(cwd, filePath).replace(/\\/g, '/')
+    if (!relativePath || relativePath === '..' || relativePath.startsWith('../') || isAbsolute(relativePath)) {
+        return filePath
+    }
+    return `./${relativePath}`
 }

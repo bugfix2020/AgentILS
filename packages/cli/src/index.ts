@@ -46,6 +46,8 @@ const noopLogger: Logger = {
     info: () => undefined,
     warn: () => undefined,
     error: () => undefined,
+    group: () => undefined,
+    groupEnd: () => undefined,
     child: () => noopLogger,
 }
 

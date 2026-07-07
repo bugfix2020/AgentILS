@@ -37,7 +37,8 @@ AgentILS/
 ├── apps/
 │   ├── webview/            # Vite 应用，渲染 AgentILS 任务控制台（产品真值源）
 │   ├── vscode-debug/       # 一次性 VS Code workspace，给扩展宿主调试用
-│   └── e2e-userflow/       # 端到端用户流程测试套
+│   ├── e2e-userflow/       # 端到端用户流程测试套
+│   └── logger-regression/  # @agent-ils/logger 的交互式 + 自动化回归测试台
 ├── packages/
 │   ├── mcp/                # 控制平面：状态机、orchestrator、MCP server (stdio/HTTP)
 │   ├── extensions/agentils-vscode/  # VS Code 扩展：MCP 的薄桥接，承载 webview
@@ -123,7 +124,7 @@ pnpm run sync:instructions
 
 两个 GitHub Actions workflow 负责质量门禁与 npm 发布：
 
-- **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** —— 每个 PR 与 push 到 `main` 时触发。Build → typecheck → lint → instruction 同步检查 → changeset 存在性检查。必须全绿才能合。
+- **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** —— 每个 PR 与 push 到 `main` 时触发。Build → typecheck → lint → instruction 同步检查 → repository rule enforcement。changeset 存在性检查只对 PR 生效，`main` 上的 release/version commit 不会被要求新增 changeset。必须全绿才能合。
 - **[`.github/workflows/release.yml`](.github/workflows/release.yml)** —— push 到 `main` 时触发。用 [`changesets/action`](https://github.com/changesets/action) 在有待消费 changeset 时开 "Version Packages" PR；没有时通过 OIDC Trusted Publisher 直接发到 npm。**不需要 `NPM_TOKEN`**。
 
 完整走读（分支模型、为什么 `build` 先于 `typecheck`、为什么 release 用 Node 24 而 CI 用 Node 22、为什么是 `private: true` 而不是 `.changeset` `ignore` 阻止发布、OIDC 配置、端到端发布叙事、踩坑表）见 [`docs/developer/ci-release-pipeline.zh-CN.md`](docs/developer/ci-release-pipeline.zh-CN.md)。

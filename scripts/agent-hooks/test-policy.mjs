@@ -173,6 +173,7 @@ test('CI enforcement blocks publishable package changes without changeset', () =
     const result = evaluatePolicy({
         phase: 'ci',
         runtime: 'repository',
+        eventName: 'pull_request',
         changedFiles: ['packages/logger/src/index.ts'],
         addedFiles: [],
     })
@@ -184,17 +185,42 @@ test('CI allow sample accepts publishable package changes with changeset', () =>
     const result = evaluatePolicy({
         phase: 'ci',
         runtime: 'repository',
+        eventName: 'pull_request',
         changedFiles: ['packages/logger/src/index.ts', '.changeset/logger-change.md'],
         addedFiles: ['.changeset/logger-change.md'],
     })
     assert.equal(result.decision, 'allow')
 })
 
-test('CI enforcement ignores non-publishable package directories without release scope', () => {
+test('CI enforcement treats logger collector changes as logger release scope', () => {
     const result = evaluatePolicy({
         phase: 'ci',
         runtime: 'repository',
+        eventName: 'pull_request',
         changedFiles: ['packages/logger-collector/main.go'],
+        addedFiles: [],
+    })
+    assert.equal(result.decision, 'block')
+    assert.equal(result.primaryFinding.ruleId, 'ci.publishable-package.requires-changeset')
+})
+
+test('CI enforcement accepts logger collector changes with changeset', () => {
+    const result = evaluatePolicy({
+        phase: 'ci',
+        runtime: 'repository',
+        eventName: 'pull_request',
+        changedFiles: ['packages/logger-collector/main.go', '.changeset/logger-collector.md'],
+        addedFiles: ['.changeset/logger-collector.md'],
+    })
+    assert.equal(result.decision, 'allow')
+})
+
+test('CI enforcement keeps changeset gate off main release pushes', () => {
+    const result = evaluatePolicy({
+        phase: 'ci',
+        runtime: 'repository',
+        eventName: 'push',
+        changedFiles: ['packages/logger/package.json', 'packages/logger/CHANGELOG.md'],
         addedFiles: [],
     })
     assert.equal(result.decision, 'allow')
@@ -204,6 +230,7 @@ test('CI enforcement covers workflow-sdk as a publishable package', () => {
     const result = evaluatePolicy({
         phase: 'ci',
         runtime: 'repository',
+        eventName: 'pull_request',
         changedFiles: ['packages/workflow-sdk/src/index.ts'],
         addedFiles: [],
     })

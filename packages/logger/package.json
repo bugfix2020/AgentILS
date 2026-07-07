@@ -66,6 +66,7 @@
     "scripts": {
         "build": "tsup && node scripts/copy-templates.mjs",
         "dev": "tsup --watch",
+        "test": "pnpm run build && node --test test/*.test.mjs",
         "typecheck": "tsc --noEmit"
     },
     "devDependencies": {

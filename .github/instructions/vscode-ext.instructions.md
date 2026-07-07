@@ -30,7 +30,7 @@ VS Code 扩展是 AgentILS 的 **thin bridge**：
 
 ```
 extension.ts            # activate / deactivate 入口；启 mcp + 注册命令 + 注册 4 LM tool
-logging.ts              # createExtensionLogger：包装 OutputChannel + 500 行 ring buffer
+logging.ts              # createExtensionLogger：包装 OutputChannel + 500 行 ring buffer + 本地 logger collector 镜像
 tools/
   registerTools.ts      # TOOL_BINDINGS（4 个 lmId↔ToolName）+ vscode.lm.registerTool
   toolResult.ts         # buildToolResultFromResponse / buildCancelledToolResult / buildHeartbeatTimeoutToolResult
@@ -71,6 +71,12 @@ deactivate()
 ```
 
 `activationEvents` 当前为 `onStartupFinished` —— 启动即拉起 mcp + 注册 tool；用户随后通过命令 `agentils.openPanel` 打开 WebView，或在 Copilot Chat 用 `#agentilsRequestUserClarification` 等 `toolReferenceName` 直接引用 tool（**没有** chat participant，**没有** slash command 入口）。
+
+扩展 logger 会始终写 VS Code OutputChannel，同时在后台探测
+`AGENTILS_LOG_URL ?? http://127.0.0.1:12138` 的
+`GET /api/health`。只有响应 JSON 包含 `ok: true` 和
+`name: "agentils-logger"` 时才镜像 POST 到 `/api/logs`；collector 未就绪或同端口是
+其它服务时不得反复产生 404 噪音。
 
 ## 配置项（`package.json contributes.configuration`）
 
